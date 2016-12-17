@@ -8,11 +8,22 @@ namespace erfin {
 
 class Assembler {
 public:
+    enum SuffixAssumption {
+        NO_ASSUMPTION = 0,
+        MSB_SUFFIX = 1 << 1,
+        LSB_SUFFIX = 1 << 2,
+        FP_SUFFIX  = 1 << 3,
+        INT_SUFFIX = 1 << 4
+    };
+
     using ProgramData = std::vector<Inst>;
 
-    Assembler(){}
-    ~Assembler(){}
+    Assembler(): m_assumptions(NO_ASSUMPTION) {}
 
+    void assume(SuffixAssumption assumptions_)
+        { m_assumptions = assumptions_; }
+    SuffixAssumption assumptions() const
+        { return m_assumptions; }
     void assemble_from_file(const char * file);
 
     void assemble_from_string(const std::string & source);
@@ -26,7 +37,7 @@ public:
 
     /**
      *  @note also clears error information
-     * @param other
+     *  @param other
      */
     void swap_out_program_data(ProgramData & other);
 
@@ -37,6 +48,7 @@ public:
 private:
     ProgramData m_program;
     std::string m_error_string;
+    SuffixAssumption m_assumptions;
 };
 
 // for ParamForm: REG

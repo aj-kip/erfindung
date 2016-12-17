@@ -34,13 +34,13 @@ namespace {
 using StringCIter = std::vector<std::string>::const_iterator;
 using UInt32 = erfin::UInt32;
 using Error = std::runtime_error;
+using SuffixAssumption = erfin::Assembler::SuffixAssumption;
 
 struct TextProcessState {
     TextProcessState(): in_square_brackets(false), in_data_directive(false),
-                        /*tentative_program_size(0),*/ current_source_line(1) {}
+                        current_source_line(1), assumptions(nullptr) {}
     bool in_square_brackets;
     bool in_data_directive;
-    //std::size_t tentative_program_size;
     std::size_t current_source_line;
 
     std::vector<UInt32> data;
@@ -48,6 +48,7 @@ struct TextProcessState {
     std::map<std::string, LabelPair> labels;
     std::vector<erfin::Inst> program_data;
     std::vector<LabelPair> unfulfilled_labels;
+    const SuffixAssumption * assumptions;
 };
 
 // high level textual processing
@@ -103,6 +104,7 @@ void Assembler::assemble_from_string(const std::string & source) {
     std::vector<std::string> tokens = tokenize(line_list);
 
     TextProcessState tpstate;
+    tpstate.assumptions = &m_assumptions;
     process_text(tpstate, tokens.begin(), tokens.end());
     // only when a valid program has been assembled do we swap in the actual
     // instructions, as a throw may occur at any point of the text processing
@@ -208,7 +210,7 @@ using LineToInstFunc = StringCIter(*)(TextProcessState & state,
 
 bool is_line_blank(const std::string & line);
 
-LineToInstFunc get_line_processing_func(const std::string & fname);
+LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std::string & fname);
 
 Error make_error(TextProcessState & state, const std::string & str);
 
@@ -234,7 +236,7 @@ void skip_new_lines(TextProcessState & state, StringCIter * itr);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     if (beg == end) return;
-    auto func = get_line_processing_func(*beg);
+    auto func = get_line_processing_func(*state.assumptions, *beg);
     if (func) {
         process_text(state, func(state, beg, end), end);
     } else if (*beg == "data") {
@@ -319,7 +321,7 @@ bool is_line_blank(const std::string & line) {
 StringCIter make_and
     (TextProcessState & state, StringCIter beg, StringCIter end);
 
-LineToInstFunc get_line_processing_func(const std::string & fname) {
+LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std::string & fname) {
     static bool is_initialized = false;
     static std::map<std::string, LineToInstFunc> fmap;
     if (is_initialized) {
@@ -328,7 +330,7 @@ LineToInstFunc get_line_processing_func(const std::string & fname) {
     }
     fmap["and"] = make_and;
     is_initialized = true;
-    return get_line_processing_func(fname);
+    return get_line_processing_func(assumptions, fname);
 }
 
 Error make_error(TextProcessState & state, const std::string & str) {
@@ -349,7 +351,7 @@ StringCIter process_binary
     while (*beg != "]") {
         for (char c : *beg) {
             switch (c) {
-            case '_': case 'o': case '0': case '1': case 'x':
+            case '_': case 'o': case '0': case '.': case '1': case 'x':
                 if (bit_pos == 0)
                     state.data.push_back(0);
                 break;
@@ -359,7 +361,7 @@ StringCIter process_binary
             case '1': case 'x':
                 state.data.back() |= (1 << (31 - bit_pos));
                 // v fall through v
-            case '_': case 'o': case '0':
+            case '_': case 'o': case '0': case '.':
                 bit_pos = (bit_pos + 1) % 32;
                 break;
             // characters we should never see
@@ -512,6 +514,7 @@ erfin::Reg string_to_register(const std::string & str) {
 
 void erfin::Assembler::run_tests() {
     TextProcessState state;
+    // data encodings
     {
     const std::vector<std::string> sample_binary = {
         "____xxxx", "____x_xxx___x__x", "xx__x_x_",
@@ -541,5 +544,6 @@ void erfin::Assembler::run_tests() {
 }
 
 namespace {
-    const LineToInstFunc init_f = get_line_processing_func("");
+    const LineToInstFunc init_f = get_line_processing_func
+                                  (erfin::Assembler::NO_ASSUMPTION, "");
 }  // end of anonymous namespace

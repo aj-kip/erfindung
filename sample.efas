@@ -1,0 +1,6 @@
+: > data binary [ ________ ________ ________ _______x ]
+set x 10
+set y  5
+cmp x y a
+skip a > # what bits are put into a label? lsb or msb?
+jump do_on_lessthan

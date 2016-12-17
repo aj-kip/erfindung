@@ -21,7 +21,7 @@
 
 /** This document/source file defines Erfindung ISA/interpreter.
  *  Target features:
- *  - RISC
+ *  - RISC + some bells and wistles
  *  - assemble to C++ and dynamically executable byte code
  *
  *  Erfindung is designed to handle two different types of numbers:
@@ -145,42 +145,66 @@ enum OpCode_e : UInt32 {
     // R-type arthemitic operations (4)
     // I will need variations that can handle immediates
     PLUS      , // two args, one answer
+                // "plus x y a"
+                // "plus x immd"
     MINUS     , // two args, one answer
+                // "minus x y a"
+                // "minus x y immd"
+                // "sub x y a"
     TIMES     , // two args, one answer
+                // "times.int x y a"
+                // "times.int x immd"
     DIVIDE_MOD, // two args, one answer (mod to flags)
                 // if divide by zero, flags == denominator
-
+                // "divmod.int x y a b"
+                // "div.int x y a"
+                // "div.int x immd"
+    TIMES_FP  , // "times.fp x y a"
+                // "times.fp x immd"
+    DIV_MOD_FP, // "divmod.fp x y a"
+                // "divmod.fp x immd"
     // R-type LOGIC ops (4)
     AND, // two args, one answer
+         // "and x y a"
+         // "and x immd" Assembler may assume LSB
+         // "and.lsb x y a" depends on assembler options
     XOR, // two args, one answer
     OR , // two args, one answer
     NOT, // one arg , one answer
+         // "not x a"
 
     // I-type LOGIC, lsb and msb (6)
-    AND_LSB_IMMD, // two args, one answer
-    XOR_LSB_IMMD, // two args, one answer
-    OR_LSB_IMMD , // two args, one answer
-
-    AND_MSB_IMMD, // two args, one answer
-    XOR_MSB_IMMD, // two args, one answer
-    OR_MSB_IMMD , // two args, one answer
+    AND_MSB, // two args, one answer
+             // "and.msb x immd"
+    XOR_MSB, // two args, one answer
+    OR_MSB , // two args, one answer
 
     // J-type operations plus one R-type helper (COMP) (4)
     // do all (>, <, ==, !=) (then use XOR + NON_ZERO)
     COMP    , // two args, one answer
+              // "cmp x y a"
     SKIP    , // one arg , conditional, if flags is zero
-    JUMP    , // one IMMD, one answer (to PC)
-    JUMP_REG,
+              // "skip x"
+              // "skip x immd" immediate acts as a bit mask here
+    // jump is now a psuedo instruction
+    // "jump x   " -> "set pc x"
+    // "jump immd" -> "set pc immd"
 
     // loading/saving (2 ['heavy'])
-    LOAD, // two regs, one immd (also 'set')
-    SAVE, // two regs, one immd (also 'set')
+    LOAD, // two regs, one immd
+          // "load x a"
+          // "load x immd"
+          // "load x a immd
+    SAVE, // two regs, one immd
 
     // I-types setting values from immds
     SET_INT , // one reg, one IMMD (msb)
+              // "set.msb immd"
     SET_ABS , // one reg, one IMMD (lsb)
     SET_FP96, // one reg, one IMMD as a 9/6 bit fixed point (+1 for sign)
     SET_REG , // two regs (r0 = r1)
+              // argument deduced "set x 123.3" <- note the decimal
+              // "set x a"
 
     // graphics operations (7)
     GLOAD_ADDR    , // immd load sprite data

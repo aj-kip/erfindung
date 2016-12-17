@@ -38,6 +38,10 @@
 
 #include "ErfiGpu.hpp"
 
+namespace {
+using Error = std::runtime_error;
+}
+
 namespace erfin {
 
 inline OpCode get_op_code(Inst inst) {
@@ -49,8 +53,6 @@ inline int get_r0_index(Inst inst) { return (inst & 0x380000) >> (16+3); }
 inline int get_r1_index(Inst inst) { return (inst &  0x70000) >> (16  ); }
 inline int get_r2_index(Inst inst) { return (inst &   0xE000) >> (16-3); }
 inline int get_r3_index(Inst inst) { return (inst &   0x1C00) >> (16-6); }
-
-
 
 // for ParamForm: REG_REG_IMMD
 
@@ -97,11 +99,13 @@ inline Inst make_or(Reg r0, Reg r1, Reg r2) {
 inline Inst make_comp(Reg r0, Reg r1, Reg r2) {
     return encode_op(enum_types::COMP) | encode_reg_reg_reg(r0, r1, r2);
 }
+#if 0
 // for op: SKIP    , // one arg , conditional, if flags is zero
 // for op: JUMP    , // one IMMD, one answer (to PC)
 inline Inst make_jump(UInt32 immd) {
     return encode_op(enum_types::JUMP) | immd;
 }
+#endif
 
 // for op: JUMP_REG,
 // for op: LOAD, // two regs, one immd
@@ -181,8 +185,10 @@ ParamForm get_op_param(OpCode op) {
         //return REG_REG_IMMD;
     case COMP    : return REG_REG_REG;
     case SKIP    : return REG;
+#   if 0
     case JUMP    : return REG_IMMD;
     case JUMP_REG: return REG;
+#   endif
     case LOAD: case SAVE:
         return REG_REG_IMMD;
     case SET_REG : return REG_REG;
@@ -204,7 +210,8 @@ void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu, Inst inst) {
     UInt32 * r0 = nullptr, * r1 = nullptr, * r2 = nullptr, * r3 = nullptr;
     UInt32 immd = 0;
     (void)r3;
-    switch (get_op_param(get_op_code(inst))) {
+    const auto param_form = get_op_param(get_op_code(inst));
+    switch (param_form) {
     case REG_REG_REG_REG:
         r3 = &regs[get_r3_index(inst)];
     case REG_REG_REG:
@@ -216,23 +223,26 @@ void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu, Inst inst) {
     default: break;
     }
 
-    switch (get_op_param(get_op_code(inst))) {
+    switch (param_form) {
     case REG_REG_IMMD: case REG_IMMD:
-        //immd = get_immd(inst);
+        immd = inst & 0xFFFF;
     default: break;
     }
 
     // execute
     switch (get_op_code(inst)) {
     // fundemental computations
-    case PLUS : *r2 = *r0 + *r1; break;
+    case PLUS :
+        switch (param_form) {
+        case REG_REG_REG: *r2 = *r0 + *r1; break;
+
+        default: throw Error("Invalid parameter form.");
+        }
+
+        break;
     case MINUS: *r2 = *r0 - *r1; break;
     case TIMES: *r2 = fp_multiply(*r0, *r1); break;
     case DIVIDE_MOD: break;
-    //case PLUS_IMMD: *r1 = *r0 + immd; break;
-
-    //case MINUS_IMMD: *r1 = *r0 - immd; break;
-
     case AND     : *r2 = *r0 & *r1; break;
     case NOT     : *r1 = ~*r0     ; break;
     case XOR     : *r2 = *r0 ^ *r1; break;
@@ -244,8 +254,10 @@ void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu, Inst inst) {
               | ((*r0 != *r1) << 3);
         break;
     case SKIP    : if (*r0 == 0) regs[REG_PC] += sizeof(Inst); break;
+#   if 0
     case JUMP    : regs[REG_PC] = immd; break;
     case JUMP_REG: regs[REG_PC] =  *r0; break; // what's special about this vs SET
+#   endif
     // loading/saving
     case LOAD: *r1 = mem[*r0 + immd]; break;
     case SAVE: mem[*r1 + immd] = *r0; break;
