@@ -32,6 +32,8 @@ public:
 
     void swap(Assembler & asmr);
 
+    static void run_tests();
+
 private:
     ProgramData m_program;
     std::string m_error_string;

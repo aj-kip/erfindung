@@ -62,13 +62,7 @@ void remove_blank_strings(std::vector<std::string> & strings);
 void convert_to_lower_case(std::string & str);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end);
-#if 0
-erfin::Inst process_line(TextProcessState & state,
-                         StringCIter beg, StringCIter end);
 
-bool handle_as_special_directive(TextProcessState & state,
-                                 StringCIter beg, StringCIter end);
-#endif
 int get_file_size(const char * filename) {
     struct stat stat_buf;
     int rc = stat(filename, &stat_buf);
@@ -110,31 +104,6 @@ void Assembler::assemble_from_string(const std::string & source) {
 
     TextProcessState tpstate;
     process_text(tpstate, tokens.begin(), tokens.end());
-#   if 0
-    auto itr = tokens.begin();
-    auto old = itr;
-    for (; itr != tokens.end(); ++itr) {
-        // set old position if it is unset
-        if (old == tokens.end()) {
-            old = itr;
-        }
-
-        if (tpstate.in_data_directive) {
-            ;
-        } else if (*itr == "\n") {
-            ++tpstate.current_source_line;
-            // first check for special directives
-            if (!handle_as_special_directive(tpstate, old, itr)) {
-                // check for data
-
-                // then check for regular executable lines
-                process_line(tpstate, old, itr);
-            }
-            // "unset" old position
-            old = tokens.end();
-        }
-    }
-#   endif
     // only when a valid program has been assembled do we swap in the actual
     // instructions, as a throw may occur at any point of the text processing
     m_program.swap(tpstate.program_data);
@@ -209,7 +178,6 @@ std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
                 default: break;
                 }
             }
-
             switch (*itr) {
             // label declarations
             // "operators" :[]
@@ -262,6 +230,7 @@ void convert_to_lower_case(std::string & str) {
 
 StringCIter process_data(TextProcessState & state, StringCIter beg, StringCIter end);
 StringCIter process_label(TextProcessState & state, StringCIter beg, StringCIter end);
+void skip_new_lines(TextProcessState & state, StringCIter * itr);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     if (beg == end) return;
@@ -275,35 +244,6 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     }
 }
 
-#if 0
-erfin::Inst process_line(TextProcessState & state,
-                         StringCIter beg, StringCIter end)
-{
-    if (beg == end)
-        assert(!"Blank line, this is indicitive of a bug in the code.");
-    auto func = get_line_processing_func(*beg);
-    if (!func) {
-        throw Error("Instruction \"" + *beg +
-                                 "\" is not recognized.");
-    }
-    return func(state, ++beg, end);
-}
-
-bool handle_as_special_directive(TextProcessState & state,
-                                 StringCIter beg, StringCIter end)
-{
-    if (*beg == "data" || state.in_data_directive) { // data directive
-        ;
-        return true;
-    } else if (*beg == ":") { // label directive
-
-        // and now we need to process the rest of the line
-        process_line(state, beg, end);
-        return true;
-    }
-    return false;
-}
-#endif
 StringCIter process_binary
     (TextProcessState & state, StringCIter beg, StringCIter end);
 
@@ -316,7 +256,7 @@ StringCIter process_data
     }
     auto process_func = process_binary;
     if (*beg != "[") {
-        if (*beg == "binary") {
+        if (*++beg == "binary") {
             // default
         } else {
             throw make_error(state, ": encoding scheme \"" + *beg + "\" not "
@@ -324,7 +264,7 @@ StringCIter process_data
         }
         ++beg;
     }
-    while (*beg != "\n") ++beg;
+    skip_new_lines(state, &beg);
     if (*beg != "[") {
         throw make_error(state, ": expected square bracket to indicate the "
                                 "start of data.");
@@ -337,11 +277,12 @@ StringCIter process_label
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     ++beg;
+    skip_new_lines(state, &beg);
     if (beg == end) {
-        throw make_error(state, ": Line ends before labels was given for "
-                                "label directive.");
+        throw make_error(state, ": Code ends before a label was given for "
+                                "the label directive.");
     }
-    while (*beg != "\n") { ++beg; ++state.current_source_line; }
+    skip_new_lines(state, &beg);
     if (string_to_register(*beg) != erfin::enum_types::REG_COUNT) {
         throw make_error(state, ": register cannot be used as a label.");
     }
@@ -356,6 +297,13 @@ StringCIter process_label
                          "on line: " + std::to_string(itr->second.source_line));
     }
     return beg;
+}
+
+void skip_new_lines(TextProcessState & state, StringCIter * itr) {
+    while (**itr == "\n") {
+        ++(*itr);
+        ++state.current_source_line;
+    }
 }
 
 bool is_line_blank(const std::string & line) {
@@ -390,28 +338,41 @@ Error make_error(TextProcessState & state, const std::string & str) {
 StringCIter process_binary
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
+    static constexpr const char * const BAD_CHAR_MSG =
+        ": binary encodings only handle five characters '1','x' for one and "
+        "'_', 'o', '0' for zero.";
+    static constexpr const char * const SOURCE_ENDED_TOO_SOON_MSG =
+        ": source code ended without ending the current data sequence, is must "
+        "be closed with a \"]\"";
     int bit_pos = 0;
     assert(state.data.empty());
     while (*beg != "]") {
         for (char c : *beg) {
-            if (bit_pos == 0)
-                state.data.push_back(0);
+            switch (c) {
+            case '_': case 'o': case '0': case '1': case 'x':
+                if (bit_pos == 0)
+                    state.data.push_back(0);
+                break;
+            default: break;
+            }
             switch (c) {
             case '1': case 'x':
-                state.data.back() |= (1 << bit_pos);
+                state.data.back() |= (1 << (31 - bit_pos));
+                // v fall through v
             case '_': case 'o': case '0':
                 bit_pos = (bit_pos + 1) % 32;
                 break;
-            default: throw make_error(state, ": binary encodings only handle "
-                                             "five characters '1','x' for one "
-                                             "and '_', 'o', '0' for zero.");
+            // characters we should never see
+            case '\n':
+                if (beg->size() == 1) break;
+                // v fall through v
+            case '[': case ']': assert(false); break;
+            default: throw make_error(state, BAD_CHAR_MSG);
             }
         }
         ++beg;
         if (beg == end) {
-            throw make_error(state, ": source code ended without ending the "
-                                    "current data sequence, is must be closed "
-                                    "with a \"]\"");
+            throw make_error(state, SOURCE_ENDED_TOO_SOON_MSG);
         }
     }
     if (bit_pos != 0) {
@@ -547,6 +508,38 @@ erfin::Reg string_to_register(const std::string & str) {
     }
 }
 
-const LineToInstFunc init_f = get_line_processing_func("");
-
 } // end of anonymous namespace
+
+void erfin::Assembler::run_tests() {
+    TextProcessState state;
+    {
+    const std::vector<std::string> sample_binary = {
+        "____xxxx", "____x_xxx___x__x", "xx__x_x_",
+        "]"
+    };
+    (void)process_binary(state, sample_binary.begin(), sample_binary.end());
+    assert(state.program_data.back() == 252414410);
+    }
+    {
+    const std::vector<std::string> sample_data = {
+        "data", "binary", "[", "\n",
+            "____xxxxxx__x_x_", "\n", // 4042
+            "___x_xxx____x__x", "\n", // 5897
+        "]"
+    };
+    (void)process_data(state, sample_data.begin(), sample_data.end());
+    assert(state.program_data.back() == 264902409);
+    }
+    {
+    const std::vector<std::string> sample_label = {
+        ":", "hello", "and", "x", "y", "\n"
+                    , "jump", "hello"
+    };
+    (void)process_label(state, sample_label.begin(), sample_label.end());
+    assert(state.labels.find("hello") != state.labels.end());
+    }
+}
+
+namespace {
+    const LineToInstFunc init_f = get_line_processing_func("");
+}  // end of anonymous namespace

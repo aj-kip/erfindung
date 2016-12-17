@@ -477,6 +477,7 @@ std::vector<erfin::UInt32> make_demo_app() {
 
 int main() {
     std::cout << erfin::enum_types::OPCODE_COUNT << std::endl;
+    erfin::Assembler::run_tests();
     test_string_processing();
     return 0;
 
