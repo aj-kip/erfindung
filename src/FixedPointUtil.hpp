@@ -28,7 +28,7 @@
 
 namespace erfin {
 
-UInt32 reverse_bits(UInt32 num) {
+inline UInt32 reverse_bits(UInt32 num) {
 
     // this implementation uses a 256 byte table, which may not work well
     // with caching if I'm not calling this often

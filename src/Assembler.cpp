@@ -20,6 +20,7 @@
 *****************************************************************************/
 
 #include "Assembler.hpp"
+#include "FixedPointUtil.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -111,9 +112,15 @@ void Assembler::assemble_from_string(const std::string & source) {
     m_program.swap(tpstate.program_data);
 }
 
+UInt32 encode_immd(double d) { return to_fixed_point(d); }
+
 } // end of erfin namespace
 
+// <-------------------------- Level 1 helpers ------------------------------->
+
 namespace {
+
+bool is_line_blank(const std::string & line);
 
 std::vector<std::string> seperate_into_lines(const std::string & str) {
     std::vector<std::string> rv;
@@ -205,17 +212,6 @@ std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
     return tokens;
 }
 
-using LineToInstFunc = StringCIter(*)(TextProcessState & state,
-                                      StringCIter beg, StringCIter end);
-
-bool is_line_blank(const std::string & line);
-
-LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std::string & fname);
-
-Error make_error(TextProcessState & state, const std::string & str);
-
-erfin::Reg string_to_register(const std::string & str);
-
 void remove_blank_strings(std::vector<std::string> & strings) {
     auto itr = std::remove_if
         (strings.begin(), strings.end(), is_line_blank);
@@ -230,9 +226,19 @@ void convert_to_lower_case(std::string & str) {
     }
 }
 
-StringCIter process_data(TextProcessState & state, StringCIter beg, StringCIter end);
-StringCIter process_label(TextProcessState & state, StringCIter beg, StringCIter end);
-void skip_new_lines(TextProcessState & state, StringCIter * itr);
+// <---------------------------- level 2 helpers ----------------------------->
+
+using LineToInstFunc = StringCIter(*)(TextProcessState & state,
+                                      StringCIter beg, StringCIter end);
+
+LineToInstFunc get_line_processing_func
+    (SuffixAssumption assumptions, const std::string & fname);
+
+StringCIter process_data
+    (TextProcessState & state, StringCIter beg, StringCIter end);
+
+StringCIter process_label
+    (TextProcessState & state, StringCIter beg, StringCIter end);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     if (beg == end) return;
@@ -246,8 +252,23 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     }
 }
 
+bool is_line_blank(const std::string & line) {
+    for (char c : line) {
+        switch (c) {
+        case ' ': case '\t': case '\r': case '\n': break;
+        default : return false;
+        }
+    }
+    return true;
+}
+
+// <--------------------------- level 3 helpers ------------------------------>
+
 StringCIter process_binary
     (TextProcessState & state, StringCIter beg, StringCIter end);
+void skip_new_lines(TextProcessState & state, StringCIter * itr);
+erfin::Reg string_to_register(const std::string & str);
+Error make_error(TextProcessState & state, const std::string & str);
 
 StringCIter process_data
     (TextProcessState & state, StringCIter beg, StringCIter end)
@@ -308,18 +329,51 @@ void skip_new_lines(TextProcessState & state, StringCIter * itr) {
     }
 }
 
-bool is_line_blank(const std::string & line) {
-    for (char c : line) {
-        switch (c) {
-        case ' ': case '\t': case '\r': case '\n': break;
-        default : return false;
-        }
-    }
-    return true;
-}
+// <--------------------------- level 4 helpers ------------------------------>
 
-StringCIter make_and
-    (TextProcessState & state, StringCIter beg, StringCIter end);
+// <----------------------- Arithmetic operations ---------------------------->
+
+StringCIter make_plus(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_minus(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_multiply(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_divmod(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_multiply_fp(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_divmod_fp(TextProcessState &, StringCIter, StringCIter);
+
+// <------------------------- Logic operations ------------------------------->
+
+StringCIter make_and(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_or(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_xor(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_and_msb(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_or_msb(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_xor_msb(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_not(TextProcessState &, StringCIter, StringCIter);
+
+// <--------------------- flow control operations ---------------------------->
+
+StringCIter make_cmp(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_skip(TextProcessState &, StringCIter, StringCIter);
+
+// <------------------------- move operations -------------------------------->
+
+StringCIter make_set(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_load(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_save(TextProcessState &, StringCIter, StringCIter);
 
 LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std::string & fname) {
     static bool is_initialized = false;
@@ -328,7 +382,40 @@ LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std:
         auto itr = fmap.find(fname);
         return itr->second;
     }
-    fmap["and"] = make_and;
+
+    fmap["and"] = fmap["&"] = make_and;
+    fmap["or" ] = fmap["|"] = make_or ;
+    fmap["xor"] = fmap["^"] = make_xor;
+
+    // suffixes
+    fmap["and.lsb"] = fmap["&.lsb"] = make_and;
+    fmap["or.lsb" ] = fmap["|.lsb"] = make_or ;
+    fmap["xor.lsb"] = fmap["^.lsb"] = make_xor;
+    fmap["and.msb"] = fmap["&.msb"] = make_and_msb;
+    fmap["or.msb" ] = fmap["|.msb"] = make_or_msb ;
+    fmap["xor.msb"] = fmap["^.msb"] = make_xor_msb;
+
+    fmap["not"] = fmap["!"] = fmap["~"] = make_not;
+
+    fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
+    fmap["minus"] = fmap["sub"] = fmap["-"] = make_minus;
+
+    fmap["mul"] = fmap["multiply"] = fmap["*"] = make_multiply_fp;
+    fmap["div"] = fmap["divmod"  ] = fmap["/"] = make_divmod_fp;
+
+    // suffixes
+    fmap["mul.int"] = fmap["multiply.int"] = fmap["*.int"] = make_multiply;
+    fmap["mul.fp" ] = fmap["multiply.fp" ] = fmap["*.fp" ] = make_multiply_fp;
+    fmap["div.int"] = fmap["divmod.int"  ] = fmap["/.int"] = make_divmod;
+    fmap["div.fp" ] = fmap["divmod.fp"   ] = fmap["/.fp" ] = make_divmod_fp;
+
+    fmap["cmp"] = fmap["<>="] = make_cmp;
+    fmap["skip"] = fmap["?"] = make_skip;
+
+    fmap["save"] = fmap["sav"] = fmap["<<"] = make_save;
+    fmap["load"] = fmap["ld"] = fmap[">>"] = make_load;
+
+    fmap["set"] = fmap["="] = make_set;
     is_initialized = true;
     return get_line_processing_func(assumptions, fname);
 }
@@ -389,6 +476,8 @@ StringCIter process_binary
     return ++beg;
 }
 
+// <--------------------------- level 5 helpers ------------------------------>
+
 enum TokenClassification {
     REGISTER,
     IMMEDIATE_INTEGER,
@@ -399,7 +488,8 @@ enum TokenClassification {
 enum NumericClassification {
     NON_NEGATIVE_INTEGER,
     INTEGER,
-    DECIMAL
+    DECIMAL,
+    NOT_NUMERIC
 };
 
 TokenClassification classify_token(const std::string & str);
@@ -408,18 +498,72 @@ StringCIter make_generic_r_type
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end);
 
+bool op_code_supports_fpoint_immd(erfin::Inst inst);
+bool op_code_supports_integer_immd(erfin::Inst inst);
+UInt32 encode_integer_immd_from_iter(StringCIter iter);
+UInt32 encode_fpoint_immd_from_iter(StringCIter iter);
+
 StringCIter make_and
     (TextProcessState & state, StringCIter beg, StringCIter end)
 { return make_generic_r_type(erfin::OpCode::AND, state, beg, end); }
+
+StringCIter make_set
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin::enum_types;
+    assert(*beg == "set" || *beg == "=");
+    // supports fp 9/6, integer immediates and registers
+    ++beg; // skip "set"
+    // set instruction has exactly two arguments
+    StringCIter line_end = beg;
+    while (*line_end != "\n") {
+        ++line_end;
+        if (line_end == end) break;
+    }
+    if (line_end - beg != 2) {
+        throw make_error(state, ": set instruction may only have exactly "
+                                "two arguments.");
+    }
+    auto r1id = string_to_register(*beg);
+    if (r1id == REG_COUNT) {
+        throw make_error(state, ": in all forms the first argument must be a "
+                                "register.");
+    }
+    auto a2t  = classify_token(*(beg + 1));
+    switch (a2t) {
+    case REGISTER:
+        assert(string_to_register(*(beg + 1)) != REG_COUNT);
+        state.program_data.push_back(SET_REG |
+            erfin::encode_reg_reg(r1id, string_to_register(*(beg + 1)))
+        );
+        break;
+    case IMMEDIATE_FIXED_POINT:
+        state.program_data.push_back(SET_FP96 | erfin::encode_reg(r1id) |
+                                     encode_fpoint_immd_from_iter(beg + 1));
+        break;
+    case IMMEDIATE_INTEGER:
+        state.program_data.push_back(SET_FP96 | erfin::encode_reg(r1id) |
+                                     encode_integer_immd_from_iter(beg + 1));
+        break;
+    case INVALID_CLASS:
+        throw make_error(state, ": labels may not be used for set operations, "
+                                "perhaps a \"load\" was intented?");
+    }
+    ++state.current_source_line;
+    return line_end;
+}
+
+// <--------------------------- level 6 helpers ------------------------------>
 
 StringCIter make_generic_r_type
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
 {
-    erfin::Inst inst = op_code;
-    bool supports_fpoints = false;
-    bool supports_label   = true;
     using namespace erfin::enum_types;
+
+    erfin::Inst inst = op_code;
+    bool supports_fpoints  = op_code_supports_fpoint_immd (op_code);
+    bool supports_integers = op_code_supports_integer_immd(op_code);
 
     // psuedo: and x y -> and x y x
     // real  : and x y a
@@ -438,24 +582,22 @@ StringCIter make_generic_r_type
             inst |= erfin::encode_reg_reg_reg(r1id, r2id, r3id);
             break;
         case IMMEDIATE_INTEGER:
+            if (!supports_integers) {
+                throw make_error(state, ": integers not supported for this "
+                                        "instruction.");
+            }
+            inst |= encode_integer_immd_from_iter(beg + 1);
+            break;
         case IMMEDIATE_FIXED_POINT:
-            if (supports_fpoints) {
-                ;
-            } else {
+            if (!supports_fpoints) {
                 throw make_error(state, ": fixed point immediates are not "
                                         "allowed for this instruction.");
             }
+            inst |= encode_fpoint_immd_from_iter(beg + 1);
             break;
         case INVALID_CLASS:
-            if (supports_label) {
-                state.unfulfilled_labels.push_back(TextProcessState::LabelPair {  state.program_data.size(),
-                                                      state.current_source_line});
-                inst |= erfin::encode_reg(r1id);
-            } else {
-                throw make_error(state, ": labels are not supported here, "
-                                 "or did you mean to place a register?");
-            }
-            break;
+            throw make_error(state, ": labels are not supported here, "
+                             "or did you mean to place a register?");
         }
         state.program_data.push_back(inst);
         return beg + 2;
@@ -480,9 +622,52 @@ StringCIter make_generic_r_type
 
 }
 
+bool op_code_supports_fpoint_immd(erfin::Inst inst) {
+    using namespace erfin::enum_types;
+    switch (inst) {
+    case PLUS: case MINUS: case TIMES_FP: case DIV_MOD_FP:
+        return true;
+    case TIMES: case AND: case XOR: case OR: case AND_MSB: case XOR_MSB:
+    case OR_MSB: case DIVIDE_MOD:
+        return false;
+    default: assert(false); break;
+    }
+}
+
+bool op_code_supports_integer_immd(erfin::Inst inst) {
+    using namespace erfin::enum_types;
+    switch (inst) {
+    case PLUS: case MINUS: case TIMES: case AND: case XOR: case OR:
+    case AND_MSB: case XOR_MSB: case OR_MSB: case DIVIDE_MOD:
+        return true;
+    case TIMES_FP: case DIV_MOD_FP:
+        return false;
+    default: assert(false); break;
+    }
+}
+
+UInt32 encode_integer_immd_from_iter(StringCIter iter) {
+    int i;
+    bool b = string_to_number<10>(&*iter->begin(), &*iter->end(), i);
+    (void)b; assert(b);
+    return erfin::encode_immd(i);
+}
+
+UInt32 encode_fpoint_immd_from_iter(StringCIter iter) {
+    double d;
+    bool b = string_to_number<10>(&*iter->begin(), &*iter->end(), d);
+    (void)b; assert(b);
+    return erfin::encode_immd(d);
+}
+
 TokenClassification classify_token(const std::string & str) {
     using namespace erfin::enum_types;
     if (string_to_register(str) != REG_COUNT) return REGISTER;
+    double d; int i;
+    if (string_to_number<10>(&str[0], &*str.end(), i))
+        return IMMEDIATE_INTEGER;
+    if (string_to_number<10>(&str[0], &*str.end(), d))
+        return IMMEDIATE_FIXED_POINT;
     return INVALID_CLASS;
 }
 
@@ -513,6 +698,8 @@ erfin::Reg string_to_register(const std::string & str) {
 } // end of anonymous namespace
 
 void erfin::Assembler::run_tests() {
+    // with such a deep call tree, unit tests on each function on each level
+    // becomes quite useful
     TextProcessState state;
     // data encodings
     {
@@ -540,6 +727,19 @@ void erfin::Assembler::run_tests() {
     };
     (void)process_label(state, sample_label.begin(), sample_label.end());
     assert(state.labels.find("hello") != state.labels.end());
+    }
+    // test basic instructions
+    {
+    const std::vector<std::string> sample_code = {
+        "="  , "x", "y"    , "\n",
+        "set", "x", "1234" , "\n",
+        "="  , "x", "12.34"
+    };
+    auto beg = sample_code.begin();
+    auto end = sample_code.end();
+    beg = make_set(state, beg, end);
+    beg = make_set(state, ++beg, end);
+    beg = make_set(state, ++beg, end);
     }
 }
 

@@ -164,13 +164,14 @@ enum OpCode_e : UInt32 {
     DIV_MOD_FP, // "divmod.fp x y a"
                 // "divmod.fp x immd"
     // R-type LOGIC ops (4)
-    AND, // two args, one answer
+    AND, // bitwise and
+         // This form applies to all logic operations
          // "and x y a"
          // "and x immd" Assembler may assume LSB
          // "and.lsb x y a" depends on assembler options
-    XOR, // two args, one answer
-    OR , // two args, one answer
-    NOT, // one arg , one answer
+    XOR, // bitwise exclusive or
+    OR , // bitwise or
+    NOT, // bitwise complement
          // "not x a"
 
     // I-type LOGIC, lsb and msb (6)
@@ -192,15 +193,17 @@ enum OpCode_e : UInt32 {
 
     // loading/saving (2 ['heavy'])
     LOAD, // two regs, one immd
-          // "load x a"
+          // "load x a" loads x from address a
           // "load x immd"
           // "load x a immd
     SAVE, // two regs, one immd
+          // "save x a" saves x to address a
 
     // I-types setting values from immds
     SET_INT , // one reg, one IMMD (msb)
               // "set.msb immd"
     SET_ABS , // one reg, one IMMD (lsb)
+              // "set x immd"
     SET_FP96, // one reg, one IMMD as a 9/6 bit fixed point (+1 for sign)
     SET_REG , // two regs (r0 = r1)
               // argument deduced "set x 123.3" <- note the decimal
@@ -271,11 +274,10 @@ enum ParamForm_e {
 //               # there are many ways to accomplish the encoding
 //               # zero characters : 0, O, _
 //               # one  characters : 1, X,
-//               ...
-// ]
+//               ... ]
 //
 // data fpnum [ # series of fixed point numbers
-// ]
+//              ... ]
 using OpCode       = enum_types::OpCode_e   ;
 using Reg          = enum_types::Reg_e      ;
 using ParamForm    = enum_types::ParamForm_e;
