@@ -400,20 +400,24 @@ LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std:
     fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
     fmap["minus"] = fmap["sub"] = fmap["-"] = make_minus;
 
-    fmap["mul"] = fmap["multiply"] = fmap["*"] = make_multiply_fp;
+    fmap["times"] = fmap["mul"] = fmap["multiply"] = fmap["*"] = make_multiply_fp;
     fmap["div"] = fmap["divmod"  ] = fmap["/"] = make_divmod_fp;
 
     // suffixes
-    fmap["mul.int"] = fmap["multiply.int"] = fmap["*.int"] = make_multiply;
-    fmap["mul.fp" ] = fmap["multiply.fp" ] = fmap["*.fp" ] = make_multiply_fp;
+    fmap["times.int"] = fmap["mul.int"] = fmap["multiply.int"] = fmap["*.int"]
+        = make_multiply;
+    fmap["times.fp" ] = fmap["mul.fp" ] = fmap["multiply.fp" ] = fmap["*.fp" ]
+        = make_multiply_fp;
     fmap["div.int"] = fmap["divmod.int"  ] = fmap["/.int"] = make_divmod;
     fmap["div.fp" ] = fmap["divmod.fp"   ] = fmap["/.fp" ] = make_divmod_fp;
 
     fmap["cmp"] = fmap["<>="] = make_cmp;
     fmap["skip"] = fmap["?"] = make_skip;
 
+    // for short hand, memory is to be thought of as on the left of the
+    // instruction.
     fmap["save"] = fmap["sav"] = fmap["<<"] = make_save;
-    fmap["load"] = fmap["ld"] = fmap[">>"] = make_load;
+    fmap["load"] = fmap["ld" ] = fmap[">>"] = make_load;
 
     fmap["set"] = fmap["="] = make_set;
     is_initialized = true;
@@ -494,7 +498,19 @@ enum NumericClassification {
 
 TokenClassification classify_token(const std::string & str);
 
-StringCIter make_generic_r_type
+StringCIter make_generic_logic
+    (erfin::OpCode op_code, TextProcessState & state,
+     StringCIter beg, StringCIter end);
+
+StringCIter make_generic_arithemetic
+    (erfin::OpCode op_code, TextProcessState & state,
+     StringCIter beg, StringCIter end);
+
+StringCIter make_generic_divmod
+    (erfin::OpCode op_code, TextProcessState & state,
+     StringCIter beg, StringCIter end);
+
+StringCIter make_generic_memory_access
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end);
 
@@ -503,23 +519,143 @@ bool op_code_supports_integer_immd(erfin::Inst inst);
 UInt32 encode_integer_immd_from_iter(StringCIter iter);
 UInt32 encode_fpoint_immd_from_iter(StringCIter iter);
 
+erfin::ParamForm get_lines_param_form(StringCIter beg, StringCIter end);
+
+// <----------------------- Arithmetic operations ---------------------------->
+
+StringCIter make_plus
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_arithemetic(erfin::OpCode::PLUS, state, beg, end);
+}
+
+StringCIter make_minus
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_arithemetic(erfin::OpCode::MINUS, state, beg, end);
+}
+
+StringCIter make_multiply
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
+}
+
+StringCIter make_divmod
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
+}
+
+StringCIter make_multiply_fp
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_arithemetic(erfin::OpCode::TIMES_FP, state, beg, end);
+}
+
+StringCIter make_divmod_fp
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_divmod(erfin::OpCode::DIV_MOD_FP, state, beg, end);
+}
+
+// <------------------------- Logic operations ------------------------------->
+
+StringCIter get_eol(StringCIter beg, StringCIter end);
+
 StringCIter make_and
     (TextProcessState & state, StringCIter beg, StringCIter end)
-{ return make_generic_r_type(erfin::OpCode::AND, state, beg, end); }
+{ return make_generic_logic(erfin::OpCode::AND, state, beg, end); }
+
+StringCIter make_or
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{ return make_generic_logic(erfin::OpCode::OR, state, beg, end); }
+
+StringCIter make_xor
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{ return make_generic_logic(erfin::OpCode::XOR, state, beg, end); }
+
+StringCIter make_and_msb
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{ return make_generic_logic(erfin::OpCode::AND_MSB, state, beg, end); }
+
+StringCIter make_or_msb
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{ return make_generic_logic(erfin::OpCode::OR_MSB, state, beg, end); }
+
+StringCIter make_xor_msb
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{ return make_generic_logic(erfin::OpCode::XOR_MSB, state, beg, end); }
+
+StringCIter make_not
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    ++beg;
+    auto eol = get_eol(beg, end);
+    switch (get_lines_param_form(beg, eol)) {
+    case REG:
+        state.program_data.push_back(encode_op(NOT) |
+                                     encode_reg(string_to_register(*beg)));
+        break;
+    default:
+        throw make_error(state, ": exactly one argument permitted for logical "
+                                "complement (not).");
+    }
+    ++state.current_source_line;
+    return eol;
+}
+
+StringCIter make_cmp
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_logic(erfin::OpCode::COMP, state, beg, end);
+}
+
+StringCIter make_skip
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    ++beg;
+    auto eol = get_eol(beg, end);
+    Reg r1;
+    UInt32 immd = 0;
+    switch (get_lines_param_form(beg, eol)) {
+    case REG_IMMD:
+        switch (classify_token(*(beg + 1))) {
+        case IMMEDIATE_FIXED_POINT:
+            immd = encode_fpoint_immd_from_iter(beg + 1);
+            break;
+        case IMMEDIATE_INTEGER:
+            immd = encode_integer_immd_from_iter(beg + 1);
+            break;
+        default: assert(false); break;
+        }
+        // v fall through v
+    case REG:
+        r1 = string_to_register(*beg);
+        break;
+    default: throw make_error(state, ": unsupported parameters.");
+    }
+    state.program_data.push_back(encode_op(erfin::OpCode::SKIP) |
+                                 encode_reg(r1) | immd);
+    ++state.current_source_line;
+    return eol;
+}
 
 StringCIter make_set
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
+    using namespace erfin;
     using namespace erfin::enum_types;
     assert(*beg == "set" || *beg == "=");
     // supports fp 9/6, integer immediates and registers
     ++beg; // skip "set"
     // set instruction has exactly two arguments
-    StringCIter line_end = beg;
-    while (*line_end != "\n") {
-        ++line_end;
-        if (line_end == end) break;
-    }
+    StringCIter line_end = get_eol(beg, end);
+
     if (line_end - beg != 2) {
         throw make_error(state, ": set instruction may only have exactly "
                                 "two arguments.");
@@ -533,16 +669,18 @@ StringCIter make_set
     switch (a2t) {
     case REGISTER:
         assert(string_to_register(*(beg + 1)) != REG_COUNT);
-        state.program_data.push_back(SET_REG |
+        state.program_data.push_back(encode_op(SET_REG) |
             erfin::encode_reg_reg(r1id, string_to_register(*(beg + 1)))
         );
         break;
     case IMMEDIATE_FIXED_POINT:
-        state.program_data.push_back(SET_FP96 | erfin::encode_reg(r1id) |
+        state.program_data.push_back(encode_op(SET_FP96) |
+                                     erfin::encode_reg(r1id) |
                                      encode_fpoint_immd_from_iter(beg + 1));
         break;
     case IMMEDIATE_INTEGER:
-        state.program_data.push_back(SET_FP96 | erfin::encode_reg(r1id) |
+        state.program_data.push_back(encode_op(SET_INT) |
+                                     erfin::encode_reg(r1id) |
                                      encode_integer_immd_from_iter(beg + 1));
         break;
     case INVALID_CLASS:
@@ -553,73 +691,202 @@ StringCIter make_set
     return line_end;
 }
 
+StringCIter make_load
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_memory_access(erfin::OpCode::LOAD, state, beg, end);
+}
+
+StringCIter make_save
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_memory_access(erfin::OpCode::SAVE, state, beg, end);
+}
+
 // <--------------------------- level 6 helpers ------------------------------>
 
-StringCIter make_generic_r_type
+erfin::ParamForm get_lines_param_form(StringCIter beg, StringCIter end) {
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    // this had better not be the begging of the line
+    assert(!get_line_processing_func(erfin::Assembler::NO_ASSUMPTION, *beg));
+
+    // naturally anyone can read this (oh god it's shit)
+    switch (int(end - beg)) {
+    case 4:
+        for (int i = 0; i != 4; ++i)
+            if (classify_token(*(beg + i)) != REGISTER)
+                return INVALID_PARAMS;
+        return REG_REG_REG_REG;
+    case 3: case 2:
+        for (int i = 0; i != int(end - beg) - 1; ++i)
+            if (classify_token(*(beg + i)) != REGISTER)
+                return INVALID_PARAMS;
+        switch (classify_token(*(beg + int(end - beg) - 1))) {
+        case IMMEDIATE_FIXED_POINT: case IMMEDIATE_INTEGER: case INVALID_CLASS:
+            return (int(end - beg) == 3) ? REG_REG_IMMD : REG_IMMD;
+        case REGISTER:
+            return (int(end - beg) == 3) ? REG_REG_REG : REG_REG;
+        }
+    case 1: // reg only
+        return (classify_token(*beg) == REGISTER) ? REG : INVALID_PARAMS;
+    default: return INVALID_PARAMS;
+    }
+}
+
+StringCIter make_generic_logic
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
 {
-    using namespace erfin::enum_types;
+    return make_generic_arithemetic(op_code, state, beg, end);
+}
 
-    erfin::Inst inst = op_code;
+StringCIter make_generic_arithemetic
+    (erfin::OpCode op_code, TextProcessState & state,
+     StringCIter beg, StringCIter end)
+{
+    ++beg;
+    auto eol = get_eol(beg, end);
+
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    Reg a1, a2, ans;
+    UInt32 immd;
     bool supports_fpoints  = op_code_supports_fpoint_immd (op_code);
     bool supports_integers = op_code_supports_integer_immd(op_code);
 
-    // psuedo: and x y -> and x y x
-    // real  : and x y a
-    // real  : and x 1234 # int only
-    switch (int(end - beg)) {
-    case 2: {
-        // first argument must be a register
-        auto r1id = string_to_register(*beg);
-        erfin::Reg r2id, r3id = r1id;
-        auto a2t = classify_token(*(beg + 1));
-        // for "and", fixed points are not allowed immediates
-        switch (a2t) {
-        case REGISTER:
-            // this is a psuedo instruction
-            r2id = string_to_register(*(beg + 1));
-            inst |= erfin::encode_reg_reg_reg(r1id, r2id, r3id);
+    static constexpr const char * const fp_unsupported_msg =
+        ": instruction does not support fixed point immediates.";
+    static constexpr const char * const int_unsupported_msg =
+        ": instruction does not support integer immediates.";
+    switch (get_lines_param_form(beg, eol)) {
+    case REG_REG: // psuedo instruction
+        a1 = string_to_register(*(beg));
+        a2 = ans = string_to_register(*(beg + 1));
+        break;
+    case REG_REG_REG:
+        a1  = string_to_register(*(beg));
+        a2  = string_to_register(*(beg + 1));
+        ans = string_to_register(*(beg + 2));
+        break;
+    case REG_IMMD:
+        // we're leaving!
+        a1 = string_to_register(*(beg));
+        // both fp and integer immediates supported (maybe)
+        switch (classify_token(*(beg + 1))) {
+        case IMMEDIATE_FIXED_POINT:
+            if (!supports_fpoints)
+                throw make_error(state, fp_unsupported_msg);
+            immd = encode_fpoint_immd_from_iter(beg + 1);
             break;
         case IMMEDIATE_INTEGER:
-            if (!supports_integers) {
-                throw make_error(state, ": integers not supported for this "
-                                        "instruction.");
-            }
-            inst |= encode_integer_immd_from_iter(beg + 1);
+            if (!supports_integers)
+                throw make_error(state, int_unsupported_msg);
+            immd = encode_integer_immd_from_iter(beg + 1);
             break;
-        case IMMEDIATE_FIXED_POINT:
-            if (!supports_fpoints) {
-                throw make_error(state, ": fixed point immediates are not "
-                                        "allowed for this instruction.");
-            }
-            inst |= encode_fpoint_immd_from_iter(beg + 1);
-            break;
-        case INVALID_CLASS:
-            throw make_error(state, ": labels are not supported here, "
-                             "or did you mean to place a register?");
+        case REGISTER: case INVALID_CLASS: assert(false); break;
         }
-        state.program_data.push_back(inst);
-        return beg + 2;
+        state.program_data.push_back(encode_op(op_code) | encode_reg(a1) | immd);
+        ++state.current_source_line;
+        return eol;
+    case REG_REG_IMMD: case REG_REG_REG_REG: case REG: case NO_PARAMS:
+        throw make_error(state, ": unsupported parameters.");
+    default: assert(false); break;
     }
-    case 3: {
-        auto r1id = string_to_register(*beg),
-             r2id = string_to_register(*(beg + 1)),
-             r3id = string_to_register(*(beg + 2));
-        // only all registers accepted
-        if (r1id != REG_COUNT || r2id != REG_COUNT || r3id != REG_COUNT) {
-            throw make_error(state, ": for three argument form, all arguements "
-                                    "must be registers.");
-        }
-        // it is no longer possible to rule out the instruction as invalid...
-        inst |= erfin::encode_reg_reg_reg(r1id, r2id, r3id);
-        state.program_data.push_back(inst);
-        return beg + 3;
-    }
-    default:
-        throw make_error(state, ": and takes exactly two or three arguments.");
-    }
+    state.program_data.push_back(encode_op(op_code) |
+                                 encode_reg_reg_reg(a1, a2, ans));
+    ++state.current_source_line;
+    return eol;
+}
 
+StringCIter make_generic_divmod
+    (erfin::OpCode op_code, TextProcessState & state,
+     StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    assert(op_code == DIV_MOD_FP || op_code == DIVIDE_MOD);
+    auto eol = get_eol(beg, end);
+    ++beg;
+    Reg n, d, q, r;
+    switch (get_lines_param_form(beg, eol)) {
+    case REG_REG_REG_REG:
+        n = string_to_register(*(beg));
+        d = string_to_register(*(beg + 1));
+        q = string_to_register(*(beg + 2));
+        r = string_to_register(*(beg + 3));
+        break;
+    case REG_REG_REG:
+        n = string_to_register(*(beg));
+        d = string_to_register(*(beg + 1));
+        r = q = string_to_register(*(beg + 2));
+        break;
+    case REG_REG:
+        // q := n / d also a := a / b
+        // so q == n
+        // quotent will have to be written last
+        r = q = n = string_to_register(*(beg));
+        d = string_to_register(*(beg + 1));
+        break;
+    default: throw make_error(state, ": unsupported parameters.");
+    }
+    state.program_data.push_back(encode_op(op_code) |
+                                 encode_reg_reg_reg_reg(n, d, q, r));
+    ++state.current_source_line;
+    return eol;
+}
+
+StringCIter make_generic_memory_access
+    (erfin::OpCode op_code, TextProcessState & state,
+     StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    assert(op_code == LOAD || op_code == SAVE);
+    auto eol = get_eol(++beg, end);
+    Reg reg;
+    Reg addr_reg;
+    UInt32 immd = 0;
+
+    // too lazy to seperate function
+    const auto int_immd_only =
+    [] (TextProcessState & state, StringCIter itr) -> UInt32 {
+        switch (classify_token(*itr)) {
+        case IMMEDIATE_FIXED_POINT:
+            throw make_error(state, ": fixed points are not valid offsets.");
+        case IMMEDIATE_INTEGER:
+            return encode_integer_immd_from_iter(itr);
+        default: assert(false); break;
+        }
+    };
+
+    switch (get_lines_param_form(beg, eol)) {
+    case REG:
+        if (op_code == SAVE)
+            throw make_error(state, ": deference psuedo instruction only available for loading.");
+        reg = addr_reg = string_to_register(*beg);
+        break;
+    case REG_IMMD:
+        // loading/saving from/to a particular address
+        reg = string_to_register(*beg);
+        immd = int_immd_only(state, beg + 1);
+        state.program_data.push_back(encode_op(op_code) | encode_reg(reg) | immd);
+        ++state.current_source_line;
+        return eol;
+    case REG_REG_IMMD:
+        immd = int_immd_only(state, beg + 2);
+        // v fall through v
+    case REG_REG:
+        reg = string_to_register(*beg);
+        addr_reg = string_to_register(*(beg + 1));
+        break;
+    default:
+        throw make_error(state, ": unsupported parameters.");
+    }
+    state.program_data.push_back(encode_op(op_code) |
+                                 encode_reg_reg(reg, addr_reg) | immd);
+    ++state.current_source_line;
+    return eol;
 }
 
 bool op_code_supports_fpoint_immd(erfin::Inst inst) {
@@ -628,7 +895,7 @@ bool op_code_supports_fpoint_immd(erfin::Inst inst) {
     case PLUS: case MINUS: case TIMES_FP: case DIV_MOD_FP:
         return true;
     case TIMES: case AND: case XOR: case OR: case AND_MSB: case XOR_MSB:
-    case OR_MSB: case DIVIDE_MOD:
+    case OR_MSB: case DIVIDE_MOD: case COMP:
         return false;
     default: assert(false); break;
     }
@@ -638,7 +905,7 @@ bool op_code_supports_integer_immd(erfin::Inst inst) {
     using namespace erfin::enum_types;
     switch (inst) {
     case PLUS: case MINUS: case TIMES: case AND: case XOR: case OR:
-    case AND_MSB: case XOR_MSB: case OR_MSB: case DIVIDE_MOD:
+    case AND_MSB: case XOR_MSB: case OR_MSB: case DIVIDE_MOD: case COMP:
         return true;
     case TIMES_FP: case DIV_MOD_FP:
         return false;
@@ -664,10 +931,15 @@ TokenClassification classify_token(const std::string & str) {
     using namespace erfin::enum_types;
     if (string_to_register(str) != REG_COUNT) return REGISTER;
     double d; int i;
-    if (string_to_number<10>(&str[0], &*str.end(), i))
+    bool at_least_int = string_to_number<10>(&str[0], &*str.end(), i);
+    bool at_least_dbl = string_to_number<10>(&str[0], &*str.end(), d);
+
+    if (at_least_dbl && at_least_int) {
+        if (d != double(i))
+            return IMMEDIATE_FIXED_POINT;
+    }
+    if (at_least_int)
         return IMMEDIATE_INTEGER;
-    if (string_to_number<10>(&str[0], &*str.end(), d))
-        return IMMEDIATE_FIXED_POINT;
     return INVALID_CLASS;
 }
 
@@ -695,9 +967,18 @@ erfin::Reg string_to_register(const std::string & str) {
     }
 }
 
+StringCIter get_eol(StringCIter beg, StringCIter end) {
+    while (*beg != "\n") {
+        ++beg;
+        if (beg == end) break;
+    }
+    return beg;
+}
+
 } // end of anonymous namespace
 
 void erfin::Assembler::run_tests() {
+    using namespace erfin;
     // with such a deep call tree, unit tests on each function on each level
     // becomes quite useful
     TextProcessState state;
@@ -740,6 +1021,33 @@ void erfin::Assembler::run_tests() {
     beg = make_set(state, beg, end);
     beg = make_set(state, ++beg, end);
     beg = make_set(state, ++beg, end);
+    auto supposed_top = encode_op(OpCode::SET_FP96) | encode_reg(Reg::REG_X) | encode_immd(12.34);
+    assert(state.program_data.back() == supposed_top);
+    }
+    // test that "generic arthemetic" instruction maker functions
+    {
+    const std::vector<std::string> sample_code = {
+        "add", "x", "y", "\n",
+        "and", "x", "y", "a", "\n",
+        "-"  , "x", "123"
+    };
+    auto beg = sample_code.begin(), end = sample_code.end();
+    beg = make_plus (state, beg, end);
+    beg = make_and  (state, ++beg, end);
+    beg = make_minus(state, ++beg, end);
+    const auto supposed_top = encode_op(OpCode::MINUS) | encode_reg_reg(Reg::REG_X, Reg::REG_X) | encode_immd(123);
+    assert(supposed_top == state.program_data.back());
+    }
+    {
+    const std::vector<std::string> sample_code = {
+        ">>", "x", "9384", "\n",
+        "<<", "y", "a", "4",
+    };
+    auto beg = sample_code.begin(), end = sample_code.end();
+    beg = make_load(state, beg, end);
+    beg = make_save(state, ++beg, end);
+    const auto supposed_top = encode_op(OpCode::SAVE) | encode_reg_reg(Reg::REG_Y, Reg::REG_A) | encode_immd(4);
+    assert(supposed_top == state.program_data.back());
     }
 }
 

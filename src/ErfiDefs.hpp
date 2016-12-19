@@ -196,6 +196,7 @@ enum OpCode_e : UInt32 {
           // "load x a" loads x from address a
           // "load x immd"
           // "load x a immd
+          // "load x" load contents stored at address x, into register x
     SAVE, // two regs, one immd
           // "save x a" saves x to address a
 
