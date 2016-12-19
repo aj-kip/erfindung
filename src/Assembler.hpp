@@ -78,30 +78,61 @@ private:
     SuffixAssumption m_assumptions;
 };
 
+// "wholesale" encoding functions
+
+Inst encode(OpCode op, Reg r0);
+Inst encode(OpCode op, Reg r0, Reg r1);
+Inst encode(OpCode op, Reg r0, Reg r1, Reg r2);
+Inst encode(OpCode op, Reg r0, Reg r1, Reg r2, Reg r3);
+
+Inst encode(OpCode op, Reg r0, int i);
+Inst encode(OpCode op, Reg r0, Reg r1, int i);
+Inst encode(OpCode op, Reg r0, double d);
+Inst encode(OpCode op, Reg r0, Reg r1, double d);
+
 // for ParamForm: REG
-inline UInt32 encode_reg(Reg r0) {
-    return (UInt32(r0) << 19);
-}
+inline UInt32 encode_reg(Reg r0)
+    { return (UInt32(r0) << 19); }
+
 // for ParamForm: REG_REG
-inline UInt32 encode_reg_reg(Reg r0, Reg r1) {
-    return encode_reg(r0) | (UInt32(r1) << 16);
-}
+inline UInt32 encode_reg_reg(Reg r0, Reg r1)
+    { return encode_reg(r0) | (UInt32(r1) << 16); }
+
 // for ParamForm: REG_REG_REG
-inline UInt32 encode_reg_reg_reg(Reg r0, Reg r1, Reg r2) {
-    return encode_reg_reg(r0, r1) | (UInt32(r2) << 13);
-}
+inline UInt32 encode_reg_reg_reg(Reg r0, Reg r1, Reg r2)
+    { return encode_reg_reg(r0, r1) | (UInt32(r2) << 13); }
+
 // for ParamForm: REG_REG_REG_REG
-inline UInt32 encode_reg_reg_reg_reg(Reg r0, Reg r1, Reg r2, Reg r3) {
-    return encode_reg_reg_reg(r0, r1, r2) | (UInt32(r3) << 10);
-}
+inline UInt32 encode_reg_reg_reg_reg(Reg r0, Reg r1, Reg r2, Reg r3)
+    { return encode_reg_reg_reg(r0, r1, r2) | (UInt32(r3) << 10); }
 
 inline UInt32 encode_op(OpCode op) { return UInt32(op) << 22; }
 
-inline UInt32 encode_immd(int immd) {
-    return (immd < 0 ? 0x8000 : 0x0000) | (immd & 0x7FFF);
-}
+inline UInt32 encode_param_form(ParamForm pf)
+    { return UInt32(pf) << 28; /* at most 3 bits */ }
+
+inline UInt32 encode_immd(int immd)
+    { return (immd < 0 ? 0x8000 : 0x0000) | (immd & 0x7FFF); }
 
 UInt32 encode_immd(double d);
+
+// helpers for vm/testing the assembler
+inline Reg decode_reg0(Inst inst) { return Reg((inst >> 19) & 0x7); }
+inline Reg decode_reg1(Inst inst) { return Reg((inst >> 16) & 0x7); }
+inline Reg decode_reg2(Inst inst) { return Reg((inst >> 13) & 0x7); }
+inline Reg decode_reg3(Inst inst) { return Reg((inst >> 10) & 0x7); }
+
+inline ParamForm decode_param_form(Inst inst)
+    { return ParamForm((inst >> 28) & 0x7); }
+
+inline int decode_immd_as_int(Inst inst) { return int(inst & 0xFFFF); }
+
+inline UInt32 decode_immd_as_fp(Inst inst) {
+    UInt32 rv = UInt32(decode_immd_as_int(inst));
+    UInt32 significand = (rv & 0x7FFF) << 10u;
+    UInt32 sign_part = (rv & 0x8000) << 16u;
+    return sign_part | significand;
+}
 
 } // end of erfin namespace
 

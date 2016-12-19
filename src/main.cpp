@@ -48,12 +48,12 @@ inline OpCode get_op_code(Inst inst) {
     inst >>= 22;
     return static_cast<OpCode>(inst & 0x3F);
 }
-
+#if 0
 inline int get_r0_index(Inst inst) { return (inst & 0x380000) >> (16+3); }
 inline int get_r1_index(Inst inst) { return (inst &  0x70000) >> (16  ); }
 inline int get_r2_index(Inst inst) { return (inst &   0xE000) >> (16-3); }
 inline int get_r3_index(Inst inst) { return (inst &   0x1C00) >> (16-6); }
-
+#endif
 // for ParamForm: REG_REG_IMMD
 
 // for ParamForm: REG_IMMD
@@ -203,7 +203,7 @@ ParamForm get_op_param(OpCode op) {
     default: return INVALID_PARAMS;
     }
 }
-
+#if 0
 void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu, Inst inst) {
     using namespace enum_types;
     // "decode"
@@ -284,7 +284,7 @@ void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu) {
     do_cycle(regs, mem, gpu, mem[regs[enum_types::REG_PC]]);
     ++regs[enum_types::REG_PC];
 }
-
+#endif
 } // end of erfin namespace
 
 class CoutFormatSaver {
@@ -368,7 +368,7 @@ void test_string_processing() {
     erfin::Assembler asmr;
     asmr.assemble_from_string(input_text);
 }
-
+#if 0
 void test_instructions() {
     using namespace erfin;
     using namespace erfin::enum_types;
@@ -410,7 +410,7 @@ void test_instructions() {
     //assert(regs[REG_X] == fp);
     }
 }
-
+#endif
 class StringToBitmapper {
 public:
     using UInt32 = erfin::UInt32;
@@ -491,7 +491,6 @@ int main() {
     std::cout << erfin::enum_types::OPCODE_COUNT << std::endl;
     erfin::Assembler::run_tests();
     test_string_processing();
-    return 0;
 
     using namespace erfin;
 
@@ -532,7 +531,7 @@ int main() {
 
     std::cout << erfin::enum_types::OPCODE_COUNT << std::endl;
     return 0;
-    (void)make_demo_app();
+    //(void)make_demo_app();
 
     Gpu gpu;
 #   if 0
