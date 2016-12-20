@@ -19,12 +19,12 @@ HEADERS += \
 TARGET = erfindung
 
 CONFIG (debug, debug|release) {
-	DEFINES += DEBUG ACL_DEBUG linux
+    DEFINES += MACRO_DEBUG linux
 	QMAKE_CXXFLAGS += -O0
 }
 
 CONFIG (release, debug|release) {
-	DEFINES += ACL_NO_DEBUG linux NDEBUG
+    DEFINES += linux NDEBUG MACRO_RELEASE
 	QMAKE_CXXFLAGS += -O3
 }
 

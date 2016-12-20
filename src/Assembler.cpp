@@ -42,7 +42,6 @@ struct TextProcessState {
                         current_source_line(1), assumptions(nullptr) {}
     struct LabelPair { std::size_t program_location, source_line; };
     struct UnfilledLabelPair {
-        UnfilledLabelPair(): program_location(std::size_t(-1)) {}
         UnfilledLabelPair(std::size_t i_, const std::string & s_):
             program_location(i_),
             label(s_)
@@ -74,11 +73,9 @@ void convert_to_lower_case(std::string & str);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end);
 
-int get_file_size(const char * filename) {
-    struct stat stat_buf;
-    int rc = stat(filename, &stat_buf);
-    return rc == 0 ? int(stat_buf.st_size) : -1;
-}
+int get_file_size(const char * filename);
+
+void resolve_unfulfilled_labels(TextProcessState & state);
 
 } // end of <anonymous> namespace
 
@@ -116,6 +113,7 @@ void Assembler::assemble_from_string(const std::string & source) {
     TextProcessState tpstate;
     tpstate.assumptions = &m_assumptions;
     process_text(tpstate, tokens.begin(), tokens.end());
+    resolve_unfulfilled_labels(tpstate);
     // only when a valid program has been assembled do we swap in the actual
     // instructions, as a throw may occur at any point of the text processing
     m_program.swap(tpstate.program_data);
@@ -291,6 +289,7 @@ void convert_to_lower_case(std::string & str) {
 using LineToInstFunc = StringCIter(*)(TextProcessState & state,
                                       StringCIter beg, StringCIter end);
 
+// each of the line to inst functions should have uniform requirements
 LineToInstFunc get_line_processing_func
     (SuffixAssumption assumptions, const std::string & fname);
 
@@ -310,6 +309,33 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     } else if (*beg == ":") {
         process_text(state, process_label(state, beg, end), end);
     }
+}
+
+int get_file_size(const char * filename) {
+    struct stat stat_buf;
+    int rc = stat(filename, &stat_buf);
+    return rc == 0 ? int(stat_buf.st_size) : -1;
+}
+
+void resolve_unfulfilled_labels(TextProcessState & state) {
+#   if 1//def MACRO_DEBUG
+    if (state.unfulfilled_labels.size() > 1) {
+        for (std::size_t i = 0; i != state.unfulfilled_labels.size() - 1; ++i) {
+            const auto & cont = state.unfulfilled_labels;
+            assert(cont[i].program_location < cont[i + 1].program_location);
+        }
+    }
+#   endif
+    for (auto & unfl_pair : state.unfulfilled_labels) {
+        auto itr = state.labels.find(unfl_pair.label);
+        if (itr == state.labels.end()) {
+            throw Error("Label on line: ??, \"" + unfl_pair.label +
+                        "\" not found anywhere in source code.");
+        }
+        state.program_data[unfl_pair.program_location] |=
+            itr->second.program_location;
+    }
+    state.unfulfilled_labels.clear();
 }
 
 bool is_line_blank(const std::string & line) {
@@ -359,6 +385,7 @@ StringCIter process_data
 StringCIter process_label
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
+    assert(*beg == ":");
     ++beg;
     skip_new_lines(state, &beg);
     if (beg == end) {
@@ -379,7 +406,7 @@ StringCIter process_label
         throw make_error(state, ": dupelicate label, previously defined "
                          "on line: " + std::to_string(itr->second.source_line));
     }
-    return beg;
+    return ++beg;
 }
 
 void skip_new_lines(TextProcessState & state, StringCIter * itr) {
@@ -440,7 +467,7 @@ LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std:
     static std::map<std::string, LineToInstFunc> fmap;
     if (is_initialized) {
         auto itr = fmap.find(fname);
-        return itr->second;
+        return (itr == fmap.end()) ? nullptr : itr->second;
     }
 
     fmap["and"] = fmap["&"] = make_and;
@@ -758,8 +785,10 @@ StringCIter make_set
         inst = encode(SET_FP96, itr2reg(beg), d);
         break;
     case XPF_1R_LABEL:
-        throw make_error(state, ": labels may not be used for set operations, "
-                                "perhaps a \"load\" was intented?");
+        state.unfulfilled_labels.emplace_back(state.program_data.size(), *(beg + 1));
+        inst = encode_op(SET_INT) | encode_param_form(REG_IMMD) |
+               encode_reg(itr2reg(beg));
+        break;
     default:
         throw make_error(state, ": set instruction may only have exactly "
                                  "two arguments.");
@@ -974,6 +1003,7 @@ StringCIter make_generic_memory_access
     };
 
     const auto eol = get_eol(++beg, end);
+    assert(!get_line_processing_func(Assembler::NO_ASSUMPTION, *beg));
     Reg reg;
     Reg addr_reg = REG_COUNT;
     int arg_count = 2;
@@ -1106,7 +1136,7 @@ void erfin::Assembler::run_tests() {
     // data encodings
     {
     const std::vector<std::string> sample_binary = {
-        "____xxxx", "____x_xxx___x__x", "xx__x_x_",
+        "____xxxx", "____x_xxx___x__x", "xx__x_x_", "\n",
         "]"
     };
     (void)process_binary(state, sample_binary.begin(), sample_binary.end());
@@ -1162,13 +1192,48 @@ void erfin::Assembler::run_tests() {
     {
     const std::vector<std::string> sample_code = {
         ">>", "x", "9384", "\n",
-        "<<", "y", "a", "4",
+        ">>", "z", "\n",
+        "<<", "y", "a", "\n",
+        "<<", "y", "a", "4"
     };
     auto beg = sample_code.begin(), end = sample_code.end();
-    beg = make_load(state, beg, end);
+    beg = make_load(state,   beg, end);
+    beg = make_load(state, ++beg, end);
+    beg = make_save(state, ++beg, end);
     beg = make_save(state, ++beg, end);
     const auto supposed_top = encode(OpCode::SAVE, Reg::REG_Y, Reg::REG_A, 4);
     assert(supposed_top == state.program_data.back());
+    }
+    {
+    const std::vector<std::string> sample_code = {
+        "<>=", "x", "y", "\n",
+        "?", "x", "1"
+    };
+    auto beg = sample_code.begin(), end = sample_code.end();
+    beg = make_cmp (state,   beg, end);
+    beg = make_skip(state, ++beg, end);
+    const auto supposed_top = encode(OpCode::SKIP, Reg::REG_X, 1);
+    assert(supposed_top == state.program_data.back());
+    }
+    // test unfulfilled labels!
+    {
+    state = TextProcessState();
+    const std::vector<std::string> sample_code = {
+        "=" , "pc", "label1", "\n",
+        ">>", "x", "label2", "\n",
+        ":", "label1", ":", "label2", "+", "x", "y", "\n",
+        "-", "x", "a"
+    };
+    auto beg = sample_code.begin(), end = sample_code.end();
+    beg = make_set     (state,   beg, end);
+    beg = make_load    (state, ++beg, end);
+    beg = process_label(state, ++beg, end);
+    beg = process_label(state,   beg, end);
+    beg = make_plus    (state,   beg, end);
+    beg = make_minus   (state, ++beg, end);
+    resolve_unfulfilled_labels(state);
+    assert(state.program_data[0] == encode(OpCode::SET_INT, Reg::REG_PC, 2));
+    assert(state.program_data[1] == encode(OpCode::LOAD, Reg::REG_X, 2));
     }
 }
 
