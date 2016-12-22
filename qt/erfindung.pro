@@ -7,14 +7,16 @@ SOURCES += \
 	../src/main.cpp \
     ../src/DrawRectangle.cpp \
     ../src/ErfiGpu.cpp \
-    ../src/Assembler.cpp
+    ../src/Assembler.cpp \
+    ../src/ErfiCpu.cpp
     
 HEADERS += \
     ../src/DrawRectangle.hpp \
     ../src/FixedPointUtil.hpp \
     ../src/ErfiGpu.hpp \
     ../src/ErfiDefs.hpp \
-    ../src/Assembler.hpp
+    ../src/Assembler.hpp \
+    ../src/ErfiCpu.hpp
 
 TARGET = erfindung
 

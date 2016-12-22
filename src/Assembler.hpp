@@ -90,6 +90,17 @@ Inst encode(OpCode op, Reg r0, Reg r1, int i);
 Inst encode(OpCode op, Reg r0, double d);
 Inst encode(OpCode op, Reg r0, Reg r1, double d);
 
+inline void load_program_into_memory
+    (MemorySpace & memspace, const Assembler::ProgramData & pdata)
+{
+    if (memspace.size() < pdata.size()) {
+        throw std::runtime_error("Program is too large for RAM!");
+    }
+    UInt32 * beg = &memspace.back();
+    for (UInt32 inst : pdata)
+        *beg++ = inst;
+}
+
 // for ParamForm: REG
 inline UInt32 encode_reg(Reg r0)
     { return (UInt32(r0) << 19); }
@@ -121,6 +132,7 @@ inline Reg decode_reg0(Inst inst) { return Reg((inst >> 19) & 0x7); }
 inline Reg decode_reg1(Inst inst) { return Reg((inst >> 16) & 0x7); }
 inline Reg decode_reg2(Inst inst) { return Reg((inst >> 13) & 0x7); }
 inline Reg decode_reg3(Inst inst) { return Reg((inst >> 10) & 0x7); }
+inline OpCode decode_op_code(Inst inst) { return OpCode((inst >> 22u) & 0x1F); }
 
 inline ParamForm decode_param_form(Inst inst)
     { return ParamForm((inst >> 28) & 0x7); }

@@ -119,6 +119,9 @@ void Assembler::assemble_from_string(const std::string & source) {
     m_program.swap(tpstate.program_data);
 }
 
+const Assembler::ProgramData & Assembler::program_data() const
+    { return m_program; }
+
 UInt32 encode_immd(double d) {
     UInt32 fullwidth = to_fixed_point(d);
     // we want a 9/6 fixed point number (+ one bit for sign)
@@ -303,7 +306,7 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     if (beg == end) return;
     auto func = get_line_processing_func(*state.assumptions, *beg);
     if (func) {
-        process_text(state, func(state, beg, end), end);
+        process_text(state, ++func(state, beg, end), end);
     } else if (*beg == "data") {
         process_text(state, process_data(state, beg, end), end);
     } else if (*beg == ":") {
@@ -462,7 +465,9 @@ StringCIter make_load(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_save(TextProcessState &, StringCIter, StringCIter);
 
-LineToInstFunc get_line_processing_func(SuffixAssumption assumptions, const std::string & fname) {
+LineToInstFunc get_line_processing_func
+    (SuffixAssumption assumptions, const std::string & fname)
+{
     static bool is_initialized = false;
     static std::map<std::string, LineToInstFunc> fmap;
     if (is_initialized) {
@@ -577,7 +582,6 @@ enum TokenClassification {
 };
 
 enum NumericClassification {
-    //NON_NEGATIVE_INTEGER,
     INTEGER,
     DECIMAL,
     NOT_NUMERIC
@@ -1233,7 +1237,21 @@ void erfin::Assembler::run_tests() {
     beg = make_minus   (state, ++beg, end);
     resolve_unfulfilled_labels(state);
     assert(state.program_data[0] == encode(OpCode::SET_INT, Reg::REG_PC, 2));
-    assert(state.program_data[1] == encode(OpCode::LOAD, Reg::REG_X, 2));
+    assert(state.program_data[1] == encode(OpCode::LOAD   , Reg::REG_X , 2));
+    }
+    {
+    constexpr const char * const sample_code =
+        "     = x 1.0 # hello there ;-)\n"
+        "     = y 1.44\n"
+        ":inc + x y x\n"
+        "     = pc inc";
+    Assembler asmr;
+    asmr.assemble_from_string(sample_code);
+    const auto & pdata = asmr.program_data();
+    assert(pdata[0] == encode(OpCode::SET_FP96, Reg::REG_X, 1.0 ));
+    assert(pdata[1] == encode(OpCode::SET_FP96, Reg::REG_Y, 1.44));
+    assert(pdata[2] == encode(OpCode::PLUS    , Reg::REG_X, Reg::REG_Y, Reg::REG_X));
+    assert(pdata[3] == encode(OpCode::SET_INT , Reg::REG_PC, 2));
     }
 }
 
