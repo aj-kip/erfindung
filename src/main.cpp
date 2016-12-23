@@ -29,12 +29,13 @@
 #include <sstream>
 #include <queue>
 #include <algorithm>
-//#include "DrawRectangle.hpp"
+
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
-//#include <SFML/Graphics.hpp>
+
 #include <cstring>
 #include "Assembler.hpp"
+#include "ErfiCpu.hpp"
 
 #include "ErfiGpu.hpp"
 
@@ -48,12 +49,7 @@ inline OpCode get_op_code(Inst inst) {
     inst >>= 22;
     return static_cast<OpCode>(inst & 0x3F);
 }
-#if 0
-inline int get_r0_index(Inst inst) { return (inst & 0x380000) >> (16+3); }
-inline int get_r1_index(Inst inst) { return (inst &  0x70000) >> (16  ); }
-inline int get_r2_index(Inst inst) { return (inst &   0xE000) >> (16-3); }
-inline int get_r3_index(Inst inst) { return (inst &   0x1C00) >> (16-6); }
-#endif
+
 // for ParamForm: REG_REG_IMMD
 
 // for ParamForm: REG_IMMD
@@ -99,13 +95,6 @@ inline Inst make_or(Reg r0, Reg r1, Reg r2) {
 inline Inst make_comp(Reg r0, Reg r1, Reg r2) {
     return encode_op(enum_types::COMP) | encode_reg_reg_reg(r0, r1, r2);
 }
-#if 0
-// for op: SKIP    , // one arg , conditional, if flags is zero
-// for op: JUMP    , // one IMMD, one answer (to PC)
-inline Inst make_jump(UInt32 immd) {
-    return encode_op(enum_types::JUMP) | immd;
-}
-#endif
 
 // for op: JUMP_REG,
 // for op: LOAD, // two regs, one immd
@@ -114,42 +103,12 @@ inline Inst make_jump(UInt32 immd) {
 inline Inst make_set_int(Reg r0, UInt32 immd) {
     return encode_op(enum_types::SET_INT) | encode_reg(r0) | immd;
 }
-
-// for op: SET_ABS , // one reg, one IMMD
-inline Inst make_set_abs(Reg r0, UInt32 immd) {
-    return encode_op(enum_types::SET_ABS) | encode_reg(r0) | immd;
-}
 // for op: SET_FP96, // one reg, one IMMD
 
 // for op: SET_REG , // two regs
 inline Inst make_set_reg(Reg r0, Reg r1) {
     return encode_op(enum_types::SET_REG) | encode_reg_reg(r0, r1);
 }
-
-inline Inst make_gload_addr(Reg r0, UInt32 immd) {
-    return encode_op(enum_types::GLOAD_ADDR) | encode_reg(r0) | immd;
-}
-
-inline Inst make_gload_reg(Reg r0) {
-    return encode_op(enum_types::GLOAD_REG) | encode_reg(r0);
-}
-
-inline Inst make_gsize(Reg r0, Reg r1) {
-    return encode_op(enum_types::GSIZE) | encode_reg_reg(r0, r1);
-}
-
-inline Inst make_gset_index(Reg r0) {
-    return encode_op(enum_types::GSET_INDEX) | encode_reg(r0);
-}
-
-inline Inst make_draw(Reg r0, Reg r1) {
-    return encode_op(enum_types::DRAW) | encode_reg_reg(r0, r1);
-}
-
-inline Inst make_draw_flush() {
-    return encode_op(enum_types::DRAW_FLUSH);
-}
-
 // for op: SYSTEM_READ // one reg, one immd
 
 
@@ -165,127 +124,6 @@ private:
 void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu);
 
 } // end of erfin
-
-// <-------------------------- erfin implementations ------------------------->
-
-namespace erfin {
-
-ParamForm get_op_param(OpCode op) {
-    using namespace enum_types;
-    switch (op) {
-    case PLUS: case MINUS: case TIMES:
-        return REG_REG_REG;
-    case DIVIDE_MOD:
-        return REG_REG_REG_REG;
-    //case PLUS_IMMD: case MINUS_IMMD:
-        //return REG_REG_IMMD;
-    case AND: case NOT: case XOR: case OR:
-        return REG_REG_REG;
-
-        //return REG_REG_IMMD;
-    case COMP    : return REG_REG_REG;
-    case SKIP    : return REG;
-#   if 0
-    case JUMP    : return REG_IMMD;
-    case JUMP_REG: return REG;
-#   endif
-    case LOAD: case SAVE:
-        return REG_REG_IMMD;
-    case SET_REG : return REG_REG;
-    case GLOAD_ADDR: return REG_IMMD;
-    case GLOAD_REG : return REG;
-    case GSIZE     : return REG_REG;
-    case GSET_INDEX: return REG;
-    case DRAW      : return REG_REG;
-    case DRAW_FLUSH: return NO_PARAMS;
-    // gets elapsed time for draw flush and input device
-    case SYSTEM_READ: return REG_IMMD;
-    default: return INVALID_PARAMS;
-    }
-}
-#if 0
-void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu, Inst inst) {
-    using namespace enum_types;
-    // "decode"
-    UInt32 * r0 = nullptr, * r1 = nullptr, * r2 = nullptr, * r3 = nullptr;
-    UInt32 immd = 0;
-    (void)r3;
-    const auto param_form = get_op_param(get_op_code(inst));
-    switch (param_form) {
-    case REG_REG_REG_REG:
-        r3 = &regs[get_r3_index(inst)];
-    case REG_REG_REG:
-        r2 = &regs[get_r2_index(inst)];
-    case REG_REG_IMMD: case REG_REG:
-        r1 = &regs[get_r1_index(inst)];
-    case REG_IMMD: case REG:
-        r0 = &regs[get_r0_index(inst)];
-    default: break;
-    }
-
-    switch (param_form) {
-    case REG_REG_IMMD: case REG_IMMD:
-        immd = inst & 0xFFFF;
-    default: break;
-    }
-
-    // execute
-    switch (get_op_code(inst)) {
-    // fundemental computations
-    case PLUS :
-        switch (param_form) {
-        case REG_REG_REG: *r2 = *r0 + *r1; break;
-
-        default: throw Error("Invalid parameter form.");
-        }
-
-        break;
-    case MINUS: *r2 = *r0 - *r1; break;
-    case TIMES: *r2 = fp_multiply(*r0, *r1); break;
-    case DIVIDE_MOD: break;
-    case AND     : *r2 = *r0 & *r1; break;
-    case NOT     : *r1 = ~*r0     ; break;
-    case XOR     : *r2 = *r0 ^ *r1; break;
-    case OR      : *r2 = *r0 | *r1; break;
-
-    // flow control
-    case COMP    :
-        *r2 =   (*r0 < *r1) | ((*r0 > *r1) << 1) | ((*r0 == *r1) << 2)
-              | ((*r0 != *r1) << 3);
-        break;
-    case SKIP    : if (*r0 == 0) regs[REG_PC] += sizeof(Inst); break;
-#   if 0
-    case JUMP    : regs[REG_PC] = immd; break;
-    case JUMP_REG: regs[REG_PC] =  *r0; break; // what's special about this vs SET
-#   endif
-    // loading/saving
-    case LOAD: *r1 = mem[*r0 + immd]; break;
-    case SAVE: mem[*r1 + immd] = *r0; break;
-    // setting values
-    case SET_INT : *r0 = immd; break;
-    case SET_ABS : *r0 = immd; break;
-    case SET_FP96: *r0 = immd; break;
-    case SET_REG : *r0 = *r1; break;
-    // graphics operations
-    case GLOAD_ADDR: gpu.load(mem[*r0 + immd]); break;
-    case GLOAD_REG : gpu.load(*r0); break;
-    case GSIZE     : gpu.size(*r0, *r1); break;
-    case GSET_INDEX: gpu.set_index(*r0); break;
-    case DRAW      : gpu.draw(*r0, *r1); break;
-    case DRAW_FLUSH: gpu.draw_flush(mem); break;
-    // device read instruction
-    case SYSTEM_READ: break;
-    default: break;
-    }
-}
-
-void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu) {
-    // fetch
-    do_cycle(regs, mem, gpu, mem[regs[enum_types::REG_PC]]);
-    ++regs[enum_types::REG_PC];
-}
-#endif
-} // end of erfin namespace
 
 class CoutFormatSaver {
 public:
@@ -368,49 +206,7 @@ void test_string_processing() {
     erfin::Assembler asmr;
     asmr.assemble_from_string(input_text);
 }
-#if 0
-void test_instructions() {
-    using namespace erfin;
-    using namespace erfin::enum_types;
-    using std::cout;
-    using std::endl;
-    // first register and immdetiates in instructions
-    Gpu gpu;
-    MemorySpace mem;
-    // second all instructions (except GPU/system_read) and their results
-    // PLUS
-    {
-    RegisterPack regs;
-    regs[REG_A] = to_fixed_point(10.0);
-    regs[REG_B] = to_fixed_point(12.0);
-    regs[REG_X] = to_fixed_point(0.0);
-    Inst i = make_plus(REG_A, REG_B, REG_X);
-    do_cycle(regs, mem, gpu, i);
-    assert(regs[REG_X] == to_fixed_point(22.0));
-    }
-    // MINUS
-    {
-    RegisterPack regs;
-    regs[REG_A] = to_fixed_point(10.0);
-    regs[REG_B] = to_fixed_point(12.0);
-    regs[REG_X] = to_fixed_point(0.0);
-    Inst i = make_minus(REG_A, REG_B, REG_X);
-    do_cycle(regs, mem, gpu, i);
-    assert(regs[REG_X] == to_fixed_point(-2.0));
-    }
-    // TIMES
-    {
-    RegisterPack regs;
-    regs[REG_A] = to_fixed_point( 3.25);
-    regs[REG_B] = to_fixed_point( 4.5 );
-    regs[REG_X] = to_fixed_point( 0.0 );
-    Inst i = make_times(REG_A, REG_B, REG_X);
-    do_cycle(regs, mem, gpu, i);
-    //UInt32 fp = to_fixed_point( 14.625);
-    //assert(regs[REG_X] == fp);
-    }
-}
-#endif
+
 class StringToBitmapper {
 public:
     using UInt32 = erfin::UInt32;
@@ -469,6 +265,7 @@ std::vector<erfin::UInt32> make_demo_app() {
     while (!stbm.is_done()) {
         app_mem.push_back(stbm.next_32b());
     }
+#   if 0
     //app_mem[0] = make_jump(make_immd(app_mem.size(), IMMD_ABS_INT));
     // load it!
     app_mem.push_back(make_gset_index(REG_A));
@@ -483,13 +280,13 @@ std::vector<erfin::UInt32> make_demo_app() {
     // draw it!
     app_mem.push_back(make_draw(REG_A, REG_B));
     app_mem.push_back(make_draw_flush());
-
+#   endif
     return app_mem;
 }
 
 int main() {
     std::cout << erfin::enum_types::OPCODE_COUNT << std::endl;
-    erfin::Assembler::run_tests();
+    erfin::ErfiCpu::run_tests();
     test_string_processing();
 
     using namespace erfin;
@@ -530,71 +327,5 @@ int main() {
     }
 
     std::cout << erfin::enum_types::OPCODE_COUNT << std::endl;
-    return 0;
-    //(void)make_demo_app();
-
-    Gpu gpu;
-#   if 0
-    sf::RenderWindow window;
-    window.create(sf::VideoMode(Gpu::SCREEN_WIDTH*3, Gpu::SCREEN_HEIGHT*3), " ");
-
-    {
-    sf::View v;
-    v.setSize(Gpu::SCREEN_WIDTH, Gpu::SCREEN_HEIGHT);
-    v.setCenter(Gpu::SCREEN_WIDTH/2, Gpu::SCREEN_HEIGHT/2);
-    window.setView(v);
-    window.setFramerateLimit(30);
-    }
-#   endif
-
-    MemorySpace ram;
-
-    gpu.set_index(0);
-    gpu.size(8, 8);
-    ram[0] = 0x0103070F;
-    ram[1] = 0x103070F0;
-    gpu.load(0);
-#   if 1
-    gpu.set_index(1);
-    gpu.size(12, 15); // 180 bits
-    ram[2] = 0x12345678;
-    ram[3] = 0x9ABCDEF0;
-    ram[4] = 0x12345678;
-    ram[5] = 0x9ABCDEF0;
-    ram[6] = 0x12345678;
-    ram[7] = 0x9ABCDEF0;
-    gpu.load(2);
-#   endif
-    gpu.draw(0, 0);
-    gpu.set_index(0);
-    gpu.draw(120, 120);
-    gpu.set_index(1);
-    gpu.draw(Gpu::SCREEN_WIDTH - 4, Gpu::SCREEN_HEIGHT - 4);
-    gpu.draw_flush(ram);
-#   if 0
-    DrawRectangle drect;
-    drect.set_size(1.f, 1.f);
-    drect.set_color(sf::Color::White);
-    while (window.isOpen()) {
-        {
-        sf::Event e;
-        while (window.pollEvent(e)) {
-            switch (e.type) {
-            case sf::Event::Closed:
-                window.close();
-                break;
-            default: break;
-            }
-        }
-        }
-        window.clear(sf::Color::Black);
-        gpu.draw_pixels([&window, &drect](int x, int y, bool p) {
-            if (!p) return;
-            drect.set_position(x, y);
-            window.draw(drect);
-        });
-        window.display();
-    }
-#   endif
     return 0;
 }

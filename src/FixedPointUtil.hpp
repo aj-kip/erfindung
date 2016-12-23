@@ -82,6 +82,12 @@ inline UInt32 fp_divide(UInt32 a, UInt32 b) {
     return fp_multiply(a, fp_inverse(b));
 }
 
+inline UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num) {
+    // n - q*d = r -> n = r + q*d -> n/d = r/d + q
+    // reduce quot to int part only
+    return num - fp_multiply(quot & 0xFFFF0000, denom);
+}
+
 inline UInt32 to_fixed_point(double fp) {
     bool is_neg = fp < 0.0;
     fp = mag(fp);

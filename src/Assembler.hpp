@@ -96,7 +96,7 @@ inline void load_program_into_memory
     if (memspace.size() < pdata.size()) {
         throw std::runtime_error("Program is too large for RAM!");
     }
-    UInt32 * beg = &memspace.back();
+    UInt32 * beg = &memspace.front();
     for (UInt32 inst : pdata)
         *beg++ = inst;
 }
@@ -137,7 +137,8 @@ inline OpCode decode_op_code(Inst inst) { return OpCode((inst >> 22u) & 0x1F); }
 inline ParamForm decode_param_form(Inst inst)
     { return ParamForm((inst >> 28) & 0x7); }
 
-inline int decode_immd_as_int(Inst inst) { return int(inst & 0xFFFF); }
+inline int decode_immd_as_int(Inst inst)
+    { return int((inst & 0x8000) << 16) | int(inst & 0x7FFF); }
 
 inline UInt32 decode_immd_as_fp(Inst inst) {
     UInt32 rv = UInt32(decode_immd_as_int(inst));
@@ -145,6 +146,8 @@ inline UInt32 decode_immd_as_fp(Inst inst) {
     UInt32 sign_part = (rv & 0x8000) << 16u;
     return sign_part | significand;
 }
+
+const char * register_to_string(Reg r);
 
 } // end of erfin namespace
 

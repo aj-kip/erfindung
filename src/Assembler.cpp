@@ -30,6 +30,16 @@
 #include <sys/stat.h>
 #include <cassert>
 
+#ifdef MACRO_COMPILER_GCC
+#   define MACRO_FALLTHROUGH
+#elif defined(MACRO_COMPILER_MSVC)
+#   define MACRO_FALLTHROUGH
+#elif defined(MACRO_COMPILER_CLANG)
+#   define MACRO_FALLTHROUGH [[clang::fallthrough]]
+#else
+#   define MACRO_FALLTHROUGH [[clang::fallthrough]]
+#endif
+
 namespace {
 
 using StringCIter = std::vector<std::string>::const_iterator;
@@ -134,6 +144,20 @@ UInt32 encode_immd(double d) {
     return sign_part | partial;
 }
 
+const char * register_to_string(Reg r) {
+    using namespace enum_types;
+    switch (r) {
+    case REG_X : return "x" ;
+    case REG_Y : return "y" ;
+    case REG_Z : return "z" ;
+    case REG_A : return "a" ;
+    case REG_B : return "b" ;
+    case REG_C : return "c" ;
+    case REG_BP: return "bp";
+    case REG_PC: return "pc";
+    default: throw Error("Invalid register, cannot convert to a string.");
+    }
+}
 
 Inst encode(OpCode op, Reg r0) {
     return encode_param_form(erfin::ParamForm::REG) |
@@ -442,14 +466,16 @@ StringCIter make_and(TextProcessState &, StringCIter, StringCIter);
 StringCIter make_or(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_xor(TextProcessState &, StringCIter, StringCIter);
-
+#if 0
 StringCIter make_and_msb(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_or_msb(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_xor_msb(TextProcessState &, StringCIter, StringCIter);
-
+#endif
 StringCIter make_not(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_rotate(TextProcessState &, StringCIter, StringCIter);
 
 // <--------------------- flow control operations ---------------------------->
 
@@ -480,13 +506,14 @@ LineToInstFunc get_line_processing_func
     fmap["xor"] = fmap["^"] = make_xor;
 
     // suffixes
+#   if 0
     fmap["and.lsb"] = fmap["&.lsb"] = make_and;
     fmap["or.lsb" ] = fmap["|.lsb"] = make_or ;
     fmap["xor.lsb"] = fmap["^.lsb"] = make_xor;
     fmap["and.msb"] = fmap["&.msb"] = make_and_msb;
     fmap["or.msb" ] = fmap["|.msb"] = make_or_msb ;
     fmap["xor.msb"] = fmap["^.msb"] = make_xor_msb;
-
+#   endif
     fmap["not"] = fmap["!"] = fmap["~"] = make_not;
 
     fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
@@ -503,7 +530,7 @@ LineToInstFunc get_line_processing_func
     fmap["div.int"] = fmap["divmod.int"  ] = fmap["/.int"] = make_divmod;
     fmap["div.fp" ] = fmap["divmod.fp"   ] = fmap["/.fp" ] = make_divmod_fp;
 
-    fmap["cmp"] = fmap["<>="] = make_cmp;
+    fmap["comp"] = fmap["compare"] = fmap["cmp"] = fmap["<>="] = make_cmp;
     fmap["skip"] = fmap["?"] = make_skip;
 
     // for short hand, memory is to be thought of as on the left of the
@@ -512,6 +539,7 @@ LineToInstFunc get_line_processing_func
     fmap["load"] = fmap["ld" ] = fmap[">>"] = make_load;
 
     fmap["set"] = fmap["="] = make_set;
+    fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
     is_initialized = true;
     return get_line_processing_func(assumptions, fname);
 }
@@ -543,14 +571,14 @@ StringCIter process_binary
             switch (c) {
             case '1': case 'x':
                 state.data.back() |= (1 << (31 - bit_pos));
-                // v fall through v
+                MACRO_FALLTHROUGH;
             case '_': case 'o': case '0': case '.':
                 bit_pos = (bit_pos + 1) % 32;
                 break;
             // characters we should never see
             case '\n':
                 if (beg->size() == 1) break;
-                // v fall through v
+                MACRO_FALLTHROUGH;
             case '[': case ']': assert(false); break;
             default: throw make_error(state, BAD_CHAR_MSG);
             }
@@ -679,7 +707,7 @@ StringCIter make_or
 StringCIter make_xor
     (TextProcessState & state, StringCIter beg, StringCIter end)
 { return make_generic_logic(erfin::OpCode::XOR, state, beg, end); }
-
+#if 0
 StringCIter make_and_msb
     (TextProcessState & state, StringCIter beg, StringCIter end)
 { return make_generic_logic(erfin::OpCode::AND_MSB, state, beg, end); }
@@ -691,7 +719,7 @@ StringCIter make_or_msb
 StringCIter make_xor_msb
     (TextProcessState & state, StringCIter beg, StringCIter end)
 { return make_generic_logic(erfin::OpCode::XOR_MSB, state, beg, end); }
-
+#endif
 StringCIter make_not
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
@@ -708,6 +736,41 @@ StringCIter make_not
         throw make_error(state, ": exactly one argument permitted for logical "
                                 "complement (not).");
     }
+}
+
+StringCIter make_rotate
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    static constexpr const char * const NON_INT_IMMD_MSG =
+        ": Rotate may only take an integer for bit rotation.";
+    static constexpr const char * const INVALID_PARAMS_MSG =
+        ": Rotate may only take a register target and another register or "
+        "integer for number of places to rotate the data.";
+    auto eol = get_eol(++beg, end);
+    union {
+        int i;
+        double d;
+    } u;
+    switch (get_lines_param_form(beg, eol)) {
+    case XPF_1R_INT:
+        switch (convert_to_number_strict(beg + 1, u.d, u.i)) {
+        case INTEGER: break;
+        default:
+            throw make_error(state, NON_INT_IMMD_MSG);
+        }
+        state.program_data.push_back(encode(ROTATE, string_to_register(*beg),
+                                            u.i                             ));
+        break;
+    case XPF_2R:
+        state.program_data.push_back(encode(ROTATE, string_to_register(*beg),
+                                            string_to_register(*(beg + 1))));
+        break;
+    default: throw make_error(state, INVALID_PARAMS_MSG);
+    }
+    ++state.current_source_line;
+    return eol;
 }
 
 StringCIter make_cmp
@@ -739,7 +802,7 @@ StringCIter make_skip
         return eol;
     case XPF_1R_FP: case XPF_1R_INT:
         numclass = convert_to_number_strict(beg + 1, d, i);
-        // v fall through v
+        MACRO_FALLTHROUGH;
     case XPF_1R:
         r1 = string_to_register(*beg);
         break;
@@ -1016,7 +1079,7 @@ StringCIter make_generic_memory_access
     case XPF_2R: case XPF_2R_INT: case XPF_2R_LABEL:
         ++arg_count;
         addr_reg = string_to_register(*(beg + 1));
-        // v fall through v
+        MACRO_FALLTHROUGH;
     case XPF_1R: case XPF_1R_INT: case XPF_1R_LABEL:
         reg = string_to_register(*beg);
         break;
@@ -1037,6 +1100,7 @@ StringCIter make_generic_memory_access
         break;
     case XPF_1R_INT: case XPF_2R_INT:
         immd = int_immd_only(state, beg + arg_count - 1);
+        break;
     case XPF_2R: break;
     default: assert(false); break;
     }
@@ -1060,8 +1124,7 @@ bool op_code_supports_fpoint_immd(erfin::Inst inst) {
     switch (inst) {
     case PLUS: case MINUS: case TIMES_FP: case DIV_MOD_FP:
         return true;
-    case TIMES: case AND: case XOR: case OR: case AND_MSB: case XOR_MSB:
-    case OR_MSB: case DIVIDE_MOD: case COMP:
+    case TIMES: case AND: case XOR: case OR: case DIVIDE_MOD: case COMP:
         return false;
     default: assert(false); break;
     }
@@ -1071,7 +1134,7 @@ bool op_code_supports_integer_immd(erfin::Inst inst) {
     using namespace erfin::enum_types;
     switch (inst) {
     case PLUS: case MINUS: case TIMES: case AND: case XOR: case OR:
-    case AND_MSB: case XOR_MSB: case OR_MSB: case DIVIDE_MOD: case COMP:
+    case DIVIDE_MOD: case COMP:
         return true;
     case TIMES_FP: case DIV_MOD_FP:
         return false;
@@ -1089,7 +1152,7 @@ erfin::Reg string_to_register(const std::string & str) {
     case 'z': rv = REG_Z    ; break;
     case 'a': rv = REG_A    ; break;
     case 'b': rv = REG_B    ; break;
-    case 'c': rv = REG_FLAGS; break;
+    case 'c': rv = REG_C; break;
     default: break;
     }
     if (rv != REG_COUNT)

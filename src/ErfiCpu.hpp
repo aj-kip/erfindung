@@ -24,13 +24,27 @@
 
 #include "ErfiDefs.hpp"
 
+#include <iosfwd>
+
 namespace erfin {
 
 class ErfiCpu {
 public:
     ErfiCpu();
+
     void run_cycle(MemorySpace & memspace);
+    void print_registers(std::ostream & out) const;
+    static void run_tests();
+
 private:
+
+    UInt32 & reg0(Inst inst);
+    UInt32 & reg1(Inst inst);
+    UInt32 & reg2(Inst inst);
+    UInt32 & reg3(Inst inst);
+    void do_rotate(Inst inst);
+    void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
+
     RegisterPack m_registers;
 };
 

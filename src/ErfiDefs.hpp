@@ -110,7 +110,7 @@ enum Reg_e {
     // GP/'answer' registers
     REG_A ,
     REG_B ,
-    REG_FLAGS,
+    REG_C ,
     // stack (base) pointer
     REG_BP,
     // [special] program counter
@@ -119,9 +119,10 @@ enum Reg_e {
     REG_COUNT
 };
 
-// reg, reg, reg, reg: oooooo 111 222 3334 44-- ---- ----
-// reg, reg, reg     : oooooo 111 222 333- ---- ---- ----
-// reg, reg, immd    : oooooo 111 222 iiii-iiii iiii-iiii
+// having a fp flag, can further eliminate unneeded op codes
+// reg, reg, reg, reg: xppp xooooo 111 222 3334 44-- ---- ----
+// reg, reg, reg     : xppp xooooo 111 222 333- ---- ---- ----
+// reg, reg, immd    : xppp xooooo 111 222 iiii-iiii iiii-iiii
 
 /*
 # set aside 16bytes*80 for box comps
@@ -139,7 +140,7 @@ find_unused(BitBytes * bb, unsigned len);
 
  */
 
-// 6 bits (expanded from 5 bits)
+// 5 bits (back to)
 enum OpCode_e : UInt32 {
 
     // R-type arthemitic operations (4)
@@ -173,12 +174,11 @@ enum OpCode_e : UInt32 {
     OR , // bitwise or
     NOT, // bitwise complement
          // "not x a"
-
-    // I-type LOGIC, lsb and msb (6)
-    AND_MSB, // two args, one answer
-             // "and.msb x immd"
-    XOR_MSB, // two args, one answer
-    OR_MSB , // two args, one answer
+    ROTATE , // negative -> left
+             // positive -> right
+             // "rotate x  4"
+             // "rotate y -6"
+             // "rotate x  a"
 
     // J-type operations plus one R-type helper (COMP) (4)
     // do all (>, <, ==, !=) (then use XOR + NON_ZERO)
@@ -201,37 +201,60 @@ enum OpCode_e : UInt32 {
           // "save x a" saves x to address a
 
     // I-types setting values from immds
-    SET_INT , // one reg, one IMMD (msb)
-              // "set.msb immd"
-    SET_ABS , // one reg, one IMMD (lsb)
-              // "set x immd"
+    SET_INT , // one reg, one IMMD
     SET_FP96, // one reg, one IMMD as a 9/6 bit fixed point (+1 for sign)
     SET_REG , // two regs (r0 = r1)
               // argument deduced "set x 123.3" <- note the decimal
               // "set x a"
 
-    // graphics operations (7)
-    GLOAD_ADDR    , // immd load sprite data
-    GLOAD_REG     , // reg load sprite data
-    GSIZE         , // two regs, set sprite size
-    GSET_INDEX    , // set sprite index (immd)
-    GSET_INDEX_REG, // set sprite index by register
-    DRAW          , // draw at (x, y) (two regs) sprite of the current index
-    DRAW_FLUSH    , // executes all gpu instructions queued up
-
-    // gets elapsed time as fp (timer) for draw flush and input device
-    SYSTEM_READ, // one reg, one immd
+    // I can reduce the instruction set size even further by defining, as all
+    // ISAs do, function call conventions
+    // therefore:
+    // answer    registers are: a, b, c
+    // parameter registers are: x, y, z
+    // other parameters and answers that cannot fit into the three registers
+    // go unto the program stack like so:
+    //
+    // +--------------------------+
+    // | callee's stack frane     |
+    // +--------------------------+ <---+--- BP
+    // | callee parameter data    |     |
+    // +--------------------------+     +--- size is constant
+    // | callee answer data       |     |
+    // +--------------------------+ <---+
+    // | old base pointer value   |
+    // +--------------------------+
+    // |                          |
+    // | previous function's data |
+    // |                          |
+    // +--------------------------+
+    // registers BP and PC are neither (obviously)
+    SYSTEM_CALL,
 
     OPCODE_COUNT // sentinal value [not a valid op code]
 };
 
+enum SystemCallValue_e {
+    // system calls ignore paramform, and will only read the immediate
+    // this will provide a space of ~32,000 possible functions
+    // this enumeration defines constants that map to thier respective function
+    // calls
+    // system calls are "calls to the hardware"
+    // Erfindung needs a GPU of sorts to display
+    // it also needs system calls to read user input
+    UPLOAD_SPRITE , // arguments: x: width, y: height, z: address
+                    // answers  : a: index for sprite
+    DRAW_SPRITE   , // arguments: x: x pos, y: y pox, z: index for sprite
+    SCREEN_FLUSH  , // no arguments
+    WAIT_FOR_FRAME, // wait until the end of the frame
+    READ_INPUT
+};
 
 enum ParamForm_e {
     REG_REG_REG_REG,
     REG_REG_REG,
     REG_REG_IMMD,
     REG_REG,
-
     REG_IMMD,
     REG,
     NO_PARAMS,
