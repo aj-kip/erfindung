@@ -141,7 +141,7 @@ UInt32 encode_immd(double d) {
     // make sure we're not losing any of the integer part
     if ((fullwidth >> 16u) & ~0x1FFu)
         throw Error("Value too large to be encoded in a 9/6 fixed point number.");
-    return sign_part | partial;
+    return sign_part | partial | encode_set_is_fixed_point_flag();
 }
 
 const char * register_to_string(Reg r) {
@@ -638,7 +638,7 @@ StringCIter make_generic_arithemetic
      StringCIter beg, StringCIter end);
 
 StringCIter make_generic_divmod
-    (erfin::OpCode op_code, TextProcessState & state,
+    (erfin::OpCode op_code, TextProcessState & state, bool is_fixed_point,
      StringCIter beg, StringCIter end);
 
 StringCIter make_generic_memory_access
@@ -677,19 +677,22 @@ StringCIter make_multiply
 StringCIter make_divmod
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
+    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, false, beg, end);
 }
 
 StringCIter make_multiply_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    return make_generic_arithemetic(erfin::OpCode::TIMES_FP, state, beg, end);
+    auto rv = make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
+    // hackish, but requires least modification
+    state.program_data.back() |= erfin::encode_set_is_fixed_point_flag();
+    return rv;
 }
 
 StringCIter make_divmod_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    return make_generic_divmod(erfin::OpCode::DIV_MOD_FP, state, beg, end);
+    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, true, beg, end);
 }
 
 // <------------------------- Logic operations ------------------------------->
@@ -707,19 +710,7 @@ StringCIter make_or
 StringCIter make_xor
     (TextProcessState & state, StringCIter beg, StringCIter end)
 { return make_generic_logic(erfin::OpCode::XOR, state, beg, end); }
-#if 0
-StringCIter make_and_msb
-    (TextProcessState & state, StringCIter beg, StringCIter end)
-{ return make_generic_logic(erfin::OpCode::AND_MSB, state, beg, end); }
 
-StringCIter make_or_msb
-    (TextProcessState & state, StringCIter beg, StringCIter end)
-{ return make_generic_logic(erfin::OpCode::OR_MSB, state, beg, end); }
-
-StringCIter make_xor_msb
-    (TextProcessState & state, StringCIter beg, StringCIter end)
-{ return make_generic_logic(erfin::OpCode::XOR_MSB, state, beg, end); }
-#endif
 StringCIter make_not
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
@@ -841,19 +832,19 @@ StringCIter make_set
     double d;
     switch (get_lines_param_form(beg, line_end)) {
     case XPF_2R:
-        inst = encode(SET_REG, itr2reg(beg), itr2reg(beg + 1));
+        inst = encode(SET, itr2reg(beg), itr2reg(beg + 1));
         break;
     case XPF_1R_INT:
         convert_to_number_strict(beg + 1, d, i);
-        inst = encode(SET_INT, itr2reg(beg), i);
+        inst = encode(SET, itr2reg(beg), i);
         break;
     case XPF_1R_FP:
         convert_to_number_strict(beg + 1, d, i);
-        inst = encode(SET_FP96, itr2reg(beg), d);
+        inst = encode(SET, itr2reg(beg), d);
         break;
     case XPF_1R_LABEL:
         state.unfulfilled_labels.emplace_back(state.program_data.size(), *(beg + 1));
-        inst = encode_op(SET_INT) | encode_param_form(REG_IMMD) |
+        inst = encode_op(SET) | encode_param_form(REG_IMMD) |
                encode_reg(itr2reg(beg));
         break;
     default:
@@ -1012,12 +1003,12 @@ StringCIter make_generic_arithemetic
 }
 
 StringCIter make_generic_divmod
-    (erfin::OpCode op_code, TextProcessState & state,
+    (erfin::OpCode op_code, TextProcessState & state, bool is_fixed_point,
      StringCIter beg, StringCIter end)
 {
     using namespace erfin;
     using namespace erfin::enum_types;
-    assert(op_code == DIV_MOD_FP || op_code == DIVIDE_MOD);
+    assert(op_code == DIVIDE_MOD);
     auto eol = get_eol(beg, end);
     ++beg;
     Reg n, d, q, r;
@@ -1044,6 +1035,8 @@ StringCIter make_generic_divmod
     }
     state.program_data.push_back(encode_op(op_code) |
                                  encode_reg_reg_reg_reg(n, d, q, r));
+    if (is_fixed_point)
+        state.program_data.back() |= encode_set_is_fixed_point_flag();
     ++state.current_source_line;
     return eol;
 }
@@ -1122,8 +1115,7 @@ StringCIter make_generic_memory_access
 bool op_code_supports_fpoint_immd(erfin::Inst inst) {
     using namespace erfin::enum_types;
     switch (inst) {
-    case PLUS: case MINUS: case TIMES_FP: case DIV_MOD_FP:
-        return true;
+    case PLUS: case MINUS: return true;
     case TIMES: case AND: case XOR: case OR: case DIVIDE_MOD: case COMP:
         return false;
     default: assert(false); break;
@@ -1136,8 +1128,6 @@ bool op_code_supports_integer_immd(erfin::Inst inst) {
     case PLUS: case MINUS: case TIMES: case AND: case XOR: case OR:
     case DIVIDE_MOD: case COMP:
         return true;
-    case TIMES_FP: case DIV_MOD_FP:
-        return false;
     default: assert(false); break;
     }
 }
@@ -1239,7 +1229,7 @@ void erfin::Assembler::run_tests() {
     beg = make_set(state, beg, end);
     beg = make_set(state, ++beg, end);
     beg = make_set(state, ++beg, end);
-    auto supposed_top = encode(OpCode::SET_FP96, Reg::REG_X, 12.34);
+    auto supposed_top = encode(OpCode::SET, Reg::REG_X, 12.34);
     assert(state.program_data.back() == supposed_top);
     }
     // test that "generic arthemetic" instruction maker functions
@@ -1299,8 +1289,8 @@ void erfin::Assembler::run_tests() {
     beg = make_plus    (state,   beg, end);
     beg = make_minus   (state, ++beg, end);
     resolve_unfulfilled_labels(state);
-    assert(state.program_data[0] == encode(OpCode::SET_INT, Reg::REG_PC, 2));
-    assert(state.program_data[1] == encode(OpCode::LOAD   , Reg::REG_X , 2));
+    assert(state.program_data[0] == encode(OpCode::SET , Reg::REG_PC, 2));
+    assert(state.program_data[1] == encode(OpCode::LOAD, Reg::REG_X , 2));
     }
     {
     constexpr const char * const sample_code =
@@ -1311,10 +1301,10 @@ void erfin::Assembler::run_tests() {
     Assembler asmr;
     asmr.assemble_from_string(sample_code);
     const auto & pdata = asmr.program_data();
-    assert(pdata[0] == encode(OpCode::SET_FP96, Reg::REG_X, 1.0 ));
-    assert(pdata[1] == encode(OpCode::SET_FP96, Reg::REG_Y, 1.44));
-    assert(pdata[2] == encode(OpCode::PLUS    , Reg::REG_X, Reg::REG_Y, Reg::REG_X));
-    assert(pdata[3] == encode(OpCode::SET_INT , Reg::REG_PC, 2));
+    assert(pdata[0] == encode(OpCode::SET , Reg::REG_X, 1.0 ));
+    assert(pdata[1] == encode(OpCode::SET , Reg::REG_Y, 1.44));
+    assert(pdata[2] == encode(OpCode::PLUS, Reg::REG_X, Reg::REG_Y, Reg::REG_X));
+    assert(pdata[3] == encode(OpCode::SET , Reg::REG_PC, 2));
     }
 }
 

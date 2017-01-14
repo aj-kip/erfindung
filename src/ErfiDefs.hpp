@@ -120,9 +120,9 @@ enum Reg_e {
 };
 
 // having a fp flag, can further eliminate unneeded op codes
-// reg, reg, reg, reg: xppp xooooo 111 222 3334 44-- ---- ----
-// reg, reg, reg     : xppp xooooo 111 222 333- ---- ---- ----
-// reg, reg, immd    : xppp xooooo 111 222 iiii-iiii iiii-iiii
+// reg, reg, reg, reg: fppp xooooo 111 222 3334 44-- ---- ----
+// reg, reg, reg     : fppp xooooo 111 222 333- ---- ---- ----
+// reg, reg, immd    : fppp xooooo 111 222 iiii-iiii iiii-iiii
 
 /*
 # set aside 16bytes*80 for box comps
@@ -153,23 +153,24 @@ enum OpCode_e : UInt32 {
                 // "minus x y immd"
                 // "sub x y a"
     TIMES     , // two args, one answer
-                // "times.int x y a"
-                // "times.int x immd"
+                // "times x y a"
+                // "times x immd"
     DIVIDE_MOD, // two args, one answer (mod to flags)
                 // if divide by zero, flags == denominator
-                // "divmod.int x y a b"
-                // "div.int x y a"
-                // "div.int x immd"
+                // "divmod x y a b"
+                // "div x y a"
+                // "div x immd"
+#   if 0
     TIMES_FP  , // "times.fp x y a"
                 // "times.fp x immd"
     DIV_MOD_FP, // "divmod.fp x y a"
                 // "divmod.fp x immd"
+#   endif
     // R-type LOGIC ops (4)
     AND, // bitwise and
          // This form applies to all logic operations
          // "and x y a"
-         // "and x immd" Assembler may assume LSB
-         // "and.lsb x y a" depends on assembler options
+         // "and x immd" only LSB
     XOR, // bitwise exclusive or
     OR , // bitwise or
     NOT, // bitwise complement
@@ -199,14 +200,15 @@ enum OpCode_e : UInt32 {
           // "load x" load contents stored at address x, into register x
     SAVE, // two regs, one immd
           // "save x a" saves x to address a
-
+    SET,
+#   if 0
     // I-types setting values from immds
     SET_INT , // one reg, one IMMD
     SET_FP96, // one reg, one IMMD as a 9/6 bit fixed point (+1 for sign)
     SET_REG , // two regs (r0 = r1)
               // argument deduced "set x 123.3" <- note the decimal
               // "set x a"
-
+#   endif
     // I can reduce the instruction set size even further by defining, as all
     // ISAs do, function call conventions
     // therefore:

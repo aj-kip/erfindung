@@ -43,6 +43,7 @@ private:
     UInt32 & reg2(Inst inst);
     UInt32 & reg3(Inst inst);
     void do_rotate(Inst inst);
+    void do_divmod(Inst inst);
     void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
 
     RegisterPack m_registers;

@@ -127,6 +127,8 @@ inline UInt32 encode_immd(int immd)
 
 UInt32 encode_immd(double d);
 
+inline UInt32 encode_set_is_fixed_point_flag() { return 0x80000000; }
+
 // helpers for vm/testing the assembler
 inline Reg decode_reg0(Inst inst) { return Reg((inst >> 19) & 0x7); }
 inline Reg decode_reg1(Inst inst) { return Reg((inst >> 16) & 0x7); }
@@ -146,6 +148,8 @@ inline UInt32 decode_immd_as_fp(Inst inst) {
     UInt32 sign_part = (rv & 0x8000) << 16u;
     return sign_part | significand;
 }
+
+inline bool decode_is_fixed_point_flag_set(UInt32 i) { return i & 0x80000000; }
 
 const char * register_to_string(Reg r);
 

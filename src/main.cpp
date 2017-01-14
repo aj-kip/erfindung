@@ -101,13 +101,13 @@ inline Inst make_comp(Reg r0, Reg r1, Reg r2) {
 // for op: SAVE, // two regs, one immd
 // for op: SET_INT , // one reg, one IMMD
 inline Inst make_set_int(Reg r0, UInt32 immd) {
-    return encode_op(enum_types::SET_INT) | encode_reg(r0) | immd;
+    return encode_op(enum_types::SET) | encode_reg(r0) | immd;
 }
 // for op: SET_FP96, // one reg, one IMMD
 
 // for op: SET_REG , // two regs
 inline Inst make_set_reg(Reg r0, Reg r1) {
-    return encode_op(enum_types::SET_REG) | encode_reg_reg(r0, r1);
+    return encode_op(enum_types::SET) | encode_reg_reg(r0, r1);
 }
 // for op: SYSTEM_READ // one reg, one immd
 

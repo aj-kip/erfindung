@@ -21,12 +21,12 @@ HEADERS += \
 TARGET = erfindung
 
 CONFIG (debug, debug|release) {
-    DEFINES += MACRO_DEBUG linux
+    DEFINES += MACRO_DEBUG linux MACRO_COMPILER_GCC
 	QMAKE_CXXFLAGS += -O0
 }
 
 CONFIG (release, debug|release) {
-    DEFINES += linux NDEBUG MACRO_RELEASE
+    DEFINES += linux NDEBUG MACRO_RELEASE MACRO_COMPILER_GCC
 	QMAKE_CXXFLAGS += -O3
 }
 
