@@ -27,7 +27,6 @@
 #include <map>
 #include <queue>
 #include <vector>
-#include <future>
 #include <thread>
 
 namespace erfin {
@@ -45,36 +44,10 @@ enum GpuOpCode_e {
 
 using GpuOpCode = gpu_enum_types::GpuOpCode_e;
 
-class GpuCommandBuffer {
-public:
-    friend class GpuAttorney; // for pop ?
-    // command buffer methods
-
-    void unload_sprite(UInt32 index);
-    void draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
-    void screen_clear ();
-protected:
-    void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
-
-    UInt32 pop();
-    bool is_empty() const { return m_queue.empty(); }
-    void swap(GpuCommandBuffer & other) { m_queue.swap(other.m_queue); }
-private:
-    std::queue<UInt32> m_queue;
-};
-
-class ErfiGpu;
-
-class GpuAttorney {
-    friend class ErfiGpu;
-    static UInt32 pop(GpuCommandBuffer & inst) { return inst.pop(); }
-    static bool is_empty(const GpuCommandBuffer & inst)
-        { return inst.is_empty(); }
-};
-
-class ErfiGpu : public GpuCommandBuffer {
+class ErfiGpu {
 public:
     ErfiGpu();
+    ~ErfiGpu();
 
     // finishes all previous draw operations (join)
     // swaps command buffers
@@ -84,11 +57,14 @@ public:
     void wait(MemorySpace & mem);
 
     UInt32 upload_sprite(UInt32 width, UInt32 height, UInt32 address);
+    void unload_sprite(UInt32 index);
+    void draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
+    void screen_clear ();
 
     template <typename Func>
     void draw_pixels(Func f) {
         int x = 0, y = 0;
-        for (auto b : m_screen_pixels) {
+        for (auto b : m_cold.pixels) {
             f(x, y, b);
             ++x;
             if (x == m_screen_width) {
@@ -102,8 +78,9 @@ public:
     static const int SCREEN_HEIGHT;
 
 private:
+    void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
+
     using VideoMemory = std::vector<bool>;
-    using GpuUpdateTask = std::packaged_task<int(GpuCommandBuffer&, VideoMemory&)>;
 
     struct SpriteMeta {
         int width;
@@ -111,21 +88,27 @@ private:
         std::vector<bool> pixels;
     };
 
-    static int do_gpu_tasks(GpuCommandBuffer & commands, VideoMemory & video_mem);
+    static void do_gpu_tasks(std::queue<UInt32> & commands, VideoMemory & video_mem);
 
     std::map<UInt32, SpriteMeta> m_sprite_map;
     int m_screen_width;
-    VideoMemory m_screen_pixels;
-
     UInt32 m_index_pos;
-
     std::thread m_gfx_thread;
-    struct {
-        GpuUpdateTask gpu_task;
-        GpuCommandBuffer command_buffer;
-        VideoMemory working_pixels;
-        std::future<int> signal;
-    } m_hot;
+
+    struct GpuContext {
+        std::queue<UInt32> command_buffer;
+        std::queue<SpriteMeta *> sprite_data;
+        VideoMemory pixels;
+
+        void swap(GpuContext & rhs) {
+            command_buffer.swap(rhs.command_buffer);
+            sprite_data.swap(rhs.sprite_data);
+            pixels.swap(rhs.pixels);
+        }
+    };
+
+    GpuContext m_cold;
+    GpuContext m_hot ; // hot as in "touch it and get burned"
 };
 
 } // end of erfin namespace
