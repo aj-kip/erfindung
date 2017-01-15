@@ -121,7 +121,7 @@ private:
     RegisterPack m_regs;
 };
 
-void do_cycle(RegisterPack & regs, MemorySpace & mem, Gpu & gpu);
+void do_cycle(RegisterPack & regs, MemorySpace & mem, ErfiGpu & gpu);
 
 } // end of erfin
 
@@ -285,12 +285,27 @@ std::vector<erfin::UInt32> make_demo_app() {
 }
 
 int main() {
-    std::cout << erfin::enum_types::OPCODE_COUNT << std::endl;
-    erfin::ErfiCpu::run_tests();
-    test_string_processing();
-
     using namespace erfin;
 
+    std::cout << enum_types::OPCODE_COUNT << std::endl;
+    ErfiCpu::run_tests();
+    test_string_processing();
+
+    Assembler asmr;
+    ErfiCpu cpu;
+    ErfiGpu gpu;
+    MemorySpace memory;
+
+    asmr.assemble_from_string(
+        "call upload\n"
+        "call unload\n"
+        "call draw\n"
+        "call wait");
+    load_program_into_memory(memory, asmr.program_data());
+    for (int i = 0; i != 3; ++i)
+        cpu.run_cycle(memory, &gpu);
+    gpu.wait(memory);
+    gpu.wait(memory);
     try {
         test_fixed_point(  2.0);
         test_fixed_point( -1.0);

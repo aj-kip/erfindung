@@ -22,6 +22,7 @@
 #include "ErfiCpu.hpp"
 #include "Assembler.hpp"
 #include "FixedPointUtil.hpp"
+#include "ErfiGpu.hpp"
 
 #include <iostream>
 
@@ -49,7 +50,7 @@ ErfiCpu::ErfiCpu() {
         reg = 0;
 }
 
-void ErfiCpu::run_cycle(MemorySpace & memspace) {
+void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
     using namespace erfin;
     using namespace erfin::enum_types;
     Inst inst = memspace[m_registers[REG_PC]];
@@ -131,7 +132,7 @@ void ErfiCpu::run_cycle(MemorySpace & memspace) {
         default: throw make_illegal_inst_error(inst);
         }
         break;
-    case SYSTEM_CALL: /* does not handle system calls */ break;
+    case SYSTEM_CALL: if (gpu) do_syscall(inst, *gpu); break;
     default: throw make_illegal_inst_error(inst);
     };
 
@@ -171,8 +172,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     load_program_into_memory(mem, asmr.program_data());
     for (int i = 0; i != 10; ++i)
         cpu.run_cycle(mem);
-    int j = 0;
-    ++j;
+
 }
 
 /* private */ UInt32 & ErfiCpu::reg0(Inst inst)
@@ -219,6 +219,24 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     }
 }
 
+/* private */ void ErfiCpu::do_syscall(Inst inst, ErfiGpu & gpu) {
+    using namespace erfin::enum_types;
+
+    auto & x = m_registers[REG_X], & y = m_registers[REG_Y], & z = m_registers[REG_Z];
+    auto & a = m_registers[REG_A];
+    static_assert(std::is_same<decltype(x), decltype(y)>::value, "");
+    switch (decode_immd_as_int(inst)) {
+    case UPLOAD_SPRITE : a = gpu.upload_sprite(x, y, z); break;
+    case UNLOAD_SPRITE : gpu.unload_sprite(x); break;
+    case DRAW_SPRITE   : gpu.draw_sprite(x, y, z); break;
+    case SCREEN_CLEAR  : gpu.screen_clear(); break;
+    case WAIT_FOR_FRAME: break;
+    case READ_INPUT    : break;
+    default:
+        throw make_illegal_inst_error(inst);
+    }
+}
+
 /* private */ void ErfiCpu::do_basic_arth_inst
     (Inst inst, UInt32(*func)(UInt32, UInt32))
 {
@@ -257,20 +275,20 @@ const char * op_code_to_string(erfin::Inst i) {
     using namespace erfin;
     using namespace erfin::enum_types;
     switch (decode_op_code(i)) {
-    case PLUS : return "plus";
-    case MINUS: return "minus";
-    case TIMES: return "times";
-    case DIVIDE_MOD: return "divmod";
-    case AND: return "and";
-    case XOR: return "xor";
-    case OR : return "or";
-    case NOT: return "not";
-    case ROTATE: return "rotate";
-    case COMP: return "compare";
-    case SKIP: return "skip";
-    case LOAD: return "load";
-    case SAVE: return "save";
-    case SET: return "set";
+    case PLUS       : return "plus";
+    case MINUS      : return "minus";
+    case TIMES      : return "times";
+    case DIVIDE_MOD : return "divmod";
+    case AND        : return "and";
+    case XOR        : return "xor";
+    case OR         : return "or";
+    case NOT        : return "not";
+    case ROTATE     : return "rotate";
+    case COMP       : return "compare";
+    case SKIP       : return "skip";
+    case LOAD       : return "load";
+    case SAVE       : return "save";
+    case SET        : return "set";
     case SYSTEM_CALL: return "call";
     default: return "<NOT ANY OPTCODE>";
     }

@@ -466,16 +466,12 @@ StringCIter make_and(TextProcessState &, StringCIter, StringCIter);
 StringCIter make_or(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_xor(TextProcessState &, StringCIter, StringCIter);
-#if 0
-StringCIter make_and_msb(TextProcessState &, StringCIter, StringCIter);
 
-StringCIter make_or_msb(TextProcessState &, StringCIter, StringCIter);
-
-StringCIter make_xor_msb(TextProcessState &, StringCIter, StringCIter);
-#endif
 StringCIter make_not(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_rotate(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_syscall(TextProcessState &, StringCIter, StringCIter);
 
 // <--------------------- flow control operations ---------------------------->
 
@@ -505,22 +501,13 @@ LineToInstFunc get_line_processing_func
     fmap["or" ] = fmap["|"] = make_or ;
     fmap["xor"] = fmap["^"] = make_xor;
 
-    // suffixes
-#   if 0
-    fmap["and.lsb"] = fmap["&.lsb"] = make_and;
-    fmap["or.lsb" ] = fmap["|.lsb"] = make_or ;
-    fmap["xor.lsb"] = fmap["^.lsb"] = make_xor;
-    fmap["and.msb"] = fmap["&.msb"] = make_and_msb;
-    fmap["or.msb" ] = fmap["|.msb"] = make_or_msb ;
-    fmap["xor.msb"] = fmap["^.msb"] = make_xor_msb;
-#   endif
     fmap["not"] = fmap["!"] = fmap["~"] = make_not;
 
     fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
     fmap["minus"] = fmap["sub"] = fmap["-"] = make_minus;
 
     fmap["times"] = fmap["mul"] = fmap["multiply"] = fmap["*"] = make_multiply_fp;
-    fmap["div"] = fmap["divmod"  ] = fmap["/"] = make_divmod_fp;
+    fmap["div"] = fmap["divmod"] = fmap["/"] = make_divmod_fp;
 
     // suffixes
     fmap["times.int"] = fmap["mul.int"] = fmap["multiply.int"] = fmap["*.int"]
@@ -540,6 +527,8 @@ LineToInstFunc get_line_processing_func
 
     fmap["set"] = fmap["="] = make_set;
     fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
+
+    fmap["call"] = fmap["()"] = make_syscall;
     is_initialized = true;
     return get_line_processing_func(assumptions, fname);
 }
@@ -760,6 +749,43 @@ StringCIter make_rotate
         break;
     default: throw make_error(state, INVALID_PARAMS_MSG);
     }
+    ++state.current_source_line;
+    return eol;
+}
+
+StringCIter make_syscall
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    using namespace erfin::enum_types;
+
+    auto eol = get_eol(++beg, end);
+    union { int i; double d; } u;
+
+    switch (convert_to_number_strict(beg, u.d, u.i)) {
+    case INTEGER: break;
+    case NOT_NUMERIC:
+        if (*beg == "upload")
+            u.i = UPLOAD_SPRITE;
+        else if (*beg == "unload")
+            u.i = UNLOAD_SPRITE;
+        else if (*beg == "clear")
+            u.i = SCREEN_CLEAR;
+        else if (*beg == "wait")
+            u.i = WAIT_FOR_FRAME;
+        else if (*beg == "read")
+            u.i = READ_INPUT;
+        else if (*beg == "draw")
+            u.i = DRAW_SPRITE;
+        else
+            throw make_error(state, ": \"" + *beg + "\" is not a system call.");
+        break;
+    default:
+        throw make_error(state, ": fixed points are not system call names.");
+        break;
+    }
+
+    state.program_data.push_back(encode_op(SYSTEM_CALL) | encode_immd(u.i));
     ++state.current_source_line;
     return eol;
 }

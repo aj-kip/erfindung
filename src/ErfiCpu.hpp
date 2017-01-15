@@ -28,11 +28,12 @@
 
 namespace erfin {
 
+class ErfiGpu;
 class ErfiCpu {
 public:
     ErfiCpu();
 
-    void run_cycle(MemorySpace & memspace);
+    void run_cycle(MemorySpace & memspace, ErfiGpu * gpu = nullptr);
     void print_registers(std::ostream & out) const;
     static void run_tests();
 
@@ -44,6 +45,7 @@ private:
     UInt32 & reg3(Inst inst);
     void do_rotate(Inst inst);
     void do_divmod(Inst inst);
+    void do_syscall(Inst inst, ErfiGpu & gpu);
     void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
 
     RegisterPack m_registers;

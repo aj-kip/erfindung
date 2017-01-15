@@ -27,10 +27,10 @@
 
 #include <array>
 
-class DrawRectangle : public sf::Drawable {
+class DrawRectangle final : public sf::Drawable {
 public:
 
-    DrawRectangle(): m_vertices() {}
+    DrawRectangle();
 
 	DrawRectangle
         (float x_, float y_, float w_ = 0.f, float h_ = 0.f,

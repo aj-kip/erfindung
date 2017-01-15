@@ -24,99 +24,84 @@
 
 namespace erfin {
 
-/* static */ const int Gpu::SCREEN_WIDTH  = 320;
-/* static */ const int Gpu::SCREEN_HEIGHT = 240;
+/* static */ const int ErfiGpu::SCREEN_WIDTH  = 320;
+/* static */ const int ErfiGpu::SCREEN_HEIGHT = 240;
 
-Gpu::Gpu():
-    m_screen_width(SCREEN_WIDTH)
+void GpuCommandBuffer::upload_sprite
+    (UInt32 index, UInt32 width, UInt32 height, UInt32 address)
+{
+    m_queue.push(gpu_enum_types::UPLOAD);
+    m_queue.push(index  );
+    m_queue.push(width  );
+    m_queue.push(height );
+    m_queue.push(address);
+}
+
+void GpuCommandBuffer::unload_sprite(UInt32 index) {
+    m_queue.push(gpu_enum_types::UNLOAD);
+    m_queue.push(index);
+}
+
+void GpuCommandBuffer::draw_sprite(UInt32 x, UInt32 y, UInt32 index) {
+    m_queue.push(gpu_enum_types::DRAW);
+    m_queue.push(x);
+    m_queue.push(y);
+    m_queue.push(index);
+}
+
+void GpuCommandBuffer::screen_clear() {
+    m_queue.push(gpu_enum_types::CLEAR);
+}
+
+UInt32 GpuCommandBuffer::pop() {
+    UInt32 top = m_queue.front();
+    m_queue.pop();
+    return top;
+}
+
+int ErfiGpu::do_gpu_tasks(GpuCommandBuffer & commands, VideoMemory & video_mem) {
+    using namespace gpu_enum_types;
+    while (!GpuAttorney::is_empty(commands)) {
+        switch (GpuAttorney::pop(commands)) {
+        case UPLOAD:
+        case UNLOAD:
+        case DRAW  :
+        case CLEAR : break;
+        }
+    }
+    (void)video_mem;
+    return 0;
+}
+
+ErfiGpu::ErfiGpu():
+    m_screen_width(SCREEN_WIDTH),
+    m_index_pos(0)
 {
     m_screen_pixels.resize(SCREEN_WIDTH*SCREEN_HEIGHT, false);
+
+    m_hot.gpu_task = GpuUpdateTask(do_gpu_tasks);
 }
 
-void Gpu::set_index(UInt32 index) {
-    m_sprite_map[index] = { 0, 0, std::vector<bool>() };
-    m_cmd_queue.push({ GOpCode::SET_INDEX, index, 0 });
-}
-
-void Gpu::load(UInt32 addr) {
-    m_cmd_queue.push({ GOpCode::LOAD, addr, 0 });
-}
-
-void Gpu::size(UInt32 w, UInt32 h) {
-    m_cmd_queue.push({ GOpCode::SIZE, w, h });
-}
-
-void Gpu::draw(UInt32 x, UInt32 y) {
-    m_cmd_queue.push({ GOpCode::DRAW, x, y });
-}
-
-void Gpu::draw_flush(MemorySpace & mem) {
-    const UInt32 INVALID_INDEX = UInt32(-1);
-    UInt32 cur_index = INVALID_INDEX;
-    while (!m_cmd_queue.empty()) {
-        GInst & inst = m_cmd_queue.front();
-        SpriteMeta * smeta = nullptr;
-        if (cur_index != INVALID_INDEX)
-            smeta = &(m_sprite_map[cur_index]);
-        switch (inst.op) {
-        case GOpCode::SET_INDEX:
-            cur_index = inst.arg0;
-            break;
-        case GOpCode::LOAD:
-            load_action(inst, smeta, mem);
-            break;
-        case GOpCode::SIZE:
-            if (!smeta) break;
-            smeta->pixels.clear();
-            smeta->pixels.resize(inst.arg0*inst.arg1, false);
-            smeta->width = inst.arg0;
-            smeta->height = inst.arg1;
-            break;
-        case GOpCode::DRAW:
-            draw_action(inst, smeta);
-            break;
-        default: assert(false); break;
-        }
-
-        m_cmd_queue.pop();
+void ErfiGpu::wait(MemorySpace &) {
+    if (m_hot.signal.valid()) {
+        if (m_gfx_thread.joinable())
+            m_gfx_thread.join();
+        (void)m_hot.signal.get();
+        //m_hot.gpu_task.reset();
     }
+    swap(m_hot.command_buffer);
+    m_screen_pixels.swap(m_hot.working_pixels);
+    m_hot.signal = m_hot.gpu_task.get_future();
+    std::thread t1(std::move(m_hot.gpu_task),
+                   std::ref(m_hot.command_buffer),
+                   std::ref(m_hot.working_pixels));
+    m_gfx_thread.swap(t1);
 }
 
-/* private */ void Gpu::draw_action(GInst & inst, SpriteMeta * smeta) {
-    if (!smeta) return;
-
-    assert(int(smeta->pixels.size()) == smeta->height*smeta->width);
-
-    for (int y = 0; y != smeta->height; ++y) {
-        int y_comp = y + inst.arg1;
-        if (y_comp >= int(m_screen_pixels.size()/m_screen_width))
-            return;
-        for (int x = 0; x != smeta->width ; ++x) {
-            int x_comp = x + inst.arg0;
-            int index = x_comp + y_comp*m_screen_width;
-            if (index >= int(m_screen_pixels.size()))
-                break;
-            m_screen_pixels[index] = smeta->pixels[x + y*smeta->width];
-        }
-    }
-}
-
-/* private */ void Gpu::load_action
-    (GInst & inst, SpriteMeta * smeta, MemorySpace & mem)
-{
-    if (!smeta) return;
-    smeta->pixels.clear();
-    UInt32 * data = &mem[inst.arg0];
-    int bit_index = 0;
-    for (int i = 0; i != smeta->height*smeta->width; ++i) {
-        smeta->pixels.push_back((*data >> (31 - bit_index)) & 0x1);
-        if (bit_index == 31) {
-            ++data;
-            bit_index = 0;
-        } else {
-            ++bit_index;
-        }
-    }
+UInt32 ErfiGpu::upload_sprite(UInt32 width, UInt32 height, UInt32 address) {
+    m_sprite_map[m_index_pos] = { int(width), int(height), std::vector<bool>() };
+    GpuCommandBuffer::upload_sprite(m_index_pos, width, height, address);
+    return m_index_pos++;
 }
 
 } // end of erfin namespace

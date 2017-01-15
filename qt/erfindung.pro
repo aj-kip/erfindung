@@ -8,7 +8,8 @@ SOURCES += \
     ../src/DrawRectangle.cpp \
     ../src/ErfiGpu.cpp \
     ../src/Assembler.cpp \
-    ../src/ErfiCpu.cpp
+    ../src/ErfiCpu.cpp  \
+    ../src/FixedPointUtil.cpp
     
 HEADERS += \
     ../src/DrawRectangle.hpp \
@@ -22,7 +23,8 @@ TARGET = erfindung
 
 CONFIG (debug, debug|release) {
     DEFINES += MACRO_DEBUG linux MACRO_COMPILER_GCC
-	QMAKE_CXXFLAGS += -O0
+    QMAKE_CXXFLAGS += -O0 -pthread
+    QMAKE_LFLAGS += -pthread
 }
 
 CONFIG (release, debug|release) {

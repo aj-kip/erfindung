@@ -23,6 +23,7 @@
 #define MACRO_HEADER_GUARD_ERFI_ASSEMBLER_HPP
 
 #include "ErfiDefs.hpp"
+
 #include <vector>
 #include <limits>
 

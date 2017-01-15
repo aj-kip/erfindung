@@ -23,6 +23,14 @@
 
 #include <SFML/Graphics.hpp>
 
+DrawRectangle::DrawRectangle() {
+    for (sf::Vertex & v : m_vertices) {
+        // note: these aren't really verticies
+        //       std::array doesn't make them
+        new (reinterpret_cast<void *>(&v)) sf::Vertex();
+    }
+}
+
 DrawRectangle::DrawRectangle
 	(float x_, float y_, float w_, float h_, sf::Color clr_)
 {

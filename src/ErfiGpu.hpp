@@ -23,20 +23,67 @@
 #define MACRO_HEADER_GUARD_ERFIN_GPU_HPP
 
 #include "ErfiDefs.hpp"
+
 #include <map>
 #include <queue>
 #include <vector>
+#include <future>
+#include <thread>
 
 namespace erfin {
 
-class Gpu {
+namespace gpu_enum_types {
+
+enum GpuOpCode_e {
+    UPLOAD = enum_types::UPLOAD_SPRITE ,
+    UNLOAD = enum_types::UNLOAD_SPRITE ,
+    DRAW   = enum_types::DRAW_SPRITE   ,
+    CLEAR  = enum_types::SCREEN_CLEAR
+};
+
+} // end of gpu_enum_types namespace
+
+using GpuOpCode = gpu_enum_types::GpuOpCode_e;
+
+class GpuCommandBuffer {
 public:
-    Gpu();
-    void set_index(UInt32 index);
-    void load(UInt32 addr);
-    void size(UInt32 w, UInt32 h);
-    void draw(UInt32 x, UInt32 y);
-    void draw_flush(MemorySpace & mem);
+    friend class GpuAttorney; // for pop ?
+    // command buffer methods
+
+    void unload_sprite(UInt32 index);
+    void draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
+    void screen_clear ();
+protected:
+    void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
+
+    UInt32 pop();
+    bool is_empty() const { return m_queue.empty(); }
+    void swap(GpuCommandBuffer & other) { m_queue.swap(other.m_queue); }
+private:
+    std::queue<UInt32> m_queue;
+};
+
+class ErfiGpu;
+
+class GpuAttorney {
+    friend class ErfiGpu;
+    static UInt32 pop(GpuCommandBuffer & inst) { return inst.pop(); }
+    static bool is_empty(const GpuCommandBuffer & inst)
+        { return inst.is_empty(); }
+};
+
+class ErfiGpu : public GpuCommandBuffer {
+public:
+    ErfiGpu();
+
+    // finishes all previous draw operations (join)
+    // swaps command buffers
+    // swaps graphics buffers
+    // waits for frame time, time out
+    // begins/resumes all draw operations ("split")
+    void wait(MemorySpace & mem);
+
+    UInt32 upload_sprite(UInt32 width, UInt32 height, UInt32 address);
 
     template <typename Func>
     void draw_pixels(Func f) {
@@ -55,31 +102,30 @@ public:
     static const int SCREEN_HEIGHT;
 
 private:
+    using VideoMemory = std::vector<bool>;
+    using GpuUpdateTask = std::packaged_task<int(GpuCommandBuffer&, VideoMemory&)>;
 
-    enum class GOpCode : UInt8 {
-        SET_INDEX,
-        LOAD,
-        SIZE,
-        DRAW
-    };
-    struct GInst {
-        GOpCode op;
-        UInt32 arg0;
-        UInt32 arg1;
-    };
     struct SpriteMeta {
         int width;
         int height;
         std::vector<bool> pixels;
     };
 
-    void draw_action(GInst & inst, SpriteMeta * smeta);
-    void load_action(GInst & inst, SpriteMeta * smeta, MemorySpace & mem);
+    static int do_gpu_tasks(GpuCommandBuffer & commands, VideoMemory & video_mem);
 
-    std::queue<GInst> m_cmd_queue;
     std::map<UInt32, SpriteMeta> m_sprite_map;
     int m_screen_width;
-    std::vector<bool> m_screen_pixels;
+    VideoMemory m_screen_pixels;
+
+    UInt32 m_index_pos;
+
+    std::thread m_gfx_thread;
+    struct {
+        GpuUpdateTask gpu_task;
+        GpuCommandBuffer command_buffer;
+        VideoMemory working_pixels;
+        std::future<int> signal;
+    } m_hot;
 };
 
 } // end of erfin namespace

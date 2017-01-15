@@ -160,12 +160,6 @@ enum OpCode_e : UInt32 {
                 // "divmod x y a b"
                 // "div x y a"
                 // "div x immd"
-#   if 0
-    TIMES_FP  , // "times.fp x y a"
-                // "times.fp x immd"
-    DIV_MOD_FP, // "divmod.fp x y a"
-                // "divmod.fp x immd"
-#   endif
     // R-type LOGIC ops (4)
     AND, // bitwise and
          // This form applies to all logic operations
@@ -201,14 +195,6 @@ enum OpCode_e : UInt32 {
     SAVE, // two regs, one immd
           // "save x a" saves x to address a
     SET,
-#   if 0
-    // I-types setting values from immds
-    SET_INT , // one reg, one IMMD
-    SET_FP96, // one reg, one IMMD as a 9/6 bit fixed point (+1 for sign)
-    SET_REG , // two regs (r0 = r1)
-              // argument deduced "set x 123.3" <- note the decimal
-              // "set x a"
-#   endif
     // I can reduce the instruction set size even further by defining, as all
     // ISAs do, function call conventions
     // therefore:
@@ -244,12 +230,14 @@ enum SystemCallValue_e {
     // system calls are "calls to the hardware"
     // Erfindung needs a GPU of sorts to display
     // it also needs system calls to read user input
-    UPLOAD_SPRITE , // arguments: x: width, y: height, z: address
-                    // answers  : a: index for sprite
+    UPLOAD_SPRITE , // parameters: x: width, y: height, z: address
+                    // answers   : a: index for sprite
+    UNLOAD_SPRITE , // parameters: x: index for sprite
     DRAW_SPRITE   , // arguments: x: x pos, y: y pox, z: index for sprite
-    SCREEN_FLUSH  , // no arguments
+    SCREEN_CLEAR  , // no arguments
     WAIT_FOR_FRAME, // wait until the end of the frame
-    READ_INPUT
+    READ_INPUT    ,
+    SYSTEM_CALL_COUNT // sentinal value
 };
 
 enum ParamForm_e {
