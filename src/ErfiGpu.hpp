@@ -28,6 +28,7 @@
 #include <queue>
 #include <vector>
 #include <thread>
+#include <memory>
 
 namespace erfin {
 
@@ -44,6 +45,8 @@ enum GpuOpCode_e {
 
 using GpuOpCode = gpu_enum_types::GpuOpCode_e;
 
+struct GpuContext; // implementation detail
+
 class ErfiGpu {
 public:
     ErfiGpu();
@@ -57,10 +60,10 @@ public:
     void wait(MemorySpace & mem);
 
     UInt32 upload_sprite(UInt32 width, UInt32 height, UInt32 address);
-    void unload_sprite(UInt32 index);
-    void draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
-    void screen_clear ();
-
+    void   unload_sprite(UInt32 index);
+    void   draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
+    void   screen_clear ();
+#   if 0
     template <typename Func>
     void draw_pixels(Func f) {
         int x = 0, y = 0;
@@ -73,7 +76,7 @@ public:
             }
         }
     }
-
+#   endif
     static const int SCREEN_WIDTH;
     static const int SCREEN_HEIGHT;
 
@@ -81,34 +84,27 @@ private:
     void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
 
     using VideoMemory = std::vector<bool>;
+    friend struct GpuContext;
 
     struct SpriteMeta {
-        int width;
-        int height;
+        SpriteMeta(): width(0), height(0), delete_flag(false) {}
+        SpriteMeta(UInt32 w_, UInt32 h_): width(w_), height(h_), delete_flag(false) {}
+
+        UInt32 width;
+        UInt32 height;
         std::vector<bool> pixels;
+        bool delete_flag;
     };
 
-    static void do_gpu_tasks(std::queue<UInt32> & commands, VideoMemory & video_mem);
+    static void do_gpu_tasks(GpuContext & context, const UInt32 * memory);
 
     std::map<UInt32, SpriteMeta> m_sprite_map;
     int m_screen_width;
     UInt32 m_index_pos;
     std::thread m_gfx_thread;
 
-    struct GpuContext {
-        std::queue<UInt32> command_buffer;
-        std::queue<SpriteMeta *> sprite_data;
-        VideoMemory pixels;
-
-        void swap(GpuContext & rhs) {
-            command_buffer.swap(rhs.command_buffer);
-            sprite_data.swap(rhs.sprite_data);
-            pixels.swap(rhs.pixels);
-        }
-    };
-
-    GpuContext m_cold;
-    GpuContext m_hot ; // hot as in "touch it and get burned"
+    std::unique_ptr<GpuContext> m_cold;
+    std::unique_ptr<GpuContext> m_hot ; // hot as in "touch it and get burned"
 };
 
 } // end of erfin namespace
