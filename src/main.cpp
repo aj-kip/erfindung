@@ -30,19 +30,22 @@
 #include <queue>
 #include <algorithm>
 
+#include <SFML/Graphics.hpp>
+
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
+#include "DrawRectangle.hpp"
 
 #include <cstring>
+
 #include "Assembler.hpp"
 #include "ErfiCpu.hpp"
-
 #include "ErfiGpu.hpp"
 
 namespace {
-using Error = std::runtime_error;
+    using Error = std::runtime_error;
 }
-
+#if 0
 namespace erfin {
 
 inline OpCode get_op_code(Inst inst) {
@@ -124,7 +127,7 @@ private:
 void do_cycle(RegisterPack & regs, MemorySpace & mem, ErfiGpu & gpu);
 
 } // end of erfin
-
+#endif
 class CoutFormatSaver {
 public:
     CoutFormatSaver():
@@ -140,7 +143,6 @@ private:
     int old_precision;
     std::ios::fmtflags old_flags;
 };
-
 
 void test_fixed_point(double value) {
     using namespace erfin;
@@ -192,7 +194,7 @@ void test_fp_multiply(double a, double b) {
 
 void test_string_processing() {
     const char * const input_text =
-        "jump b 0\n"
+        "jump b\n"
         "jump 0\n\r"
         "cmp  a b\n\n\n"
         "jump b\n"
@@ -202,11 +204,11 @@ void test_string_processing() {
         "save a b -10\n"
         "load a b  -1\r"
         "load a b\n"
-        "test\n\n";
+        "\n\n";
     erfin::Assembler asmr;
     asmr.assemble_from_string(input_text);
 }
-
+#if 0
 class StringToBitmapper {
 public:
     using UInt32 = erfin::UInt32;
@@ -283,29 +285,58 @@ std::vector<erfin::UInt32> make_demo_app() {
 #   endif
     return app_mem;
 }
-
+#endif
 int main() {
     using namespace erfin;
-
+#   if 0
     std::cout << enum_types::OPCODE_COUNT << std::endl;
     ErfiCpu::run_tests();
     test_string_processing();
-
+#   endif
     Assembler asmr;
     ErfiCpu cpu;
     ErfiGpu gpu;
     MemorySpace memory;
 
-    asmr.assemble_from_string(
-        "call upload\n"
-        "call unload\n"
-        "call draw\n"
-        "call wait");
+    asmr.assemble_from_file("sample.efas");
     load_program_into_memory(memory, asmr.program_data());
-    for (int i = 0; i != 3; ++i)
+
+
+
+    sf::RenderWindow win;
+    win.create(sf::VideoMode(ErfiGpu::SCREEN_WIDTH*3, ErfiGpu::SCREEN_HEIGHT*3), " ");
+    {
+    sf::View view = win.getView();
+    //view.zoom(0.999f);
+    view.setCenter(ErfiGpu::SCREEN_WIDTH/2, ErfiGpu::SCREEN_HEIGHT/2);
+    view.setSize(ErfiGpu::SCREEN_WIDTH, ErfiGpu::SCREEN_HEIGHT);
+    win.setView(view);
+    }
+    while (win.isOpen()) {
+        {
+        sf::Event e;
+        while (win.pollEvent(e)) {
+            switch (e.type) {
+            case sf::Event::KeyReleased:
+                if (e.key.code == sf::Keyboard::Escape)
+                    win.close();
+                break;
+            default: break;
+            }
+        }
+        }
+        win.clear();
         cpu.run_cycle(memory, &gpu);
-    gpu.wait(memory);
-    gpu.wait(memory);
+        gpu.wait(memory);
+        DrawRectangle brush;
+        brush.set_size(1.f, 1.f);
+        gpu.draw_pixels([&win, &brush](int x, int y) {
+            brush.set_position(float(x), float(y));
+            win.draw(brush);
+        });
+        win.display();
+    }
+
     try {
         test_fixed_point(  2.0);
         test_fixed_point( -1.0);

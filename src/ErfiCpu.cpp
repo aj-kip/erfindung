@@ -53,7 +53,7 @@ ErfiCpu::ErfiCpu() {
 void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
     using namespace erfin;
     using namespace erfin::enum_types;
-    Inst inst = memspace[m_registers[REG_PC]];
+    Inst inst = memspace[m_registers[REG_PC]++];
     const auto giimd = decode_immd_as_int;
 
     switch (decode_op_code(inst)) {
@@ -127,6 +127,13 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         }
         break;
     case SET: switch (decode_param_form(inst)) {
+        case REG_REG_IMMD:
+#           ifdef MACRO_DEBUG
+            if (decode_reg0(inst) == REG_PC && decode_is_fixed_point_flag_set(inst))
+                throw make_illegal_inst_error(inst);
+#           endif
+            reg0(inst) = reg1(inst) + decode_immd_selectively(inst);
+            break;
         case REG_REG : reg0(inst) = reg1(inst); break;
         case REG_IMMD: reg0(inst) = decode_immd_selectively(inst); break;
         default: throw make_illegal_inst_error(inst);
@@ -135,8 +142,6 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
     case SYSTEM_CALL: if (gpu) do_syscall(inst, *gpu); break;
     default: throw make_illegal_inst_error(inst);
     };
-
-    ++m_registers[REG_PC];
 }
 
 void ErfiCpu::print_registers(std::ostream & out) const {
@@ -258,10 +263,12 @@ void ErfiCpu::print_registers(std::ostream & out) const {
 namespace {
 
 const char * op_code_to_string(erfin::Inst i);
+const char * param_form_to_string(erfin::Inst i);
 
 Error make_illegal_inst_error(erfin::Inst i) {
     return Error(std::string("Unsupport instruction \"") +
-                 op_code_to_string(i) + "\"");
+                 op_code_to_string(i) + "\" with parameter form of: " +
+                 param_form_to_string(i));
 }
 
 UInt32 decode_immd_selectively(UInt32 inst) {
@@ -291,6 +298,21 @@ const char * op_code_to_string(erfin::Inst i) {
     case SET        : return "set";
     case SYSTEM_CALL: return "call";
     default: return "<NOT ANY OPTCODE>";
+    }
+}
+
+const char * param_form_to_string(erfin::Inst i) {
+    using namespace erfin;
+    using namespace erfin::enum_types;
+    switch (decode_param_form(i)) {
+    case REG_REG_REG_REG: return "4 registers";
+    case REG_REG_REG    : return "3 registers";
+    case REG_REG_IMMD   : return "2 registers and an immediate";
+    case REG_REG        : return "2 registers";
+    case REG_IMMD       : return "1 register and an immediate";
+    case REG            : return "1 register";
+    case NO_PARAMS      : return "no parameters";
+    default             : return "<INVALID PARAMETER FORM>";
     }
 }
 

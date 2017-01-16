@@ -21,10 +21,12 @@ HEADERS += \
 
 TARGET = erfindung
 
+QMAKE_CXXFLAGS += -pthread
+QMAKE_LFLAGS   += -pthread
+
 CONFIG (debug, debug|release) {
     DEFINES += MACRO_DEBUG linux MACRO_COMPILER_GCC
-    QMAKE_CXXFLAGS += -O0 -pthread
-    QMAKE_LFLAGS += -pthread
+    QMAKE_CXXFLAGS += -O0
 }
 
 CONFIG (release, debug|release) {

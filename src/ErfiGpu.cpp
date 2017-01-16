@@ -62,6 +62,7 @@ ErfiGpu::ErfiGpu():
     m_hot(new GpuContext())
 {
     m_cold->pixels.resize(SCREEN_WIDTH*SCREEN_HEIGHT, false);
+    m_hot ->pixels.resize(SCREEN_WIDTH*SCREEN_HEIGHT, false);
 }
 
 ErfiGpu::~ErfiGpu() {
@@ -120,6 +121,14 @@ void ErfiGpu::screen_clear() {
     m_cold->command_buffer.push(address);
 }
 
+/* private */ std::size_t ErfiGpu::next_set_pixel(std::size_t i) {
+    while (i != m_cold->pixels.size()) {
+        if (m_cold->pixels[i++])
+            return i;
+    }
+    return std::size_t(-1);
+}
+
 /* private static */ void ErfiGpu::do_gpu_tasks
     (GpuContext & context, const UInt32 * memory)
 {
@@ -166,7 +175,7 @@ void upload_sprite(erfin::GpuContext & ctx, const erfin::UInt32 * memory) {
            address = front_and_pop(queue);
     SpriteMeta * sprite = front_and_pop(ctx.sprite_data);
     const UInt32 * start = &memory[address];
-    const UInt32 * end   = start + width*height;
+    const UInt32 * end   = start + (width*height)/32;
     sprite->width  = width;
     sprite->height = height;
     for (; start != end; ++start) {

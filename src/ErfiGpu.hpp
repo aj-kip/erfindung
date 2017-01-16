@@ -63,25 +63,14 @@ public:
     void   unload_sprite(UInt32 index);
     void   draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
     void   screen_clear ();
-#   if 0
+
     template <typename Func>
-    void draw_pixels(Func f) {
-        int x = 0, y = 0;
-        for (auto b : m_cold.pixels) {
-            f(x, y, b);
-            ++x;
-            if (x == m_screen_width) {
-                x = 0;
-                ++y;
-            }
-        }
-    }
-#   endif
+    void draw_pixels(Func f);
+
     static const int SCREEN_WIDTH;
     static const int SCREEN_HEIGHT;
 
 private:
-    void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
 
     using VideoMemory = std::vector<bool>;
     friend struct GpuContext;
@@ -96,6 +85,9 @@ private:
         bool delete_flag;
     };
 
+    void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
+    std::size_t next_set_pixel(std::size_t i);
+
     static void do_gpu_tasks(GpuContext & context, const UInt32 * memory);
 
     std::map<UInt32, SpriteMeta> m_sprite_map;
@@ -106,6 +98,16 @@ private:
     std::unique_ptr<GpuContext> m_cold;
     std::unique_ptr<GpuContext> m_hot ; // hot as in "touch it and get burned"
 };
+
+template <typename Func>
+void ErfiGpu::draw_pixels(Func f) {
+    const std::size_t END = std::size_t(-1);
+    for (std::size_t i = 0; i != END; i = next_set_pixel(i)) {
+        int x = int(i % SCREEN_WIDTH);
+        int y = int(i / SCREEN_WIDTH);
+        f(x, y);
+    }
+}
 
 } // end of erfin namespace
 

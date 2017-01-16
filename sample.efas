@@ -1,5 +1,5 @@
-set pc main
-: data erfindung_text [
+  set pc main
+: erfindung_text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
 __X__________X______XX__XX__________________________________X_______________________________
 __X__________X_X_____X__XX_____________XX___________________X_______________________________
@@ -18,15 +18,18 @@ ________________________________________________________________________________
 ____________________________________________________________________________________X_______
 ____________________________________________________________________________________X_______
 ____________________________________________________________________________________X_______
-X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____XXXXXX_______ ]
-: main set x 92
-       set y 19
-       add z erfindung_text
-       call 1 # upload sprite
-       call 3 # screen flush
-       set z a
-	   set x 0
-	   set y 0
-	   call 2 # draw sprite
-: wait call 4 # wait for frame
-	   set pc wait 
+X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____XXXXXX_______
+____________ ]
+: main set  x 92
+       set  y 19
+       add  z erfindung_text
+       call upload # upload sprite
+       call clear  # screen flush
+       set  z a
+	   set  x 0
+	   set  y 0
+: wait call draw # draw sprite
+       add  x 1
+       add  y 1
+       call wait # wait for frame
+	   set  pc wait 

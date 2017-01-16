@@ -307,7 +307,7 @@ void convert_to_lower_case(std::string & str) {
     static_assert(int('a') > int('A'), "");
     for (char & c : str) {
         if (c >= 'A' && c <= 'Z')
-            c -= ('a' - 'A');
+            c += ('a' - 'A');
     }
 }
 
@@ -326,6 +326,8 @@ StringCIter process_data
 StringCIter process_label
     (TextProcessState & state, StringCIter beg, StringCIter end);
 
+Error make_error(TextProcessState & state, const std::string & str);
+
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     if (beg == end) return;
     auto func = get_line_processing_func(*state.assumptions, *beg);
@@ -335,6 +337,10 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
         process_text(state, process_data(state, beg, end), end);
     } else if (*beg == ":") {
         process_text(state, process_label(state, beg, end), end);
+    } else {
+        throw make_error(state,
+                         " first token \"" + *beg +
+                         "\" is neither directive, label, or instruction.");
     }
 }
 
@@ -350,6 +356,7 @@ void resolve_unfulfilled_labels(TextProcessState & state) {
         for (std::size_t i = 0; i != state.unfulfilled_labels.size() - 1; ++i) {
             const auto & cont = state.unfulfilled_labels;
             assert(cont[i].program_location < cont[i + 1].program_location);
+            (void)cont;
         }
     }
 #   endif
@@ -381,7 +388,6 @@ StringCIter process_binary
     (TextProcessState & state, StringCIter beg, StringCIter end);
 void skip_new_lines(TextProcessState & state, StringCIter * itr);
 erfin::Reg string_to_register(const std::string & str);
-Error make_error(TextProcessState & state, const std::string & str);
 
 StringCIter process_data
     (TextProcessState & state, StringCIter beg, StringCIter end)
@@ -390,9 +396,10 @@ StringCIter process_data
         throw make_error(state, ": stray data directive found at the end of "
                                 "the source code.");
     }
+    ++beg; // set over "data"
     auto process_func = process_binary;
     if (*beg != "[") {
-        if (*++beg == "binary") {
+        if (*beg == "binary") {
             // default
         } else {
             throw make_error(state, ": encoding scheme \"" + *beg + "\" not "
@@ -406,7 +413,9 @@ StringCIter process_data
                                 "start of data.");
     }
     ++beg;
-    return process_func(state, beg, end);
+    beg = process_func(state, beg, end);
+    skip_new_lines(state, &beg);
+    return beg;
 }
 
 StringCIter process_label
@@ -441,6 +450,10 @@ void skip_new_lines(TextProcessState & state, StringCIter * itr) {
         ++(*itr);
         ++state.current_source_line;
     }
+}
+
+Error make_error(TextProcessState & state, const std::string & str) {
+    return Error("On line " + std::to_string(state.current_source_line) + str);
 }
 
 // <--------------------------- level 4 helpers ------------------------------>
@@ -487,6 +500,10 @@ StringCIter make_load(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_save(TextProcessState &, StringCIter, StringCIter);
 
+// <----------------------- psuedo instructions ------------------------------>
+
+StringCIter make_jump(TextProcessState &, StringCIter, StringCIter);
+
 LineToInstFunc get_line_processing_func
     (SuffixAssumption assumptions, const std::string & fname)
 {
@@ -529,12 +546,10 @@ LineToInstFunc get_line_processing_func
     fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
 
     fmap["call"] = fmap["()"] = make_syscall;
+
+    fmap["jump"] = make_jump;
     is_initialized = true;
     return get_line_processing_func(assumptions, fname);
-}
-
-Error make_error(TextProcessState & state, const std::string & str) {
-    return Error("On line " + std::to_string(state.current_source_line) + str);
 }
 
 StringCIter process_binary
@@ -566,6 +581,7 @@ StringCIter process_binary
                 break;
             // characters we should never see
             case '\n':
+                ++state.current_source_line;
                 if (beg->size() == 1) break;
                 MACRO_FALLTHROUGH;
             case '[': case ']': assert(false); break;
@@ -578,9 +594,9 @@ StringCIter process_binary
         }
     }
     if (bit_pos != 0) {
-        throw make_error(state, "All data sequences must be divisible by 32 "
+        throw make_error(state, ": all data sequences must be divisible by 32 "
                          "bits, this data sequence is off by " +
-                         std::to_string(32 - bit_pos) + "bits.");
+                         std::to_string(32 - bit_pos) + " bits.");
     }
     for (UInt32 datum : state.data) {
         state.program_data.push_back(erfin::Inst(datum));
@@ -615,6 +631,9 @@ enum ExtendedParamForm {
     XPF_1R_FP,
     XPF_1R_LABEL,
     XPF_1R,
+    XPF_INT,
+    XPF_FP,
+    XPF_LABEL,
     XPF_INVALID
 };
 
@@ -894,6 +913,39 @@ StringCIter make_save
     return make_generic_memory_access(erfin::OpCode::SAVE, state, beg, end);
 }
 
+StringCIter make_jump
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    auto eol = get_eol(++beg, end);
+    static constexpr const auto PC = enum_types::REG_PC;
+    Inst inst = encode_op(enum_types::SET);
+    union { int i; double d; } u;
+    (void)convert_to_number_strict(beg, u.d, u.i);
+    switch (get_lines_param_form(beg, eol)) {
+    case XPF_1R:
+        inst |= encode_param_form(enum_types::REG_REG) |
+                encode_reg_reg(PC, string_to_register(*beg));
+        break;
+    case XPF_INT:
+        inst |= encode_param_form(enum_types::REG_IMMD) |
+                encode_reg(PC) | encode_immd(u.i);
+        break;
+    case XPF_LABEL:
+        // not quite sure... will need to insert the offset...? maybe not
+        state.unfulfilled_labels.push_back({ state.program_data.size(), *beg });
+        inst |= encode_reg(PC);
+        break;
+    default:
+        throw make_error(state, ": jump only excepts one argument, the "
+                                "destination.");
+    }
+    state.program_data.push_back(inst);
+    ++state.current_source_line;
+    return eol;
+}
+
+
 // <--------------------------- level 6 helpers ------------------------------>
 
 erfin::ParamForm narrow_param_form(ExtendedParamForm xpf);
@@ -949,7 +1001,12 @@ ExtendedParamForm get_lines_param_form(StringCIter beg, StringCIter end) {
         default: return arg_count == 2 ? XPF_1R_LABEL : XPF_2R_LABEL ;
         }
     case 1: // reg only
-        return (string_to_register(*beg) != REG_COUNT) ? XPF_1R : XPF_INVALID;
+        if (string_to_register(*beg) != REG_COUNT) return XPF_1R;
+        switch (convert_to_number_strict(beg, u.d, u.i)) {
+        case INTEGER: return XPF_INT;
+        case DECIMAL: return XPF_FP;
+        default     : return XPF_LABEL;
+        }
     default: return XPF_INVALID;
     }
 }
@@ -1020,7 +1077,8 @@ StringCIter make_generic_arithemetic
         state.unfulfilled_labels.emplace_back
             (state.program_data.size(), *(beg + 1));
         state.program_data.push_back
-            (encode_op(op_code) | encode_param_form(REG_IMMD) | encode_reg(a1));
+            (encode_op(op_code) | encode_param_form(REG_REG_IMMD) |
+             encode_reg_reg(a1, a1));
         break;
     default: assert(false); break;
     }    
@@ -1086,6 +1144,7 @@ StringCIter make_generic_memory_access
         case INTEGER: return encode_immd(i);
         default: assert(false); break;
         }
+        throw Error("Impossible branch reached!");
     };
 
     const auto eol = get_eol(++beg, end);
@@ -1146,6 +1205,7 @@ bool op_code_supports_fpoint_immd(erfin::Inst inst) {
         return false;
     default: assert(false); break;
     }
+    std::terminate();
 }
 
 bool op_code_supports_integer_immd(erfin::Inst inst) {
@@ -1156,6 +1216,7 @@ bool op_code_supports_integer_immd(erfin::Inst inst) {
         return true;
     default: assert(false); break;
     }
+    std::terminate();
 }
 
 erfin::Reg string_to_register(const std::string & str) {
@@ -1204,6 +1265,9 @@ erfin::ParamForm narrow_param_form(ExtendedParamForm xpf) {
         return REG_IMMD;
     case XPF_1R: return REG;
     case XPF_INVALID: return INVALID_PARAMS;
+    default:
+        throw Error("Attempted to convert a parameter form that is only "
+                    "available for psuedo-instructions.");
     }
     assert(false);
     throw Error("Impossible branch?!");
@@ -1211,7 +1275,13 @@ erfin::ParamForm narrow_param_form(ExtendedParamForm xpf) {
 
 } // end of anonymous namespace
 
+namespace {
+    const LineToInstFunc init_f = get_line_processing_func
+                                  (erfin::Assembler::NO_ASSUMPTION, "");
+}  // end of anonymous namespace
+
 void erfin::Assembler::run_tests() {
+    (void)init_f;
     using namespace erfin;
     // with such a deep call tree, unit tests on each function on each level
     // becomes quite useful
@@ -1257,6 +1327,7 @@ void erfin::Assembler::run_tests() {
     beg = make_set(state, ++beg, end);
     auto supposed_top = encode(OpCode::SET, Reg::REG_X, 12.34);
     assert(state.program_data.back() == supposed_top);
+    (void)supposed_top;
     }
     // test that "generic arthemetic" instruction maker functions
     {
@@ -1271,6 +1342,7 @@ void erfin::Assembler::run_tests() {
     beg = make_minus(state, ++beg, end);
     const auto supposed_top = encode(OpCode::MINUS, Reg::REG_X, Reg::REG_X, 123);
     assert(supposed_top == state.program_data.back());
+    (void)supposed_top;
     }
     {
     const std::vector<std::string> sample_code = {
@@ -1286,6 +1358,7 @@ void erfin::Assembler::run_tests() {
     beg = make_save(state, ++beg, end);
     const auto supposed_top = encode(OpCode::SAVE, Reg::REG_Y, Reg::REG_A, 4);
     assert(supposed_top == state.program_data.back());
+    (void)supposed_top;
     }
     {
     const std::vector<std::string> sample_code = {
@@ -1297,6 +1370,7 @@ void erfin::Assembler::run_tests() {
     beg = make_skip(state, ++beg, end);
     const auto supposed_top = encode(OpCode::SKIP, Reg::REG_X, 1);
     assert(supposed_top == state.program_data.back());
+    (void)supposed_top;
     }
     // test unfulfilled labels!
     {
@@ -1331,10 +1405,8 @@ void erfin::Assembler::run_tests() {
     assert(pdata[1] == encode(OpCode::SET , Reg::REG_Y, 1.44));
     assert(pdata[2] == encode(OpCode::PLUS, Reg::REG_X, Reg::REG_Y, Reg::REG_X));
     assert(pdata[3] == encode(OpCode::SET , Reg::REG_PC, 2));
+    (void)pdata;
     }
 }
 
-namespace {
-    const LineToInstFunc init_f = get_line_processing_func
-                                  (erfin::Assembler::NO_ASSUMPTION, "");
-}  // end of anonymous namespace
+
