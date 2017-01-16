@@ -301,10 +301,9 @@ int main() {
     asmr.assemble_from_file("sample.efas");
     load_program_into_memory(memory, asmr.program_data());
 
-
-
     sf::RenderWindow win;
-    win.create(sf::VideoMode(ErfiGpu::SCREEN_WIDTH*3, ErfiGpu::SCREEN_HEIGHT*3), " ");
+    win.create(sf::VideoMode(unsigned(ErfiGpu::SCREEN_WIDTH*3),
+                             unsigned(ErfiGpu::SCREEN_HEIGHT*3)), " ");
     {
     sf::View view = win.getView();
     //view.zoom(0.999f);
@@ -326,14 +325,19 @@ int main() {
         }
         }
         win.clear();
-        cpu.run_cycle(memory, &gpu);
-        gpu.wait(memory);
+
+        cpu.clear_flags();
+        while (!cpu.wait_was_called())
+            cpu.run_cycle(memory, &gpu);
+
         DrawRectangle brush;
         brush.set_size(1.f, 1.f);
         gpu.draw_pixels([&win, &brush](int x, int y) {
             brush.set_position(float(x), float(y));
             win.draw(brush);
         });
+        gpu.wait(memory);
+
         win.display();
     }
 

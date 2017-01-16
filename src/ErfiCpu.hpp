@@ -35,6 +35,9 @@ public:
 
     void run_cycle(MemorySpace & memspace, ErfiGpu * gpu = nullptr);
     void print_registers(std::ostream & out) const;
+    bool wait_was_called() const { return m_wait_called; }
+    void clear_flags() { m_wait_called = false; }
+
     static void run_tests();
 
 private:
@@ -43,12 +46,14 @@ private:
     UInt32 & reg1(Inst inst);
     UInt32 & reg2(Inst inst);
     UInt32 & reg3(Inst inst);
+
     void do_rotate(Inst inst);
     void do_divmod(Inst inst);
     void do_syscall(Inst inst, ErfiGpu & gpu);
     void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
 
     RegisterPack m_registers;
+    bool m_wait_called;
 };
 
 }

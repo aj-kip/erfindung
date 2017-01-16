@@ -95,12 +95,11 @@ void Assembler::assemble_from_file(const char * file) {
     m_error_string = "";
     std::string file_contents;
     int fsize = get_file_size(file);
-    file_contents.reserve(std::size_t(fsize));
     if (fsize < 0) {
-        m_error_string = "Could not read file contents (file too large/not "
-                         "there?).";
-        return;
+        throw Error("Could not read file contents (file too large/not "
+                    "there?).");
     }
+    file_contents.reserve(std::size_t(fsize));
     std::fstream file_stream(file);
     for (int i = 0; i != fsize; ++i) {
         file_contents.push_back(' ');
@@ -179,24 +178,30 @@ Inst encode(OpCode op, Reg r0, Reg r1, Reg r2, Reg r3) {
            encode_op(op) | encode_reg_reg_reg_reg(r0, r1, r2, r3);
 }
 
-Inst encode(OpCode op, Reg r0, int i) {
+Inst encode(OpCode op, Reg r0, UInt32 i) {
     return encode_param_form(erfin::ParamForm::REG_IMMD) |
-           encode_op(op) | encode_reg(r0) | encode_immd(i);
+           encode_op(op) | encode_reg(r0) | i;
+}
+
+Inst encode(OpCode op, Reg r0, Reg r1, UInt32 i) {
+    return encode_param_form(erfin::ParamForm::REG_REG_IMMD) |
+           encode_op(op) | encode_reg_reg(r0, r1) | i;
+}
+
+Inst encode(OpCode op, Reg r0, int i) {
+    return encode(op, r0, encode_immd(i));
 }
 
 Inst encode(OpCode op, Reg r0, Reg r1, int i) {
-    return encode_param_form(erfin::ParamForm::REG_REG_IMMD) |
-           encode_op(op) | encode_reg_reg(r0, r1) | encode_immd(i);
+    return encode(op, r0, r1, encode_immd(i));
 }
 
 Inst encode(OpCode op, Reg r0, double d) {
-    return encode_param_form(erfin::ParamForm::REG_IMMD) |
-           encode_op(op) | encode_reg(r0) | encode_immd(d);
+    return encode(op, r0, encode_immd(d));
 }
 
 Inst encode(OpCode op, Reg r0, Reg r1, double d) {
-    return encode_param_form(erfin::ParamForm::REG_REG_IMMD) |
-           encode_op(op) | encode_reg_reg(r0, r1) | encode_immd(d);
+    return encode(op, r0, r1, encode_immd(d));
 }
 
 } // end of erfin namespace
@@ -801,7 +806,6 @@ StringCIter make_syscall
         break;
     default:
         throw make_error(state, ": fixed points are not system call names.");
-        break;
     }
 
     state.program_data.push_back(encode_op(SYSTEM_CALL) | encode_immd(u.i));
@@ -822,39 +826,48 @@ StringCIter make_skip
     using namespace erfin::enum_types;
     ++beg;
     auto eol = get_eol(beg, end);
-    Reg r1;
-    int i = 0;
-    double d;
-    NumericClassification numclass = INTEGER;
 
+    auto string_to_int_immd = [] (StringCIter itr) -> UInt32 {
+        int i;
+        bool b = string_to_number<10>(&*itr->begin(), &*itr->end(), i);
+        assert(b); (void)b;
+        return encode_immd(i);
+    };
+
+    UInt32 temp;
+    auto & program = state.program_data;
     switch (get_lines_param_form(beg, eol)) {
-    case XPF_1R_LABEL:
-        state.unfulfilled_labels.emplace_back
-            (state.program_data.size(), *(beg + 1));
-        state.program_data.push_back
-            (encode_op(SKIP) | encode_param_form(REG_IMMD) |
-             encode_reg(string_to_register(*beg)));
-        ++state.current_source_line;
-        return eol;
-    case XPF_1R_FP: case XPF_1R_INT:
-        numclass = convert_to_number_strict(beg + 1, d, i);
-        MACRO_FALLTHROUGH;
+    case XPF_1R_LABEL:{
+        const auto & label = *(beg + 1);
+        if (label == "==") {
+            temp = COMP_EQUAL_MASK;
+        } else if (label == "<") {
+            temp = COMP_LESS_THAN_MASK;
+        } else if (label == ">") {
+            temp = COMP_GREATER_THAN_MASK;
+        } else if (label == "<=") {
+            temp = COMP_EQUAL_MASK | COMP_LESS_THAN_MASK;
+        } else if (label == ">=") {
+            temp = COMP_EQUAL_MASK | COMP_GREATER_THAN_MASK;
+        } else if (label == "!=") {
+            temp = COMP_NOT_EQUAL_MASK;
+        } else {
+            throw make_error(state, ": labels are not support with skip "
+                                    "instructions.");
+        }
+        }
+        program.push_back(encode(SKIP, string_to_register(*beg), temp));
+        break;
+    case XPF_1R_INT:
+        temp = string_to_int_immd(beg + 1);
+        program.push_back(encode(SKIP, string_to_register(*beg), temp));
+        break;
+    case XPF_1R_FP:
+        throw make_error(state, ": a fixed point is not an appropiate mask.");
     case XPF_1R:
-        r1 = string_to_register(*beg);
+        program.push_back(encode(SKIP, string_to_register(*beg)));
         break;
     default: throw make_error(state, ": unsupported parameters.");
-    }
-
-    if (numclass == INTEGER) {
-        state.program_data.push_back(encode(SKIP, r1, i));
-    } else if (numclass == NOT_NUMERIC) {
-        state.unfulfilled_labels.emplace_back
-            (state.program_data.size(), *(beg + 1));
-        state.program_data.push_back
-            (encode_param_form(ParamForm::REG_IMMD) |
-             encode_op(erfin::OpCode::SKIP) | encode_reg(r1));
-    } else {
-        throw make_error(state, ": a fixed point is not an appropiate offset.");
     }
 
     ++state.current_source_line;
@@ -1029,14 +1042,41 @@ StringCIter make_generic_arithemetic
     static constexpr const char * const int_unsupported_msg =
         ": instruction does not support integer immediates.";
 
+    auto deal_with_int_immd = [/* do not capture! */]
+        (StringCIter eol, OpCode op_code, TextProcessState & state) -> UInt32
+    {
+        if (!op_code_supports_integer_immd(op_code))
+            throw make_error(state, int_unsupported_msg);
+        int i;
+        string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), i);
+        return encode_immd(i);
+    };
+    auto deal_with_fp_immd = [/* do not capture! */]
+        (StringCIter eol, OpCode op_code, TextProcessState & state) -> UInt32
+    {
+        if (!op_code_supports_fpoint_immd(op_code))
+            throw make_error(state, fp_unsupported_msg);
+        double d;
+        string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
+        return encode_immd(d);
+    };
+    auto deal_with_label_immd = [/* do not capture! */]
+        (StringCIter eol, OpCode, TextProcessState & state) -> UInt32
+    {
+        state.unfulfilled_labels.emplace_back
+            (state.program_data.size(), *(eol - 1));
+        return 0;
+    };
+
     Reg a1;
     ++beg;
     auto eol = get_eol(beg, end);
     const auto pf = get_lines_param_form(beg, eol);
 
     switch (pf) {
-    case XPF_2R: case XPF_3R: case XPF_1R_FP: case XPF_1R_INT:
-    case XPF_1R_LABEL:
+    case XPF_3R   : case XPF_2R:
+    case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
+    case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
         a1 = string_to_register(*beg);
         break;
     default:
@@ -1044,44 +1084,42 @@ StringCIter make_generic_arithemetic
     }
 
     Reg a2, ans;
-    int i;
-    double d;
-    bool supports_fpoints  = op_code_supports_fpoint_immd (op_code);
-    bool supports_integers = op_code_supports_integer_immd(op_code);
+    Inst inst = 0;
+    UInt32 (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
+    switch (pf) {
+    case XPF_2R_FP: case XPF_1R_FP:
+        handle_immd = deal_with_fp_immd;
+        break;
+    case XPF_2R_INT: case XPF_1R_INT:
+        handle_immd = deal_with_int_immd;
+        break;
+    case XPF_2R_LABEL: case XPF_1R_LABEL:
+        handle_immd = deal_with_label_immd;
+        break;
+    default: break;
+    }
 
     switch (pf) {
     case XPF_2R: // psuedo instruction
         a2 = ans = string_to_register(*(beg + 1));
-        state.program_data.push_back(encode(op_code, a1, a2, ans));
+        inst = encode(op_code, a1, a2, ans);
         break;
     case XPF_3R:
         a2  = string_to_register(*(beg + 1));
         ans = string_to_register(*(beg + 2));
-        state.program_data.push_back(encode(op_code, a1, a2, ans));
+        inst = encode(op_code, a1, a2, ans);
         break;
-    case XPF_1R_FP:
-        if (!supports_fpoints)
-            throw make_error(state, fp_unsupported_msg);
-        string_to_number<10>(&*(beg + 1)->begin(), &*(beg + 1)->end(), d);
-        state.program_data.push_back(encode(op_code, a1, a1, d));
+    case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
+        ans = string_to_register(*(beg + 1));
+        inst = encode(op_code, a1, ans, handle_immd(eol, op_code, state));
         break;
-    case XPF_1R_INT:
-        if (!supports_integers)
-            throw make_error(state, int_unsupported_msg);
-        string_to_number<10>(&*(beg + 1)->begin(), &*(beg + 1)->end(), i);
-        state.program_data.push_back(encode(op_code, a1, a1, i));
-        break;
-    case XPF_1R_LABEL:
-        if (!supports_integers)
-            throw make_error(state, int_unsupported_msg);
-        state.unfulfilled_labels.emplace_back
-            (state.program_data.size(), *(beg + 1));
-        state.program_data.push_back
-            (encode_op(op_code) | encode_param_form(REG_REG_IMMD) |
-             encode_reg_reg(a1, a1));
+    case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
+        inst = encode(op_code, a1, a1, handle_immd(eol, op_code, state));
         break;
     default: assert(false); break;
     }    
+
+    state.program_data.push_back(inst);
     ++state.current_source_line;
     return eol;
 }
@@ -1281,8 +1319,8 @@ namespace {
 }  // end of anonymous namespace
 
 void erfin::Assembler::run_tests() {
-    (void)init_f;
     using namespace erfin;
+    (void)init_f;
     // with such a deep call tree, unit tests on each function on each level
     // becomes quite useful
     TextProcessState state;
@@ -1408,5 +1446,3 @@ void erfin::Assembler::run_tests() {
     (void)pdata;
     }
 }
-
-

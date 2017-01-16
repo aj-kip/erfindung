@@ -35,9 +35,9 @@ namespace erfin {
 namespace gpu_enum_types {
 
 enum GpuOpCode_e {
-    UPLOAD = enum_types::UPLOAD_SPRITE ,
-    UNLOAD = enum_types::UNLOAD_SPRITE ,
-    DRAW   = enum_types::DRAW_SPRITE   ,
+    UPLOAD = enum_types::UPLOAD_SPRITE,
+    UNLOAD = enum_types::UNLOAD_SPRITE,
+    DRAW   = enum_types::DRAW_SPRITE  ,
     CLEAR  = enum_types::SCREEN_CLEAR
 };
 
@@ -65,7 +65,7 @@ public:
     void   screen_clear ();
 
     template <typename Func>
-    void draw_pixels(Func f);
+    bool draw_pixels(Func f);
 
     static const int SCREEN_WIDTH;
     static const int SCREEN_HEIGHT;
@@ -100,13 +100,18 @@ private:
 };
 
 template <typename Func>
-void ErfiGpu::draw_pixels(Func f) {
+bool ErfiGpu::draw_pixels(Func f) {
+    //static int cnt = 1;
+
+    //if ((cnt = ((cnt + 1) % 2)) == 0) return false;
+
     const std::size_t END = std::size_t(-1);
-    for (std::size_t i = 0; i != END; i = next_set_pixel(i)) {
-        int x = int(i % SCREEN_WIDTH);
-        int y = int(i / SCREEN_WIDTH);
+    for (std::size_t i = next_set_pixel(0); i != END; i = next_set_pixel(i)) {
+        int x = int(i) % SCREEN_WIDTH;
+        int y = int(i) / SCREEN_WIDTH;
         f(x, y);
     }
+    return true;
 }
 
 } // end of erfin namespace

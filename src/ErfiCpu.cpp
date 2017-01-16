@@ -26,6 +26,8 @@
 
 #include <iostream>
 
+#include <cassert>
+
 namespace {
 
 using Error = std::runtime_error;
@@ -45,7 +47,9 @@ UInt32 xori (UInt32 x, UInt32 y) { return x ^ y; }
 
 namespace erfin {
 
-ErfiCpu::ErfiCpu() {
+ErfiCpu::ErfiCpu():
+    m_wait_called(false)
+{
     for (UInt32 & reg : m_registers)
         reg = 0;
 }
@@ -53,6 +57,7 @@ ErfiCpu::ErfiCpu() {
 void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
     using namespace erfin;
     using namespace erfin::enum_types;
+
     Inst inst = memspace[m_registers[REG_PC]++];
     const auto giimd = decode_immd_as_int;
 
@@ -88,12 +93,15 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         case REG_REG_REG: {
             UInt32 temp = 0, r0t = reg0(inst), r1t = reg1(inst);
             // <=, >=, >, <, ==, !=
-            if (r0t <  r1t) temp |= (1 << 0);
-            if (r0t >  r1t) temp |= (1 << 1);
-            if (r0t == r1t) temp |= (1 << 2);
+            if (r0t <  r1t) temp |= COMP_LESS_THAN_MASK   ;
+            if (r0t >  r1t) temp |= COMP_GREATER_THAN_MASK;
+            if (r0t == r1t) temp |= COMP_EQUAL_MASK       ;
+            if (r0t != r1t) temp |= COMP_NOT_EQUAL_MASK   ;
             reg3(inst) = temp;
             break;
         }
+        case REG_REG_IMMD:
+            break;
         default: throw make_illegal_inst_error(inst);
         }
         break;
@@ -117,6 +125,7 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         }
         break;
     case SAVE: switch (decode_param_form(inst)) {
+        case REG_IMMD: memspace[std::size_t(giimd(inst))] = reg0(inst); break;
         case REG_REG:
             memspace[reg1(inst)] = reg0(inst);
             break;
@@ -235,7 +244,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     case UNLOAD_SPRITE : gpu.unload_sprite(x); break;
     case DRAW_SPRITE   : gpu.draw_sprite(x, y, z); break;
     case SCREEN_CLEAR  : gpu.screen_clear(); break;
-    case WAIT_FOR_FRAME: break;
+    case WAIT_FOR_FRAME: m_wait_called = true; break;
     case READ_INPUT    : break;
     default:
         throw make_illegal_inst_error(inst);

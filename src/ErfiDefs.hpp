@@ -222,6 +222,11 @@ enum OpCode_e : UInt32 {
     OPCODE_COUNT // sentinal value [not a valid op code]
 };
 
+constexpr const int COMP_EQUAL_MASK        = (1 << 0);
+constexpr const int COMP_LESS_THAN_MASK    = (1 << 1);
+constexpr const int COMP_GREATER_THAN_MASK = (1 << 2);
+constexpr const int COMP_NOT_EQUAL_MASK    = (1 << 3);
+
 enum SystemCallValue_e {
     // system calls ignore paramform, and will only read the immediate
     // this will provide a space of ~32,000 possible functions

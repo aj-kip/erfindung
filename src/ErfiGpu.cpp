@@ -21,6 +21,8 @@
 
 #include "ErfiGpu.hpp"
 
+#include <iostream>
+
 #include <cassert>
 
 namespace {
@@ -71,8 +73,10 @@ ErfiGpu::~ErfiGpu() {
 }
 
 void ErfiGpu::wait(MemorySpace & memory) {
-    if (m_gfx_thread.joinable())
+    if (m_gfx_thread.joinable()) {
+        m_cold.swap(m_hot);
         m_gfx_thread.join();
+    }
 
     for (auto itr = m_sprite_map.begin(); itr != m_sprite_map.end(); ++itr) {
         if (itr->second.delete_flag) {
@@ -81,10 +85,9 @@ void ErfiGpu::wait(MemorySpace & memory) {
         }
     }
 
-    m_cold.swap(m_hot);
-
     std::thread t1(do_gpu_tasks, std::ref(*m_hot), &memory[0]);
     m_gfx_thread.swap(t1);
+
 }
 
 UInt32 ErfiGpu::upload_sprite(UInt32 width, UInt32 height, UInt32 address) {
@@ -161,6 +164,7 @@ Value & query(std::map<Key, Value> & map, const Key & k) {
 
 template <typename T>
 T front_and_pop(std::queue<T> & queue) {
+    assert(!queue.empty());
     T rv = queue.front();
     queue.pop();
     return rv;
@@ -171,11 +175,13 @@ void upload_sprite(erfin::GpuContext & ctx, const erfin::UInt32 * memory) {
     using namespace erfin;
     using SpriteMeta = GpuContext::SpriteMeta;
     auto & queue = ctx.command_buffer;
-    UInt32 width = front_and_pop(queue), height = front_and_pop(queue),
-           address = front_and_pop(queue);
+    UInt32 width   = front_and_pop(queue);
+    UInt32 height  = front_and_pop(queue);
+    UInt32 address = front_and_pop(queue);
     SpriteMeta * sprite = front_and_pop(ctx.sprite_data);
     const UInt32 * start = &memory[address];
-    const UInt32 * end   = start + (width*height)/32;
+    const UInt32 * end   = start + (width*height)/32 +
+                           ( (width*height % 32) ? 1 : 0 );
     sprite->width  = width;
     sprite->height = height;
     for (; start != end; ++start) {
@@ -193,11 +199,13 @@ void draw_sprite(erfin::GpuContext & ctx) {
     using SpriteMeta = GpuContext::SpriteMeta;
 
     SpriteMeta * sprite = front_and_pop(ctx.sprite_data);
-    UInt32 x_ = front_and_pop(ctx.command_buffer),
-           y_ = front_and_pop(ctx.command_buffer);
+    UInt32 x_ = front_and_pop(ctx.command_buffer);
+    UInt32 y_ = front_and_pop(ctx.command_buffer);
     UInt32 i = 0;
-    for (UInt32 y = y_; y != sprite->height; ++y) {
-    for (UInt32 x = x_; x != sprite->width ; ++x) {
+    for (UInt32 y = y_; y != sprite->height + y_; ++y) {
+    for (UInt32 x = x_; x != sprite->width  + x_; ++x) {
+        if (int(x) >= ErfiGpu::SCREEN_WIDTH ||
+            int(y) >= ErfiGpu::SCREEN_HEIGHT  ) continue;
         ctx.pixels[coord_to_index(x, y)] = sprite->pixels[++i];
     }}
 }
@@ -206,6 +214,12 @@ void clear_screen(erfin::GpuContext & ctx) {
     using namespace erfin;
     for (UInt32 y = 0; y != UInt32(ErfiGpu::SCREEN_HEIGHT); ++y) {
     for (UInt32 x = 0; x != UInt32(ErfiGpu::SCREEN_WIDTH ); ++x) {
+        if (ctx.pixels[coord_to_index(x, y)]) {
+            int h = 0;
+            ++h;
+            (void)h;
+        }
+
         ctx.pixels[coord_to_index(x, y)] = false;
     }}
 }

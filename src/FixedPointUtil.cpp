@@ -21,6 +21,8 @@
 
 #include "FixedPointUtil.hpp"
 
+#include <iostream>
+
 #include <cassert>
 #include <cmath>
 
@@ -84,6 +86,30 @@ UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num) {
     // n - q*d = r -> n = r + q*d -> n/d = r/d + q
     // reduce quot to int part only
     return num - fp_multiply(quot & 0xFFFF0000, denom);
+}
+
+UInt32 fp_compare(UInt32 a, UInt32 b) {
+    using namespace erfin::enum_types;
+    auto is_neg = [] (UInt32 a) -> bool { return bool(a & 0xF0000000); };
+    bool neg;
+    if ((neg = is_neg(a)) == is_neg(b)) {
+        if ((a & 0xFFFFFF00) == (b & 0xFFFFFF00))
+            return COMP_EQUAL_MASK;
+        UInt32 rv;
+        if (a > b) {
+            rv = (neg) ? COMP_LESS_THAN_MASK : COMP_GREATER_THAN_MASK;
+        } else { // a < b
+            rv = (neg) ? COMP_GREATER_THAN_MASK : COMP_LESS_THAN_MASK;
+        }
+        return rv | COMP_NOT_EQUAL_MASK;
+    } else {
+        if (is_neg(a))
+            return COMP_LESS_THAN_MASK | COMP_NOT_EQUAL_MASK; // a < b
+        if (is_neg(b))
+            return COMP_GREATER_THAN_MASK | COMP_NOT_EQUAL_MASK; // a > b
+    }
+    std::cerr << "Wut?" << std::endl;
+    std::terminate();
 }
 
 UInt32 to_fixed_point(double fp) {

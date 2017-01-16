@@ -22,14 +22,32 @@ X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____X
 ____________ ]
 : main set  x 92
        set  y 19
-       add  z erfindung_text
+       set  z erfindung_text
        call upload # upload sprite
        call clear  # screen flush
        set  z a
-	   set  x 0
-	   set  y 0
-: wait call draw # draw sprite
-       add  x 1
-       add  y 1
-       call wait # wait for frame
-	   set  pc wait 
+       set  x 0
+       set  y 0
+       set  b 1 
+       set  c 1
+: loop call clear
+       call draw # draw sprite
+       add  x b x
+       add  y c y
+       # begin bounce code
+         comp b x 100 # b <- (x < 100)
+         skip b <     
+             set pc inv-x # if (x >= 100)
+             set pc reg-x # if (x <  100)
+: inv-x  set b  -1
+         set pc post-x
+: reg-x  set b   1
+: post-x comp c y 100
+         skip c <
+             set pc inv-y
+             set pc reg-y
+: inv-y  set c -1
+         set pc post-y
+: reg-y  set c  1
+: post-y call wait # wait for frame
+         set  pc loop
