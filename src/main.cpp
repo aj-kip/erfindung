@@ -376,6 +376,6 @@ int main() {
         return 1;
     }
 
-    std::cout << erfin::enum_types::OPCODE_COUNT << std::endl;
+    std::cout << "# of op codes " << erfin::enum_types::OPCODE_COUNT << std::endl;
     return 0;
 }

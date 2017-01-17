@@ -478,11 +478,17 @@ StringCIter make_multiply_int(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_multiply_fp(TextProcessState &, StringCIter, StringCIter);
 
-StringCIter make_divmod(TextProcessState &, StringCIter, StringCIter);
+StringCIter make_divide(TextProcessState &, StringCIter, StringCIter);
 
-StringCIter make_divmod_int(TextProcessState &, StringCIter, StringCIter);
+StringCIter make_divide_int(TextProcessState &, StringCIter, StringCIter);
 
-StringCIter make_divmod_fp(TextProcessState &, StringCIter, StringCIter);
+StringCIter make_divide_fp(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_modulus(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_modulus_int(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_modulus_fp(TextProcessState &, StringCIter, StringCIter);
 
 // <------------------------- Logic operations ------------------------------->
 
@@ -527,71 +533,57 @@ LineToInstFunc get_line_processing_func
 {
     static bool is_initialized = false;
     using LineFuncMap = std::map<std::string, LineToInstFunc>;
-    static LineFuncMap no_assumpt_map;
+    static LineFuncMap fmap;
     if (is_initialized) {
-        auto itr = no_assumpt_map.find(fname);
-        return (itr == no_assumpt_map.end()) ? nullptr : itr->second;
+        auto itr = fmap.find(fname);
+        return (itr == fmap.end()) ? nullptr : itr->second;
     }
 
-    auto add_usual_insts = [] (LineFuncMap & fmap){
-        fmap["and"] = fmap["&"] = make_and;
-        fmap["or" ] = fmap["|"] = make_or ;
-        fmap["xor"] = fmap["^"] = make_xor;
+    fmap["and"] = fmap["&"] = make_and;
+    fmap["or" ] = fmap["|"] = make_or ;
+    fmap["xor"] = fmap["^"] = make_xor;
 
-        fmap["not"] = fmap["!"] = fmap["~"] = make_not;
+    fmap["not"] = fmap["!"] = fmap["~"] = make_not;
 
-        fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
-        fmap["minus"] = fmap["sub"] = fmap["-"] = make_minus;
-        fmap["skip"] = fmap["?"] = make_skip;
+    fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
+    fmap["minus"] = fmap["sub"] = fmap["-"] = make_minus;
+    fmap["skip"] = fmap["?"] = make_skip;
 
-        // for short hand, memory is to be thought of as on the left of the
-        // instruction.
-        fmap["save"] = fmap["sav"] = fmap["<<"] = make_save;
-        fmap["load"] = fmap["ld" ] = fmap[">>"] = make_load;
+    // for short hand, memory is to be thought of as on the left of the
+    // instruction.
+    fmap["save"] = fmap["sav"] = fmap["<<"] = make_save;
+    fmap["load"] = fmap["ld" ] = fmap[">>"] = make_load;
 
-        fmap["set"] = fmap["="] = make_set;
-        fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
+    fmap["set"] = fmap["="] = make_set;
+    fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
 
-        fmap["call"] = fmap["()"] = make_syscall;
+    fmap["call"] = fmap["()"] = make_syscall;
 
-        fmap["jump"] = make_jump;
-
-        // suffixes
-        fmap["times-int"] = fmap["mul-int"] = fmap["multiply-int"] = fmap["*-int"]
-            = make_multiply_int;
-        fmap["times-fp" ] = fmap["mul-fp" ] = fmap["multiply-fp" ] = fmap["*-fp" ]
-            = make_multiply_fp;
-        fmap["times"] = fmap["mul"] = fmap["multiply"] = fmap["*"]
-            = make_multiply;
-
-        fmap["div-int"] = fmap["divmod-int"  ] = fmap["/-int"] = make_divmod_int;
-        fmap["div-fp" ] = fmap["divmod-fp"   ] = fmap["/-fp" ] = make_divmod_fp;
-        fmap["div"] = fmap["divmod"] = fmap["/"] = make_divmod;
-
-        fmap["comp-int"] = fmap["compare-int"] = fmap["cmp-int"]
-            = fmap["<>=-int"] = make_cmp_int;
-        fmap["comp-fp"] = fmap["compare-fp"] = fmap["cmp-fp"] = fmap["<>=-fp"]
-            = make_cmp_fp;
-        fmap["comp"] = fmap["compare"] = fmap["cmp"] = fmap["<>="] = make_cmp;
-        fmap["assume"] = assume_directive;
-    };
-    add_usual_insts(no_assumpt_map);
-
-
-#   if 0
-    no_assumpt_map["times"] = no_assumpt_map["mul"] = no_assumpt_map["multiply"] = no_assumpt_map["*"] = make_multiply_fp;
-    no_assumpt_map["div"] = no_assumpt_map["divmod"] = no_assumpt_map["/"] = make_divmod_fp;
+    fmap["jump"] = make_jump;
 
     // suffixes
-    no_assumpt_map["times.int"] = no_assumpt_map["mul.int"] = no_assumpt_map["multiply.int"] = no_assumpt_map["*.int"]
-        = make_multiply;
-    no_assumpt_map["times.fp" ] = no_assumpt_map["mul.fp" ] = no_assumpt_map["multiply.fp" ] = no_assumpt_map["*.fp" ]
+    fmap["times-int"] = fmap["mul-int"] = fmap["multiply-int"] = fmap["*-int"]
+        = make_multiply_int;
+    fmap["times-fp" ] = fmap["mul-fp" ] = fmap["multiply-fp" ] = fmap["*-fp" ]
         = make_multiply_fp;
-    no_assumpt_map["div.int"] = no_assumpt_map["divmod.int"  ] = no_assumpt_map["/.int"] = make_divmod;
-    no_assumpt_map["div.fp" ] = no_assumpt_map["divmod.fp"   ] = no_assumpt_map["/.fp" ] = make_divmod_fp;
+    fmap["times"] = fmap["mul"] = fmap["multiply"] = fmap["*"]
+        = make_multiply;
 
-    no_assumpt_map["comp"] = no_assumpt_map["compare"] = no_assumpt_map["cmp"] = no_assumpt_map["<>="] = make_cmp;
-#   endif
+    fmap["div-int"] = fmap["divide-int"  ] = fmap["/-int"] = make_divide_int;
+    fmap["div-fp" ] = fmap["divide-fp"   ] = fmap["/-fp" ] = make_divide_fp;
+    fmap["div"] = fmap["divmod"] = fmap["/"] = make_divide;
+
+    fmap["comp-int"] = fmap["compare-int"] = fmap["cmp-int"]
+        = fmap["<>=-int"] = make_cmp_int;
+    fmap["comp-fp"] = fmap["compare-fp"] = fmap["cmp-fp"] = fmap["<>=-fp"]
+        = make_cmp_fp;
+    fmap["comp"] = fmap["compare"] = fmap["cmp"] = fmap["<>="] = make_cmp;
+
+    fmap["mod"] = fmap["modulus"] = fmap["%"] = make_modulus;
+    fmap["mod-int"] = fmap["modulus-int"] = fmap["%-int"] = make_modulus_int;
+    fmap["mod-fp"] = fmap["modulus-fp"] = fmap["%-fp"] = make_modulus_fp;
+
+    fmap["assume"] = assume_directive;
 
     is_initialized = true;
     return get_line_processing_func(assumptions, fname);
@@ -706,10 +698,6 @@ StringCIter make_generic_arithemetic
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end);
 
-StringCIter make_generic_divmod
-    (erfin::OpCode op_code, TextProcessState & state,
-     StringCIter beg, StringCIter end);
-
 StringCIter make_generic_memory_access
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end);
@@ -757,25 +745,46 @@ StringCIter make_multiply_fp
     return make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
 }
 
-StringCIter make_divmod
+StringCIter make_divide
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
+    return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
 }
 
-StringCIter make_divmod_int
+StringCIter make_divide_int
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     AssumptionResetRAII arr(state, erfin::Assembler::USING_INT); (void)arr;
-    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
+    return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
 }
 
-StringCIter make_divmod_fp
+StringCIter make_divide_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
-    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
+    return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
 }
+
+StringCIter make_modulus
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_arithemetic(erfin::OpCode::MODULUS, state, beg, end);
+}
+
+StringCIter make_modulus_int
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
+}
+
+StringCIter make_modulus_fp
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
+}
+
 
 // <------------------------- Logic operations ------------------------------->
 
@@ -1270,87 +1279,6 @@ StringCIter make_generic_arithemetic
     return eol;
 }
 
-StringCIter make_generic_divmod
-    (erfin::OpCode op_code, TextProcessState & state,
-     StringCIter beg, StringCIter end)
-{
-    using namespace erfin;
-    using namespace erfin::enum_types;
-    assert(op_code == DIVIDE_MOD);
-    auto eol = get_eol(beg, end);
-    ++beg;
-
-    UInt32 (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
-
-    const auto pf = get_lines_param_form(beg, eol);
-    switch (pf) {
-    case XPF_1R_INT: case XPF_2R_INT:
-        handle_immd = deal_with_int_immd;
-        break;
-    case XPF_1R_FP : case XPF_2R_FP :
-        handle_immd = deal_with_fp_immd;
-        break;
-    default: break;
-    }
-
-    bool has_immd = bool(handle_immd);
-    UInt32 encoded_immd;
-    if (handle_immd)
-        encoded_immd = handle_immd(eol, op_code, state);
-
-    if (!handle_immd) {
-        if (state.assumptions == Assembler::USING_FP) {
-            handle_immd = deal_with_fp_immd;
-        } else if (state.assumptions == Assembler::USING_INT) {
-            handle_immd = deal_with_int_immd;
-        } else {
-            throw make_error(state, ": cannot deduce which instruction... no "
-                                    "assumption made...");
-        }
-    }
-
-
-    Reg n, d, q, r;
-    switch (pf) {
-    case XPF_4R:
-        n = string_to_register(*(beg));
-        d = string_to_register(*(beg + 1));
-        q = string_to_register(*(beg + 2));
-        r = string_to_register(*(beg + 3));
-        break;
-    case XPF_3R:
-        n = string_to_register(*(beg));
-        d = string_to_register(*(beg + 1));
-        r = q = string_to_register(*(beg + 2));
-        break;
-    case XPF_2R:
-        // q := n / d also a := a / b
-        // so q == n
-        // quotent will have to be written last
-        r = q = n = string_to_register(*(beg));
-        d = string_to_register(*(beg + 1));
-        break;
-    // three arguments
-    case XPF_2R_FP:
-        has_immd = true;
-        break;
-    case XPF_2R_INT:
-        has_immd = true;
-        break;
-
-    case XPF_1R_FP : // psuedo-instruction
-    case XPF_1R_INT: // psuedo-instruction
-        break;
-    default: throw make_error(state, ": unsupported parameters.");
-    }
-    state.program_data.push_back(encode_op(op_code) |
-                                 encode_reg_reg_reg_reg(n, d, q, r));
-    if (is_fixed_point)
-        state.program_data.back() |= encode_set_is_fixed_point_flag();
-    ++state.current_source_line;
-    return eol;
-}
-
 StringCIter make_generic_memory_access
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
@@ -1427,7 +1355,7 @@ bool op_code_supports_fpoint_immd(erfin::Inst inst) {
     using namespace erfin::enum_types;
     switch (inst) {
     case PLUS: case MINUS: return true;
-    case TIMES: case AND: case XOR: case OR: case DIVIDE_MOD: case COMP:
+    case TIMES: case AND: case XOR: case OR: case DIVIDE: case COMP:
         return false;
     default: assert(false); break;
     }
@@ -1438,7 +1366,7 @@ bool op_code_supports_integer_immd(erfin::Inst inst) {
     using namespace erfin::enum_types;
     switch (inst) {
     case PLUS: case MINUS: case TIMES: case AND: case XOR: case OR:
-    case DIVIDE_MOD: case COMP:
+    case DIVIDE: case COMP:
         return true;
     default: assert(false); break;
     }

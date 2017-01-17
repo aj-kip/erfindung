@@ -48,7 +48,12 @@ private:
     UInt32 & reg3(Inst inst);
 
     void do_rotate(Inst inst);
+#   if 0
+    void do_comp_fp(Inst inst);
+    void do_comp_int(Inst inst);
+
     void do_divmod(Inst inst);
+#   endif
     void do_syscall(Inst inst, ErfiGpu & gpu);
     void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
 

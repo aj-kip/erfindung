@@ -43,6 +43,13 @@ UInt32 andi (UInt32 x, UInt32 y) { return x & y; }
 UInt32 ori  (UInt32 x, UInt32 y) { return x | y; }
 UInt32 xori (UInt32 x, UInt32 y) { return x ^ y; }
 
+UInt32 div_fp  (UInt32 x, UInt32 y);
+UInt32 div_int (UInt32 x, UInt32 y);
+UInt32 mod_fp  (UInt32 x, UInt32 y);
+UInt32 mod_int (UInt32 x, UInt32 y);
+UInt32 comp_fp (UInt32 x, UInt32 y);
+UInt32 comp_int(UInt32 x, UInt32 y);
+
 } // end of <anonymous> namespace
 
 namespace erfin {
@@ -60,26 +67,20 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
 
     Inst inst = memspace[m_registers[REG_PC]++];
     const auto giimd = decode_immd_as_int;
+    static constexpr const auto is_fp_inst = decode_is_fixed_point_flag_set;
 
     switch (decode_op_code(inst)) {
     case PLUS : do_basic_arth_inst(inst, plus ); break;
     case MINUS: do_basic_arth_inst(inst, minus); break;
     case TIMES:
-        if (decode_is_fixed_point_flag_set(inst)) {
-            switch (decode_param_form(inst)) {
-            case REG_REG_REG:
-                reg0(inst) = fp_multiply(reg1(inst), reg2(inst));
-                break;
-            case REG_REG_IMMD:
-                reg0(inst) = fp_multiply(reg1(inst), decode_immd_as_fp(inst));
-                break;
-            default: throw make_illegal_inst_error(inst);
-            }
-        } else {
-            do_basic_arth_inst(inst, times);
-        }
+        do_basic_arth_inst(inst, is_fp_inst(inst) ? fp_multiply : times);
         break;
-    case DIVIDE_MOD: do_divmod(inst); break;
+    case DIVIDE:
+        do_basic_arth_inst(inst, is_fp_inst(inst) ? div_fp : div_int);
+        break;
+    case MODULUS:
+        do_basic_arth_inst(inst, is_fp_inst(inst) ? mod_fp : mod_int);
+        break;
     case AND: do_basic_arth_inst(inst, andi); break;
     case XOR: do_basic_arth_inst(inst, xori); break;
     case OR : do_basic_arth_inst(inst, ori ); break;
@@ -89,27 +90,8 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         (void)~reg0(inst);
         break;
     case ROTATE: do_rotate(inst); break;
-    case COMP: switch (decode_param_form(inst)) {
-        case REG_REG_REG: {
-            // how do I know what I'm comparing?
-            UInt32 temp = 0, r0t = reg0(inst), r1t = reg1(inst);
-            // <=, >=, >, <, ==, !=
-            if (r0t <  r1t) temp |= COMP_LESS_THAN_MASK   ;
-            if (r0t >  r1t) temp |= COMP_GREATER_THAN_MASK;
-            if (r0t == r1t) temp |= COMP_EQUAL_MASK       ;
-            if (r0t != r1t) temp |= COMP_NOT_EQUAL_MASK   ;
-            reg3(inst) = temp;
-            break;
-        }
-        case REG_REG_IMMD:
-            if (decode_is_fixed_point_flag_set(inst)) {
-                ;
-            } else {
-                //UInt32 temp = decode_immd_as_int(inst);
-            }
-            break;
-        default: throw make_illegal_inst_error(inst);
-        }
+    case COMP:
+        do_basic_arth_inst(inst, is_fp_inst(inst) ? comp_fp : comp_int);
         break;
     case SKIP: switch (decode_param_form(inst)) {
         case REG: if (reg0(inst))
@@ -143,7 +125,7 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
     case SET: switch (decode_param_form(inst)) {
         case REG_REG_IMMD:
 #           ifdef MACRO_DEBUG
-            if (decode_reg0(inst) == REG_PC && decode_is_fixed_point_flag_set(inst))
+            if (decode_reg0(inst) == REG_PC && is_fp_inst(inst))
                 throw make_illegal_inst_error(inst);
 #           endif
             reg0(inst) = reg1(inst) + decode_immd_selectively(inst);
@@ -224,22 +206,6 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     }
 }
 
-/* private */ void ErfiCpu::do_divmod(Inst inst) {
-    using namespace erfin::enum_types;
-    if (decode_param_form(inst) != REG_REG_REG_REG)
-        throw make_illegal_inst_error(inst);
-    if (decode_is_fixed_point_flag_set(inst)) {
-        // n, d, q, r; quot written last
-        int temp   = int(reg0(inst)) / int(reg1(inst));
-        reg3(inst) = (reg0(inst) & 0x7FFFFFFF) % (reg1(inst) & 0x7FFFFFFF);
-        reg2(inst) = UInt32(temp);
-    } else {
-        UInt32 temp = fp_divide(reg0(inst), reg1(inst));
-        reg3(inst)  = fp_remainder(temp, reg0(inst), reg1(inst));
-        reg2(inst)  = temp;
-    }
-}
-
 /* private */ void ErfiCpu::do_syscall(Inst inst, ErfiGpu & gpu) {
     using namespace erfin::enum_types;
 
@@ -262,7 +228,6 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     (Inst inst, UInt32(*func)(UInt32, UInt32))
 {
     using namespace erfin::enum_types;
-
     switch (decode_param_form(inst)) {
     case REG_REG_REG:
         reg0(inst) = func(reg1(inst), reg2(inst));
@@ -294,6 +259,52 @@ UInt32 decode_immd_selectively(UInt32 inst) {
         return UInt32(erfin::decode_immd_as_int(inst));
 }
 
+UInt32 div_fp  (UInt32 x, UInt32 y) {
+    if (y == erfin::to_fixed_point(0.0))
+        throw Error("Attempted to divide by zero.");
+    return erfin::fp_divide(x, y);
+}
+
+UInt32 div_int (UInt32 x, UInt32 y) {
+    if (y == 0) throw Error("Attempted to divide by zero.");
+    return UInt32(int(x) / int(y));
+}
+
+UInt32 mod_fp  (UInt32 x, UInt32 y) {
+    return erfin::fp_remainder(div_fp(x, y), y, x);
+}
+
+UInt32 mod_int (UInt32 x, UInt32 y) {
+    if (y == 0) throw Error("Attempted to divide by zero.");
+    auto sign = [](int x) { return x < 0 ? -1 : 1; };
+    auto mag  = [](int x) { return x < 0 ? -x : x; };
+    // the C++ standard does not specify how negatives are moded
+    int rv = mag(int(x)) % mag(int(y));
+    return UInt32(sign(x)*sign(y)*rv);
+}
+
+UInt32 comp_fp (UInt32 x, UInt32 y) {
+    using namespace erfin;
+    UInt32 temp = 0;
+    int res = erfin::fp_compare(x, y);
+    if (res == 0) temp |= enum_types::COMP_EQUAL_MASK;
+    if (res <  0) temp |= enum_types::COMP_LESS_THAN_MASK;
+    if (res >  0) temp |= enum_types::COMP_GREATER_THAN_MASK;
+    if (res != 0) temp |= enum_types::COMP_NOT_EQUAL_MASK;
+    return temp;
+}
+
+UInt32 comp_int(UInt32 x, UInt32 y) {
+    using namespace erfin::enum_types;
+    UInt32 temp = 0;
+    int x_ = int(x), y_ = int(y);
+    if (x_ <  y_) temp |= COMP_LESS_THAN_MASK   ;
+    if (x_ >  y_) temp |= COMP_GREATER_THAN_MASK;
+    if (x_ == y_) temp |= COMP_EQUAL_MASK       ;
+    if (x_ != y_) temp |= COMP_NOT_EQUAL_MASK   ;
+    return temp;
+}
+
 const char * op_code_to_string(erfin::Inst i) {
     using namespace erfin;
     using namespace erfin::enum_types;
@@ -301,7 +312,7 @@ const char * op_code_to_string(erfin::Inst i) {
     case PLUS       : return "plus";
     case MINUS      : return "minus";
     case TIMES      : return "times";
-    case DIVIDE_MOD : return "divmod";
+    case DIVIDE : return "divmod";
     case AND        : return "and";
     case XOR        : return "xor";
     case OR         : return "or";

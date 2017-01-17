@@ -155,11 +155,12 @@ enum OpCode_e : UInt32 {
     TIMES     , // two args, one answer
                 // "times x y a"
                 // "times x immd"
-    DIVIDE_MOD, // two args, one answer (mod to flags)
+    DIVIDE,     // two args, one answer (mod to flags)
                 // if divide by zero, flags == denominator
                 // "divmod x y a b"
                 // "div x y a"
                 // "div x immd"
+    MODULUS,
     // R-type LOGIC ops (4)
     AND, // bitwise and
          // This form applies to all logic operations

@@ -201,15 +201,15 @@ void draw_sprite(erfin::GpuContext & ctx) {
     SpriteMeta * sprite = front_and_pop(ctx.sprite_data);
     UInt32 x_ = front_and_pop(ctx.command_buffer);
     UInt32 y_ = front_and_pop(ctx.command_buffer);
-    UInt32 i = 0;
+    //UInt32 i = 0;
     const UInt32 SCREEN_WIDTH  = UInt32(ErfiGpu::SCREEN_WIDTH );
     const UInt32 SCREEN_HEIGHT = UInt32(ErfiGpu::SCREEN_HEIGHT);
     const auto sprite_height = sprite->height;
     const auto sprite_width  = sprite->width;
 
-    for (UInt32 y = y_; y != sprite_height && y < SCREEN_HEIGHT; ++y) {
-    for (UInt32 x = x_; x != sprite_width  && x < SCREEN_WIDTH ; ++x) {
-        ctx.pixels[coord_to_index(x, y)] = sprite->pixels[++i];
+    for (UInt32 y = y_; (y - y_) != sprite_height && y < SCREEN_HEIGHT; ++y) {
+    for (UInt32 x = x_; (x - x_) != sprite_width  && x < SCREEN_WIDTH ; ++x) {
+        ctx.pixels[coord_to_index(x, y)] = sprite->pixels[(x - x_) + (y - y_)*sprite_width];
     }}
 }
 

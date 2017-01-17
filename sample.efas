@@ -52,6 +52,6 @@ ____________ ]
 : post-y call wait # wait for frame
          set  pc loop
          # have to be careful not to up the cognitive load too much!
-         comp fp  x y a # explicit type needed!
-         comp int x y a # explicit integer
-         comp     x y a # defaults to integer
+         #comp fp  x y a # explicit type needed!
+         #comp int x y a # explicit integer
+         #comp     x y a # defaults to integer
