@@ -70,8 +70,8 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
             case REG_REG_REG:
                 reg0(inst) = fp_multiply(reg1(inst), reg2(inst));
                 break;
-            case REG_IMMD:
-                reg0(inst) = fp_multiply(reg0(inst), decode_immd_as_fp(inst));
+            case REG_REG_IMMD:
+                reg0(inst) = fp_multiply(reg1(inst), decode_immd_as_fp(inst));
                 break;
             default: throw make_illegal_inst_error(inst);
             }
@@ -105,7 +105,7 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
             if (decode_is_fixed_point_flag_set(inst)) {
                 ;
             } else {
-                UInt32 temp = decode_immd_as_int(inst);
+                //UInt32 temp = decode_immd_as_int(inst);
             }
             break;
         default: throw make_illegal_inst_error(inst);
@@ -122,7 +122,6 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         }
         break;
     case LOAD: switch (decode_param_form(inst)) {
-        case REG    : reg0(inst) = memspace[reg0(inst)]; break;
         case REG_REG: reg0(inst) = memspace[reg1(inst)]; break;
         case REG_REG_IMMD:
             reg0(inst) = memspace[std::size_t(int(reg1(inst)) + giimd(inst))];
@@ -266,7 +265,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
 
     switch (decode_param_form(inst)) {
     case REG_REG_REG:
-        reg2(inst) = func(reg1(inst), reg0(inst));
+        reg0(inst) = func(reg1(inst), reg2(inst));
         break;
     case REG_REG_IMMD:
         reg0(inst) = func(reg1(inst), decode_immd_selectively(inst));

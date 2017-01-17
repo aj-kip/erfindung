@@ -37,21 +37,18 @@ namespace erfin {
 class Assembler {
 public:
     enum SuffixAssumption {
+        // -int, -fp must be set explicitly
         NO_ASSUMPTION = 0,
-        MSB_SUFFIX = 1 << 1,
-        LSB_SUFFIX = 1 << 2,
-        FP_SUFFIX  = 1 << 3,
-        INT_SUFFIX = 1 << 4
+        // only -int must be set explicitly
+        USING_FP  = 1 << 1,
+        // only -fp must be set explicitly
+        USING_INT = 1 << 2
     };
 
     using ProgramData = std::vector<Inst>;
 
-    Assembler(): m_assumptions(NO_ASSUMPTION) {}
+    Assembler() {}
 
-    void assume(SuffixAssumption assumptions_)
-        { m_assumptions = assumptions_; }
-    SuffixAssumption assumptions() const
-        { return m_assumptions; }
     void assemble_from_file(const char * file);
 
     void assemble_from_string(const std::string & source);
@@ -76,7 +73,6 @@ public:
 private:
     ProgramData m_program;
     std::string m_error_string;
-    SuffixAssumption m_assumptions;
 };
 
 // "wholesale" encoding functions

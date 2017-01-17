@@ -37,7 +37,7 @@
 #elif defined(MACRO_COMPILER_CLANG)
 #   define MACRO_FALLTHROUGH [[clang::fallthrough]]
 #else
-#   define MACRO_FALLTHROUGH [[clang::fallthrough]]
+#   error "no compiler defined"
 #endif
 
 namespace {
@@ -49,7 +49,8 @@ using SuffixAssumption = erfin::Assembler::SuffixAssumption;
 
 struct TextProcessState {
     TextProcessState(): in_square_brackets(false), in_data_directive(false),
-                        current_source_line(1), assumptions(nullptr) {}
+                        current_source_line(1),
+                        assumptions(erfin::Assembler::NO_ASSUMPTION) {}
     struct LabelPair { std::size_t program_location, source_line; };
     struct UnfilledLabelPair {
         UnfilledLabelPair(std::size_t i_, const std::string & s_):
@@ -67,7 +68,7 @@ struct TextProcessState {
     std::map<std::string, LabelPair> labels;
     std::vector<erfin::Inst> program_data;
     std::vector<UnfilledLabelPair> unfulfilled_labels;
-    const SuffixAssumption * assumptions;
+    SuffixAssumption assumptions;
 };
 
 // high level textual processing
@@ -120,7 +121,7 @@ void Assembler::assemble_from_string(const std::string & source) {
     std::vector<std::string> tokens = tokenize(line_list);
 
     TextProcessState tpstate;
-    tpstate.assumptions = &m_assumptions;
+
     process_text(tpstate, tokens.begin(), tokens.end());
     resolve_unfulfilled_labels(tpstate);
     // only when a valid program has been assembled do we swap in the actual
@@ -335,7 +336,7 @@ Error make_error(TextProcessState & state, const std::string & str);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     if (beg == end) return;
-    auto func = get_line_processing_func(*state.assumptions, *beg);
+    auto func = get_line_processing_func(state.assumptions, *beg);
     if (func) {
         process_text(state, ++func(state, beg, end), end);
     } else if (*beg == "data") {
@@ -473,9 +474,13 @@ StringCIter make_minus(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_multiply(TextProcessState &, StringCIter, StringCIter);
 
-StringCIter make_divmod(TextProcessState &, StringCIter, StringCIter);
+StringCIter make_multiply_int(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_multiply_fp(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_divmod(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_divmod_int(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_divmod_fp(TextProcessState &, StringCIter, StringCIter);
 
@@ -495,7 +500,11 @@ StringCIter make_syscall(TextProcessState &, StringCIter, StringCIter);
 
 // <--------------------- flow control operations ---------------------------->
 
-StringCIter make_cmp(TextProcessState &, StringCIter, StringCIter);
+StringCIter make_cmp(TextProcessState &, StringCIter, StringCIter); // "no hint"
+
+StringCIter make_cmp_fp (TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_cmp_int(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_skip(TextProcessState &, StringCIter, StringCIter);
 
@@ -511,50 +520,79 @@ StringCIter make_save(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_jump(TextProcessState &, StringCIter, StringCIter);
 
+StringCIter assume_directive(TextProcessState &, StringCIter, StringCIter);
+
 LineToInstFunc get_line_processing_func
     (SuffixAssumption assumptions, const std::string & fname)
 {
     static bool is_initialized = false;
-    static std::map<std::string, LineToInstFunc> fmap;
+    using LineFuncMap = std::map<std::string, LineToInstFunc>;
+    static LineFuncMap no_assumpt_map;
     if (is_initialized) {
-        auto itr = fmap.find(fname);
-        return (itr == fmap.end()) ? nullptr : itr->second;
+        auto itr = no_assumpt_map.find(fname);
+        return (itr == no_assumpt_map.end()) ? nullptr : itr->second;
     }
 
-    fmap["and"] = fmap["&"] = make_and;
-    fmap["or" ] = fmap["|"] = make_or ;
-    fmap["xor"] = fmap["^"] = make_xor;
+    auto add_usual_insts = [] (LineFuncMap & fmap){
+        fmap["and"] = fmap["&"] = make_and;
+        fmap["or" ] = fmap["|"] = make_or ;
+        fmap["xor"] = fmap["^"] = make_xor;
 
-    fmap["not"] = fmap["!"] = fmap["~"] = make_not;
+        fmap["not"] = fmap["!"] = fmap["~"] = make_not;
 
-    fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
-    fmap["minus"] = fmap["sub"] = fmap["-"] = make_minus;
+        fmap["plus" ] = fmap["add"] = fmap["+"] = make_plus;
+        fmap["minus"] = fmap["sub"] = fmap["-"] = make_minus;
+        fmap["skip"] = fmap["?"] = make_skip;
 
-    fmap["times"] = fmap["mul"] = fmap["multiply"] = fmap["*"] = make_multiply_fp;
-    fmap["div"] = fmap["divmod"] = fmap["/"] = make_divmod_fp;
+        // for short hand, memory is to be thought of as on the left of the
+        // instruction.
+        fmap["save"] = fmap["sav"] = fmap["<<"] = make_save;
+        fmap["load"] = fmap["ld" ] = fmap[">>"] = make_load;
+
+        fmap["set"] = fmap["="] = make_set;
+        fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
+
+        fmap["call"] = fmap["()"] = make_syscall;
+
+        fmap["jump"] = make_jump;
+
+        // suffixes
+        fmap["times-int"] = fmap["mul-int"] = fmap["multiply-int"] = fmap["*-int"]
+            = make_multiply_int;
+        fmap["times-fp" ] = fmap["mul-fp" ] = fmap["multiply-fp" ] = fmap["*-fp" ]
+            = make_multiply_fp;
+        fmap["times"] = fmap["mul"] = fmap["multiply"] = fmap["*"]
+            = make_multiply;
+
+        fmap["div-int"] = fmap["divmod-int"  ] = fmap["/-int"] = make_divmod_int;
+        fmap["div-fp" ] = fmap["divmod-fp"   ] = fmap["/-fp" ] = make_divmod_fp;
+        fmap["div"] = fmap["divmod"] = fmap["/"] = make_divmod;
+
+        fmap["comp-int"] = fmap["compare-int"] = fmap["cmp-int"]
+            = fmap["<>=-int"] = make_cmp_int;
+        fmap["comp-fp"] = fmap["compare-fp"] = fmap["cmp-fp"] = fmap["<>=-fp"]
+            = make_cmp_fp;
+        fmap["comp"] = fmap["compare"] = fmap["cmp"] = fmap["<>="] = make_cmp;
+        fmap["assume"] = assume_directive;
+    };
+    add_usual_insts(no_assumpt_map);
+
+
+#   if 0
+    no_assumpt_map["times"] = no_assumpt_map["mul"] = no_assumpt_map["multiply"] = no_assumpt_map["*"] = make_multiply_fp;
+    no_assumpt_map["div"] = no_assumpt_map["divmod"] = no_assumpt_map["/"] = make_divmod_fp;
 
     // suffixes
-    fmap["times.int"] = fmap["mul.int"] = fmap["multiply.int"] = fmap["*.int"]
+    no_assumpt_map["times.int"] = no_assumpt_map["mul.int"] = no_assumpt_map["multiply.int"] = no_assumpt_map["*.int"]
         = make_multiply;
-    fmap["times.fp" ] = fmap["mul.fp" ] = fmap["multiply.fp" ] = fmap["*.fp" ]
+    no_assumpt_map["times.fp" ] = no_assumpt_map["mul.fp" ] = no_assumpt_map["multiply.fp" ] = no_assumpt_map["*.fp" ]
         = make_multiply_fp;
-    fmap["div.int"] = fmap["divmod.int"  ] = fmap["/.int"] = make_divmod;
-    fmap["div.fp" ] = fmap["divmod.fp"   ] = fmap["/.fp" ] = make_divmod_fp;
+    no_assumpt_map["div.int"] = no_assumpt_map["divmod.int"  ] = no_assumpt_map["/.int"] = make_divmod;
+    no_assumpt_map["div.fp" ] = no_assumpt_map["divmod.fp"   ] = no_assumpt_map["/.fp" ] = make_divmod_fp;
 
-    fmap["comp"] = fmap["compare"] = fmap["cmp"] = fmap["<>="] = make_cmp;
-    fmap["skip"] = fmap["?"] = make_skip;
+    no_assumpt_map["comp"] = no_assumpt_map["compare"] = no_assumpt_map["cmp"] = no_assumpt_map["<>="] = make_cmp;
+#   endif
 
-    // for short hand, memory is to be thought of as on the left of the
-    // instruction.
-    fmap["save"] = fmap["sav"] = fmap["<<"] = make_save;
-    fmap["load"] = fmap["ld" ] = fmap[">>"] = make_load;
-
-    fmap["set"] = fmap["="] = make_set;
-    fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
-
-    fmap["call"] = fmap["()"] = make_syscall;
-
-    fmap["jump"] = make_jump;
     is_initialized = true;
     return get_line_processing_func(assumptions, fname);
 }
@@ -644,6 +682,22 @@ enum ExtendedParamForm {
     XPF_INVALID
 };
 
+class AssumptionResetRAII {
+public:
+    using SuffixAssumption = erfin::Assembler::SuffixAssumption;
+
+    AssumptionResetRAII(TextProcessState & state, SuffixAssumption new_assumpt):
+        m_state(&state),
+        m_old_assumpt(state.assumptions)
+    { state.assumptions = new_assumpt; }
+
+    ~AssumptionResetRAII() { m_state->assumptions = m_old_assumpt; }
+
+private:
+    TextProcessState * m_state;
+    const SuffixAssumption m_old_assumpt;
+};
+
 StringCIter make_generic_logic
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end);
@@ -653,7 +707,7 @@ StringCIter make_generic_arithemetic
      StringCIter beg, StringCIter end);
 
 StringCIter make_generic_divmod
-    (erfin::OpCode op_code, TextProcessState & state, bool is_fixed_point,
+    (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end);
 
 StringCIter make_generic_memory_access
@@ -689,25 +743,38 @@ StringCIter make_multiply
     return make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
 }
 
-StringCIter make_divmod
+StringCIter make_multiply_int
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, false, beg, end);
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_INT); (void)arr;
+    return make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
 }
 
 StringCIter make_multiply_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    auto rv = make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
-    // hackish, but requires least modification
-    state.program_data.back() |= erfin::encode_set_is_fixed_point_flag();
-    return rv;
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    return make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
+}
+
+StringCIter make_divmod
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
+}
+
+StringCIter make_divmod_int
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_INT); (void)arr;
+    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
 }
 
 StringCIter make_divmod_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, true, beg, end);
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    return make_generic_divmod(erfin::OpCode::DIVIDE_MOD, state, beg, end);
 }
 
 // <------------------------- Logic operations ------------------------------->
@@ -819,6 +886,20 @@ StringCIter make_cmp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     return make_generic_logic(erfin::OpCode::COMP, state, beg, end);
+}
+
+StringCIter make_cmp_fp
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    return make_cmp(state, beg, end);
+}
+
+StringCIter make_cmp_int
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    AssumptionResetRAII arr(state, erfin::Assembler::USING_INT); (void)arr;
+    return make_cmp(state, beg, end);
 }
 
 StringCIter make_skip
@@ -960,10 +1041,38 @@ StringCIter make_jump
     return eol;
 }
 
+StringCIter assume_directive
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+    auto eol = get_eol(++beg, end);
+    if ((eol - beg) == 1) {
+        if (*beg == "fp" || *beg == "fixed-point") {
+            state.assumptions = Assembler::NO_ASSUMPTION;
+        } else if (*beg == "int" || *beg == "integer") {
+            state.assumptions = Assembler::USING_INT;
+        } else if (*beg == "none" || *beg == "nothing") {
+            state.assumptions = Assembler::USING_FP;
+        } else {
+            make_error(state, ": \"" + *beg + "\" is not a valid assumption.");
+        }
+    } else {
+        throw make_error(state, ": too many assumptions/arguments.");
+    }
+    ++state.current_source_line;
+    return eol;
+}
 
 // <--------------------------- level 6 helpers ------------------------------>
 
 erfin::ParamForm narrow_param_form(ExtendedParamForm xpf);
+
+UInt32 deal_with_int_immd
+    (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
+UInt32 deal_with_fp_immd
+    (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
+UInt32 deal_with_label_immd
+    (StringCIter eol, erfin::OpCode, TextProcessState & state);
 
 NumericClassification convert_to_number_strict
     (StringCIter itr, double & d, int & i)
@@ -1033,42 +1142,58 @@ StringCIter make_generic_logic
     return make_generic_arithemetic(op_code, state, beg, end);
 }
 
+UInt32 deal_with_int_immd
+    (StringCIter eol, erfin::OpCode op_code, TextProcessState & state)
+{
+    static constexpr const char * const int_unsupported_msg =
+        ": instruction does not support integer immediates.";
+    if (!op_code_supports_integer_immd(op_code))
+        throw make_error(state, int_unsupported_msg);
+    int i;
+    string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), i);
+    return erfin::encode_immd(i);
+}
+
+UInt32 deal_with_fp_immd
+    (StringCIter eol, erfin::OpCode op_code, TextProcessState & state)
+{
+    static constexpr const char * const fp_unsupported_msg =
+        ": instruction does not support fixed point immediates.";
+    if (!op_code_supports_fpoint_immd(op_code))
+        throw make_error(state, fp_unsupported_msg);
+    double d;
+    string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
+    return erfin::encode_immd(d);
+}
+
+UInt32 deal_with_label_immd
+    (StringCIter eol, erfin::OpCode, TextProcessState & state)
+{
+    state.unfulfilled_labels.emplace_back
+        (state.program_data.size(), *(eol - 1));
+    return 0;
+}
+
 StringCIter make_generic_arithemetic
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
 {
     using namespace erfin;
     using namespace erfin::enum_types;
-    static constexpr const char * const fp_unsupported_msg =
-        ": instruction does not support fixed point immediates.";
-    static constexpr const char * const int_unsupported_msg =
-        ": instruction does not support integer immediates.";
 
-    auto deal_with_int_immd = [/* do not capture! */]
-        (StringCIter eol, OpCode op_code, TextProcessState & state) -> UInt32
-    {
-        if (!op_code_supports_integer_immd(op_code))
-            throw make_error(state, int_unsupported_msg);
-        int i;
-        string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), i);
-        return encode_immd(i);
-    };
-    auto deal_with_fp_immd = [/* do not capture! */]
-        (StringCIter eol, OpCode op_code, TextProcessState & state) -> UInt32
-    {
-        if (!op_code_supports_fpoint_immd(op_code))
-            throw make_error(state, fp_unsupported_msg);
-        double d;
-        string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
-        return encode_immd(d);
-    };
-    auto deal_with_label_immd = [/* do not capture! */]
-        (StringCIter eol, OpCode, TextProcessState & state) -> UInt32
-    {
-        state.unfulfilled_labels.emplace_back
-            (state.program_data.size(), *(eol - 1));
-        return 0;
-    };
+    static constexpr const char * const fp_int_ambig_msg =
+        ": cannot deduce whether a fixed point or integer operation was "
+        "meant; the assembler doesn't know which instruction to construct.";
+
+    bool assumption_matters;
+    switch (op_code) {
+    // this does require some impl knowledge...
+    case PLUS: case MINUS:
+    case AND: case OR: case XOR: case NOT:
+        assumption_matters = false;
+        break;
+    default: assumption_matters = true; break;
+    }
 
     Reg a1;
     ++beg;
@@ -1077,6 +1202,11 @@ StringCIter make_generic_arithemetic
 
     switch (pf) {
     case XPF_3R   : case XPF_2R:
+        // perfect chance to check if assumptions are ok!
+        if (assumption_matters && state.assumptions == Assembler::NO_ASSUMPTION) {
+            throw make_error(state, fp_int_ambig_msg);
+        }
+        MACRO_FALLTHROUGH;
     case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
     case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
         a1 = string_to_register(*beg);
@@ -1088,17 +1218,31 @@ StringCIter make_generic_arithemetic
     Reg a2, ans;
     Inst inst = 0;
     UInt32 (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
+    static constexpr const int IS_FP = 0, IS_INT = 1, INDETERMINATE = -1;
+    int type_indentity = INDETERMINATE;
     switch (pf) {
     case XPF_2R_FP: case XPF_1R_FP:
         handle_immd = deal_with_fp_immd;
+        type_indentity = IS_FP;
         break;
     case XPF_2R_INT: case XPF_1R_INT:
         handle_immd = deal_with_int_immd;
+        type_indentity = IS_INT;
         break;
     case XPF_2R_LABEL: case XPF_1R_LABEL:
         handle_immd = deal_with_label_immd;
+        type_indentity = IS_INT;
         break;
     default: break;
+    }
+    if (type_indentity == INDETERMINATE) {
+        if (state.assumptions == Assembler::USING_FP)
+            type_indentity = IS_FP;
+        else if (state.assumptions == Assembler::USING_INT)
+            type_indentity = IS_INT;
+    }
+    if (type_indentity == IS_FP) {
+        inst |= encode_set_is_fixed_point_flag();
     }
 
     switch (pf) {
@@ -1127,7 +1271,7 @@ StringCIter make_generic_arithemetic
 }
 
 StringCIter make_generic_divmod
-    (erfin::OpCode op_code, TextProcessState & state, bool is_fixed_point,
+    (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
 {
     using namespace erfin;
@@ -1135,8 +1279,39 @@ StringCIter make_generic_divmod
     assert(op_code == DIVIDE_MOD);
     auto eol = get_eol(beg, end);
     ++beg;
+
+    UInt32 (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
+
+    const auto pf = get_lines_param_form(beg, eol);
+    switch (pf) {
+    case XPF_1R_INT: case XPF_2R_INT:
+        handle_immd = deal_with_int_immd;
+        break;
+    case XPF_1R_FP : case XPF_2R_FP :
+        handle_immd = deal_with_fp_immd;
+        break;
+    default: break;
+    }
+
+    bool has_immd = bool(handle_immd);
+    UInt32 encoded_immd;
+    if (handle_immd)
+        encoded_immd = handle_immd(eol, op_code, state);
+
+    if (!handle_immd) {
+        if (state.assumptions == Assembler::USING_FP) {
+            handle_immd = deal_with_fp_immd;
+        } else if (state.assumptions == Assembler::USING_INT) {
+            handle_immd = deal_with_int_immd;
+        } else {
+            throw make_error(state, ": cannot deduce which instruction... no "
+                                    "assumption made...");
+        }
+    }
+
+
     Reg n, d, q, r;
-    switch (get_lines_param_form(beg, eol)) {
+    switch (pf) {
     case XPF_4R:
         n = string_to_register(*(beg));
         d = string_to_register(*(beg + 1));
@@ -1154,6 +1329,17 @@ StringCIter make_generic_divmod
         // quotent will have to be written last
         r = q = n = string_to_register(*(beg));
         d = string_to_register(*(beg + 1));
+        break;
+    // three arguments
+    case XPF_2R_FP:
+        has_immd = true;
+        break;
+    case XPF_2R_INT:
+        has_immd = true;
+        break;
+
+    case XPF_1R_FP : // psuedo-instruction
+    case XPF_1R_INT: // psuedo-instruction
         break;
     default: throw make_error(state, ": unsupported parameters.");
     }
