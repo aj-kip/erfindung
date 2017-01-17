@@ -91,6 +91,7 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
     case ROTATE: do_rotate(inst); break;
     case COMP: switch (decode_param_form(inst)) {
         case REG_REG_REG: {
+            // how do I know what I'm comparing?
             UInt32 temp = 0, r0t = reg0(inst), r1t = reg1(inst);
             // <=, >=, >, <, ==, !=
             if (r0t <  r1t) temp |= COMP_LESS_THAN_MASK   ;
@@ -101,6 +102,11 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
             break;
         }
         case REG_REG_IMMD:
+            if (decode_is_fixed_point_flag_set(inst)) {
+                ;
+            } else {
+                UInt32 temp = decode_immd_as_int(inst);
+            }
             break;
         default: throw make_illegal_inst_error(inst);
         }
@@ -168,6 +174,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
 }
 
 /* static */ void ErfiCpu::run_tests() {
+    assert(decode_immd_as_int(encode_immd(-1)) == -1);
     Assembler::run_tests();
 
     Assembler asmr;
@@ -186,6 +193,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     load_program_into_memory(mem, asmr.program_data());
     for (int i = 0; i != 10; ++i)
         cpu.run_cycle(mem);
+
 
 }
 

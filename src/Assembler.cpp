@@ -391,7 +391,7 @@ bool is_line_blank(const std::string & line) {
 
 StringCIter process_binary
     (TextProcessState & state, StringCIter beg, StringCIter end);
-void skip_new_lines(TextProcessState & state, StringCIter * itr);
+void skip_new_lines(TextProcessState & state, StringCIter * itr, StringCIter end);
 erfin::Reg string_to_register(const std::string & str);
 
 StringCIter process_data
@@ -412,14 +412,14 @@ StringCIter process_data
         }
         ++beg;
     }
-    skip_new_lines(state, &beg);
+    skip_new_lines(state, &beg, end);
     if (*beg != "[") {
         throw make_error(state, ": expected square bracket to indicate the "
                                 "start of data.");
     }
     ++beg;
     beg = process_func(state, beg, end);
-    skip_new_lines(state, &beg);
+    skip_new_lines(state, &beg, end);
     return beg;
 }
 
@@ -428,12 +428,12 @@ StringCIter process_label
 {
     assert(*beg == ":");
     ++beg;
-    skip_new_lines(state, &beg);
+    skip_new_lines(state, &beg, end);
     if (beg == end) {
         throw make_error(state, ": Code ends before a label was given for "
                                 "the label directive.");
     }
-    skip_new_lines(state, &beg);
+    skip_new_lines(state, &beg, end);
     if (string_to_register(*beg) != erfin::enum_types::REG_COUNT) {
         throw make_error(state, ": register cannot be used as a label.");
     }
@@ -450,10 +450,12 @@ StringCIter process_label
     return ++beg;
 }
 
-void skip_new_lines(TextProcessState & state, StringCIter * itr) {
+void skip_new_lines(TextProcessState & state, StringCIter * itr, StringCIter end) {
+    if (*itr == end) return;
     while (**itr == "\n") {
         ++(*itr);
         ++state.current_source_line;
+        if (*itr == end) return;
     }
 }
 

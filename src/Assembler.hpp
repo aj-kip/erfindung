@@ -124,7 +124,7 @@ inline UInt32 encode_param_form(ParamForm pf)
     { return UInt32(pf) << 28; /* at most 3 bits */ }
 
 inline UInt32 encode_immd(int immd)
-    { return (immd < 0 ? 0x8000 : 0x0000) | (immd & 0x7FFF); }
+    { return (immd < 0 ? 0x8000 | encode_immd(-immd) : (immd & 0x7FFF)); }
 
 UInt32 encode_immd(double d);
 
@@ -141,7 +141,7 @@ inline ParamForm decode_param_form(Inst inst)
     { return ParamForm((inst >> 28) & 0x7); }
 
 inline int decode_immd_as_int(Inst inst)
-    { return int((inst & 0x8000) << 16) | int(inst & 0x7FFF); }
+    { return ((inst & 0x8000) ? -1 : 1) * int(inst & 0x7FFF); }
 
 inline UInt32 decode_immd_as_fp(Inst inst) {
     UInt32 rv = UInt32(decode_immd_as_int(inst));
