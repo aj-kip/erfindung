@@ -298,7 +298,13 @@ int main() {
     ErfiGpu gpu;
     MemorySpace memory;
 
-    asmr.assemble_from_file("sample.efas");
+    try {
+        asmr.assemble_from_file("sample.efas");
+    } catch (std::exception & exp) {
+        std::cout << exp.what() << std::endl;
+        return ~0;
+    }
+
     load_program_into_memory(memory, asmr.program_data());
 
     sf::RenderWindow win;

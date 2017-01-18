@@ -73,6 +73,9 @@ public:
 private:
     ProgramData m_program;
     std::string m_error_string;
+
+    // debugging erfi program info
+    std::vector<std::size_t> m_inst_to_line_map;
 };
 
 // "wholesale" encoding functions

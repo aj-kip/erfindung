@@ -48,6 +48,8 @@ using Error = std::runtime_error;
 using SuffixAssumption = erfin::Assembler::SuffixAssumption;
 
 struct TextProcessState {
+    friend void erfin::Assembler::run_tests();
+    using ProgramData = erfin::Assembler::ProgramData;
     TextProcessState(): in_square_brackets(false), in_data_directive(false),
                         current_source_line(1),
                         assumptions(erfin::Assembler::NO_ASSUMPTION) {}
@@ -63,12 +65,28 @@ struct TextProcessState {
 
     bool in_square_brackets;
     bool in_data_directive;
-    std::size_t current_source_line;
+
     std::vector<UInt32> data;
-    std::map<std::string, LabelPair> labels;
-    std::vector<erfin::Inst> program_data;
-    std::vector<UnfilledLabelPair> unfulfilled_labels;
+    std::size_t current_source_line;
     SuffixAssumption assumptions;
+
+    // having some encapsulation, helps me to change the state in predictable
+    // ways rather than having to micro-manage everything >.>
+
+    void add_instruction(erfin::Inst inst, const std::string * label = nullptr);
+
+    void swap_program
+        (ProgramData & prog, std::vector<std::size_t> & inst_to_line);
+
+    void resolve_unfulfilled_labels();
+
+    StringCIter process_label(StringCIter beg, StringCIter end);
+
+private:
+    ProgramData program_data;
+    std::vector<std::size_t> m_inst_to_source_line;
+    std::vector<UnfilledLabelPair> unfulfilled_labels;
+    std::map<std::string, LabelPair> labels;
 };
 
 // high level textual processing
@@ -78,15 +96,11 @@ void remove_comments_from(std::string & str);
 
 std::vector<std::string> tokenize(const std::vector<std::string> & lines);
 
-void remove_blank_strings(std::vector<std::string> & strings);
-
 void convert_to_lower_case(std::string & str);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end);
 
 int get_file_size(const char * filename);
-
-void resolve_unfulfilled_labels(TextProcessState & state);
 
 } // end of <anonymous> namespace
 
@@ -117,16 +131,17 @@ void Assembler::assemble_from_string(const std::string & source) {
     std::vector<std::string> line_list = seperate_into_lines(source_copy);
     for (std::string & str : line_list)
         remove_comments_from(str);
-    remove_blank_strings(line_list);
+    // I need some means to sync line numbers with the source code
+    //remove_blank_strings(line_list);
     std::vector<std::string> tokens = tokenize(line_list);
 
     TextProcessState tpstate;
 
     process_text(tpstate, tokens.begin(), tokens.end());
-    resolve_unfulfilled_labels(tpstate);
+    tpstate.resolve_unfulfilled_labels();
     // only when a valid program has been assembled do we swap in the actual
     // instructions, as a throw may occur at any point of the text processing
-    m_program.swap(tpstate.program_data);
+    tpstate.swap_program(m_program, m_inst_to_line_map);
 }
 
 const Assembler::ProgramData & Assembler::program_data() const
@@ -211,8 +226,6 @@ Inst encode(OpCode op, Reg r0, Reg r1, double d) {
 
 namespace {
 
-bool is_line_blank(const std::string & line);
-
 std::vector<std::string> seperate_into_lines(const std::string & str) {
     std::vector<std::string> rv;
     auto old_pos = str.begin();
@@ -220,16 +233,11 @@ std::vector<std::string> seperate_into_lines(const std::string & str) {
     for (; itr != str.end(); ++itr) {
         switch (*itr) {
         case '\n': case '\r':
-            if (old_pos != str.end()) {
-                rv.push_back(std::string());
-                rv.back().insert(rv.back().begin(), old_pos, itr);
-                old_pos = str.end();
-            }
+            rv.push_back(std::string());
+            rv.back().insert(rv.back().begin(), old_pos, itr);
+            old_pos = itr + 1;
             break;
-        default:
-            if (old_pos == str.end())
-                old_pos = itr;
-            break;
+        default: break;
         }
     }
     if (itr != old_pos && old_pos != str.end()) {
@@ -259,10 +267,6 @@ void remove_comments_from(std::string & str) {
 }
 
 std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
-    for (const std::string & str : lines) {
-        if (str.empty())
-            assert(!"Lines must not be blank.");
-    }
     std::vector<std::string> tokens;
     for (const std::string & str : lines) {
         auto old_pos = str.end();
@@ -303,12 +307,6 @@ std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
     return tokens;
 }
 
-void remove_blank_strings(std::vector<std::string> & strings) {
-    auto itr = std::remove_if
-        (strings.begin(), strings.end(), is_line_blank);
-    strings.erase(itr, strings.end());
-}
-
 void convert_to_lower_case(std::string & str) {
     static_assert(int('a') > int('A'), "");
     for (char & c : str) {
@@ -329,20 +327,20 @@ LineToInstFunc get_line_processing_func
 StringCIter process_data
     (TextProcessState & state, StringCIter beg, StringCIter end);
 
-StringCIter process_label
-    (TextProcessState & state, StringCIter beg, StringCIter end);
-
 Error make_error(TextProcessState & state, const std::string & str);
+
+void skip_new_lines(TextProcessState & state, StringCIter * itr, StringCIter end);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     if (beg == end) return;
+    skip_new_lines(state, &beg, end);
     auto func = get_line_processing_func(state.assumptions, *beg);
     if (func) {
         process_text(state, ++func(state, beg, end), end);
     } else if (*beg == "data") {
         process_text(state, process_data(state, beg, end), end);
     } else if (*beg == ":") {
-        process_text(state, process_label(state, beg, end), end);
+        process_text(state, state.process_label(beg, end), end);
     } else {
         throw make_error(state,
                          " first token \"" + *beg +
@@ -356,43 +354,63 @@ int get_file_size(const char * filename) {
     return rc == 0 ? int(stat_buf.st_size) : -1;
 }
 
-void resolve_unfulfilled_labels(TextProcessState & state) {
-#   if 1//def MACRO_DEBUG
-    if (state.unfulfilled_labels.size() > 1) {
-        for (std::size_t i = 0; i != state.unfulfilled_labels.size() - 1; ++i) {
-            const auto & cont = state.unfulfilled_labels;
+void TextProcessState::add_instruction
+    (erfin::Inst inst, const std::string * label)
+{
+    m_inst_to_source_line.push_back(current_source_line);
+    if (label) {
+        // if you have a label, there must be space to insert the immd
+        // this is marked by leaving the 16 lsb equal to 0.
+        assert((inst & 0xFFFF) == 0);
+        unfulfilled_labels.emplace_back(program_data.size(), *label);
+    }
+    program_data.push_back(inst);
+}
+
+void TextProcessState::swap_program
+    (ProgramData & prog, std::vector<std::size_t> & inst_to_line)
+{
+    prog.swap(program_data);
+    inst_to_line.swap(m_inst_to_source_line);
+}
+
+void TextProcessState::resolve_unfulfilled_labels() {
+#   if 0//def MACRO_DEBUG
+    if (unfulfilled_labels.size() > 1) {
+        for (std::size_t i = 0; i != unfulfilled_labels.size() - 1; ++i) {
+            const auto & cont = unfulfilled_labels;
             assert(cont[i].program_location < cont[i + 1].program_location);
             (void)cont;
         }
     }
 #   endif
-    for (auto & unfl_pair : state.unfulfilled_labels) {
-        auto itr = state.labels.find(unfl_pair.label);
-        if (itr == state.labels.end()) {
+    for (UnfilledLabelPair & unfl_pair : unfulfilled_labels) {
+        auto itr = labels.find(unfl_pair.label);
+        if (itr == labels.end()) {
             throw Error("Label on line: ??, \"" + unfl_pair.label +
                         "\" not found anywhere in source code.");
         }
-        state.program_data[unfl_pair.program_location] |=
-            itr->second.program_location;
-    }
-    state.unfulfilled_labels.clear();
-}
+        const LabelPair & lbl_pair = itr->second;
+        std::cout << "resolving label \"" << unfl_pair.label << "\" on "
+                  << lbl_pair.source_line << " to integer value: "
+                  << lbl_pair.program_location << std::endl;
 
-bool is_line_blank(const std::string & line) {
-    for (char c : line) {
-        switch (c) {
-        case ' ': case '\t': case '\r': case '\n': break;
-        default : return false;
-        }
+        assert((program_data[unfl_pair.program_location] & 0xFFFF) == 0);
+        program_data[unfl_pair.program_location] |=
+            erfin::encode_immd(int(lbl_pair.program_location));
+        int i = erfin::decode_immd_as_int(program_data[unfl_pair.program_location]);
+        assert(i == int(lbl_pair.program_location));
+        int j = 0;
+        ++j;
     }
-    return true;
+    unfulfilled_labels.clear();
 }
 
 // <--------------------------- level 3 helpers ------------------------------>
 
 StringCIter process_binary
     (TextProcessState & state, StringCIter beg, StringCIter end);
-void skip_new_lines(TextProcessState & state, StringCIter * itr, StringCIter end);
+
 erfin::Reg string_to_register(const std::string & str);
 
 StringCIter process_data
@@ -424,28 +442,26 @@ StringCIter process_data
     return beg;
 }
 
-StringCIter process_label
-    (TextProcessState & state, StringCIter beg, StringCIter end)
-{
+StringCIter TextProcessState::process_label(StringCIter beg, StringCIter end) {
+    // forgive me I did not have any kind of access control enforcement
+    // (encapsulation) on this function before, therefore the odd "this"
     assert(*beg == ":");
+    using LabelPair = TextProcessState::LabelPair;
     ++beg;
-    skip_new_lines(state, &beg, end);
+    skip_new_lines(*this, &beg, end);
     if (beg == end) {
-        throw make_error(state, ": Code ends before a label was given for "
+        throw make_error(*this, ": Code ends before a label was given for "
                                 "the label directive.");
     }
-    skip_new_lines(state, &beg, end);
+    skip_new_lines(*this, &beg, end);
     if (string_to_register(*beg) != erfin::enum_types::REG_COUNT) {
-        throw make_error(state, ": register cannot be used as a label.");
+        throw make_error(*this, ": register cannot be used as a label.");
     }
-    auto itr = state.labels.find(*beg);
-    if (itr == state.labels.end()) {
-        state.labels[*beg] = TextProcessState::LabelPair {
-            state.program_data.size(),
-            state.current_source_line
-        };
+    auto itr = labels.find(*beg);
+    if (itr == labels.end()) {
+        labels[*beg] = LabelPair { program_data.size(), current_source_line };
     } else {
-        throw make_error(state, ": dupelicate label, previously defined "
+        throw make_error(*this, ": dupelicate label, previously defined "
                          "on line: " + std::to_string(itr->second.source_line));
     }
     return ++beg;
@@ -636,7 +652,7 @@ StringCIter process_binary
                          std::to_string(32 - bit_pos) + " bits.");
     }
     for (UInt32 datum : state.data) {
-        state.program_data.push_back(erfin::Inst(datum));
+        state.add_instruction(erfin::Inst(datum));
     }
     state.data.clear();
     return ++beg;
@@ -811,7 +827,7 @@ StringCIter make_not
     auto eol = get_eol(beg, end);
     switch (get_lines_param_form(beg, eol)) {
     case XPF_1R:
-        state.program_data.push_back(encode(NOT ,string_to_register(*beg)));
+        state.add_instruction(encode(NOT ,string_to_register(*beg)));
         ++state.current_source_line;
         return eol;
     default:
@@ -842,12 +858,12 @@ StringCIter make_rotate
         default:
             throw make_error(state, NON_INT_IMMD_MSG);
         }
-        state.program_data.push_back(encode(ROTATE, string_to_register(*beg),
-                                            u.i                             ));
+        state.add_instruction(encode(ROTATE, string_to_register(*beg), u.i));
+
         break;
     case XPF_2R:
-        state.program_data.push_back(encode(ROTATE, string_to_register(*beg),
-                                            string_to_register(*(beg + 1))));
+        state.add_instruction(encode(ROTATE, string_to_register(*beg),
+                                     string_to_register(*(beg + 1))   ));
         break;
     default: throw make_error(state, INVALID_PARAMS_MSG);
     }
@@ -886,7 +902,7 @@ StringCIter make_syscall
         throw make_error(state, ": fixed points are not system call names.");
     }
 
-    state.program_data.push_back(encode_op(SYSTEM_CALL) | encode_immd(u.i));
+    state.add_instruction(encode_op(SYSTEM_CALL) | encode_immd(u.i));
     ++state.current_source_line;
     return eol;
 }
@@ -927,7 +943,7 @@ StringCIter make_skip
     };
 
     UInt32 temp;
-    auto & program = state.program_data;
+
     switch (get_lines_param_form(beg, eol)) {
     case XPF_1R_LABEL:{
         const auto & label = *(beg + 1);
@@ -948,16 +964,16 @@ StringCIter make_skip
                                     "instructions.");
         }
         }
-        program.push_back(encode(SKIP, string_to_register(*beg), temp));
+        state.add_instruction(encode(SKIP, string_to_register(*beg), temp));
         break;
     case XPF_1R_INT:
         temp = string_to_int_immd(beg + 1);
-        program.push_back(encode(SKIP, string_to_register(*beg), temp));
+        state.add_instruction(encode(SKIP, string_to_register(*beg), temp));
         break;
     case XPF_1R_FP:
         throw make_error(state, ": a fixed point is not an appropiate mask.");
     case XPF_1R:
-        program.push_back(encode(SKIP, string_to_register(*beg)));
+        state.add_instruction(encode(SKIP, string_to_register(*beg)));
         break;
     default: throw make_error(state, ": unsupported parameters.");
     }
@@ -980,6 +996,7 @@ StringCIter make_set
     Inst inst;
     int i;
     double d;
+    const std::string * label = nullptr;
     switch (get_lines_param_form(beg, line_end)) {
     case XPF_2R:
         inst = encode(SET, itr2reg(beg), itr2reg(beg + 1));
@@ -993,7 +1010,7 @@ StringCIter make_set
         inst = encode(SET, itr2reg(beg), d);
         break;
     case XPF_1R_LABEL:
-        state.unfulfilled_labels.emplace_back(state.program_data.size(), *(beg + 1));
+        label = &*(beg + 1);
         inst = encode_op(SET) | encode_param_form(REG_IMMD) |
                encode_reg(itr2reg(beg));
         break;
@@ -1001,7 +1018,7 @@ StringCIter make_set
         throw make_error(state, ": set instruction may only have exactly "
                                  "two arguments.");
     }
-    state.program_data.push_back(inst);
+    state.add_instruction(inst, label);
     ++state.current_source_line;
     return line_end;
 }
@@ -1027,6 +1044,7 @@ StringCIter make_jump
     Inst inst = encode_op(enum_types::SET);
     union { int i; double d; } u;
     (void)convert_to_number_strict(beg, u.d, u.i);
+    const std::string * label = nullptr;
     switch (get_lines_param_form(beg, eol)) {
     case XPF_1R:
         inst |= encode_param_form(enum_types::REG_REG) |
@@ -1038,14 +1056,14 @@ StringCIter make_jump
         break;
     case XPF_LABEL:
         // not quite sure... will need to insert the offset...? maybe not
-        state.unfulfilled_labels.push_back({ state.program_data.size(), *beg });
+        label = &*beg;
         inst |= encode_reg(PC);
         break;
     default:
         throw make_error(state, ": jump only excepts one argument, the "
                                 "destination.");
     }
-    state.program_data.push_back(inst);
+    state.add_instruction(inst, label);
     ++state.current_source_line;
     return eol;
 }
@@ -1078,10 +1096,9 @@ erfin::ParamForm narrow_param_form(ExtendedParamForm xpf);
 
 UInt32 deal_with_int_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
+
 UInt32 deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
-UInt32 deal_with_label_immd
-    (StringCIter eol, erfin::OpCode, TextProcessState & state);
 
 NumericClassification convert_to_number_strict
     (StringCIter itr, double & d, int & i)
@@ -1175,14 +1192,6 @@ UInt32 deal_with_fp_immd
     return erfin::encode_immd(d);
 }
 
-UInt32 deal_with_label_immd
-    (StringCIter eol, erfin::OpCode, TextProcessState & state)
-{
-    state.unfulfilled_labels.emplace_back
-        (state.program_data.size(), *(eol - 1));
-    return 0;
-}
-
 StringCIter make_generic_arithemetic
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
@@ -1227,6 +1236,9 @@ StringCIter make_generic_arithemetic
     Reg a2, ans;
     Inst inst = 0;
     UInt32 (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
+    const std::string * label = nullptr;
+    auto do_nothing_for_label =
+        [](StringCIter, OpCode, TextProcessState &) -> UInt32 { return 0; };
     static constexpr const int IS_FP = 0, IS_INT = 1, INDETERMINATE = -1;
     int type_indentity = INDETERMINATE;
     switch (pf) {
@@ -1239,7 +1251,8 @@ StringCIter make_generic_arithemetic
         type_indentity = IS_INT;
         break;
     case XPF_2R_LABEL: case XPF_1R_LABEL:
-        handle_immd = deal_with_label_immd;
+        handle_immd = do_nothing_for_label;
+        label = &*(eol - 1);
         type_indentity = IS_INT;
         break;
     default: break;
@@ -1274,7 +1287,7 @@ StringCIter make_generic_arithemetic
     default: assert(false); break;
     }    
 
-    state.program_data.push_back(inst);
+    state.add_instruction(inst, label);
     ++state.current_source_line;
     return eol;
 }
@@ -1320,6 +1333,7 @@ StringCIter make_generic_memory_access
     }
 
     UInt32 immd = 0;
+    const std::string * label = nullptr;
     switch (pf) {
     case XPF_1R:
         if (op_code == SAVE)
@@ -1327,8 +1341,7 @@ StringCIter make_generic_memory_access
         addr_reg = reg;
         break;
     case XPF_1R_LABEL: case XPF_2R_LABEL:
-        state.unfulfilled_labels.emplace_back
-            (state.program_data.size(),*(beg + arg_count - 1));
+        label = &*(beg + arg_count - 1);
         break;
     case XPF_1R_INT: case XPF_2R_INT:
         immd = int_immd_only(state, beg + arg_count - 1);
@@ -1346,7 +1359,7 @@ StringCIter make_generic_memory_access
     } else {
         assert(false);
     }
-    state.program_data.push_back(inst);
+    state.add_instruction(inst, label);
     ++state.current_source_line;
     return eol;
 }
@@ -1434,7 +1447,7 @@ namespace {
                                   (erfin::Assembler::NO_ASSUMPTION, "");
 }  // end of anonymous namespace
 
-void erfin::Assembler::run_tests() {
+/* static */ void erfin::Assembler::run_tests() {
     using namespace erfin;
     (void)init_f;
     // with such a deep call tree, unit tests on each function on each level
@@ -1464,7 +1477,7 @@ void erfin::Assembler::run_tests() {
         ":", "hello", "and", "x", "y", "\n"
                     , "jump", "hello"
     };
-    (void)process_label(state, sample_label.begin(), sample_label.end());
+    (void)state.process_label(sample_label.begin(), sample_label.end());
     assert(state.labels.find("hello") != state.labels.end());
     }
     // test basic instructions
@@ -1538,11 +1551,11 @@ void erfin::Assembler::run_tests() {
     auto beg = sample_code.begin(), end = sample_code.end();
     beg = make_set     (state,   beg, end);
     beg = make_load    (state, ++beg, end);
-    beg = process_label(state, ++beg, end);
-    beg = process_label(state,   beg, end);
+    beg = state.process_label(++beg, end);
+    beg = state.process_label(  beg, end);
     beg = make_plus    (state,   beg, end);
     beg = make_minus   (state, ++beg, end);
-    resolve_unfulfilled_labels(state);
+    state.resolve_unfulfilled_labels();
     assert(state.program_data[0] == encode(OpCode::SET , Reg::REG_PC, 2));
     assert(state.program_data[1] == encode(OpCode::LOAD, Reg::REG_X , 2));
     }
