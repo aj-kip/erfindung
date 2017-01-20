@@ -23,6 +23,7 @@
 #define MACRO_HEADER_GUARD_ERFINDUNG_CPU_HPP
 
 #include "ErfiDefs.hpp"
+#include "ErfiError.hpp"
 
 #include <iosfwd>
 
@@ -51,6 +52,14 @@ private:
 
     void do_syscall(Inst inst, ErfiGpu & gpu);
     void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
+
+    //template <typename StringType>
+    ErfiError emit_error(Inst i) const {
+        throw ErfiError(m_registers[enum_types::REG_PC],
+                        std::move(disassemble_instruction(i)));
+    }
+
+    std::string disassemble_instruction(Inst i) const;
 
     RegisterPack m_registers;
     bool m_wait_called;

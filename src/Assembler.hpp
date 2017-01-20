@@ -23,6 +23,7 @@
 #define MACRO_HEADER_GUARD_ERFI_ASSEMBLER_HPP
 
 #include "ErfiDefs.hpp"
+#include "ErfiError.hpp"
 
 #include <vector>
 #include <limits>
@@ -47,16 +48,13 @@ public:
 
     using ProgramData = std::vector<Inst>;
 
+    static constexpr const std::size_t INVALID_LINE_NUMBER = std::size_t(-1);
+
     Assembler() {}
 
     void assemble_from_file(const char * file);
 
     void assemble_from_string(const std::string & source);
-
-    /** If non-empty there is an issue with compiling the program
-     * @return
-     */
-    const std::string & error_string() const;
 
     const ProgramData & program_data() const;
 
@@ -68,11 +66,13 @@ public:
 
     void swap(Assembler & asmr);
 
+    std::size_t translate_to_line_number
+        (std::size_t instruction_address) const noexcept;
+
     static void run_tests();
 
 private:
     ProgramData m_program;
-    std::string m_error_string;
 
     // debugging erfi program info
     std::vector<std::size_t> m_inst_to_line_map;

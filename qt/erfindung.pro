@@ -17,7 +17,8 @@ HEADERS += \
     ../src/ErfiGpu.hpp \
     ../src/ErfiDefs.hpp \
     ../src/Assembler.hpp \
-    ../src/ErfiCpu.hpp
+    ../src/ErfiCpu.hpp \
+    ../src/ErfiError.hpp
 
 TARGET = erfindung
 

@@ -45,89 +45,7 @@
 namespace {
     using Error = std::runtime_error;
 }
-#if 0
-namespace erfin {
 
-inline OpCode get_op_code(Inst inst) {
-    inst >>= 22;
-    return static_cast<OpCode>(inst & 0x3F);
-}
-
-// for ParamForm: REG_REG_IMMD
-
-// for ParamForm: REG_IMMD
-
-// for op: PLUS
-inline Inst make_plus(Reg r0, Reg r1, Reg r2) {
-    return encode_op(enum_types::PLUS) | encode_reg_reg_reg(r0, r1, r2);
-}
-// for op: MINUS
-inline Inst make_minus(Reg r0, Reg r1, Reg r2) {
-    return encode_op(enum_types::MINUS) | encode_reg_reg_reg(r0, r1, r2);
-}
-// for op: TIMES
-inline Inst make_times(Reg r0, Reg r1, Reg r2) {
-    return encode_op(enum_types::TIMES) | encode_reg_reg_reg(r0, r1, r2);
-}
-// for op: DIVIDE_MOD
-// for op: PLUS_IMMD,
-// for op: TIMES_IMMD,
-// for op: MINUS_IMMD, // if immediates can be negative
-// for op: DIV_REG_IMMD,
-// for op: DIV_IMMD_REG,
-// for op: AND
-inline Inst make_and(Reg r0, Reg r1, Reg r2) {
-    return encode_op(enum_types::AND) | encode_reg_reg_reg(r0, r1, r2);
-}
-// for op: NOT
-inline Inst make_not(Reg r0, Reg r1) {
-    return encode_op(enum_types::NOT) | encode_reg_reg(r0, r1);
-}
-// for op: XOR
-inline Inst make_xor(Reg r0, Reg r1, Reg r2) {
-    return encode_op(enum_types::XOR) | encode_reg_reg_reg(r0, r1, r2);
-}
-// for op: OR
-inline Inst make_or(Reg r0, Reg r1, Reg r2) {
-    return encode_op(enum_types::TIMES) | encode_reg_reg_reg(r0, r1, r2);
-}
-// for op: AND_IMMD, // two args, one answer
-// for op: XOR_IMMD, // two args, one answer
-// for op: OR_IMMD , // two args, one answer
-// for op: COMP    , // two args, one answer
-inline Inst make_comp(Reg r0, Reg r1, Reg r2) {
-    return encode_op(enum_types::COMP) | encode_reg_reg_reg(r0, r1, r2);
-}
-
-// for op: JUMP_REG,
-// for op: LOAD, // two regs, one immd
-// for op: SAVE, // two regs, one immd
-// for op: SET_INT , // one reg, one IMMD
-inline Inst make_set_int(Reg r0, UInt32 immd) {
-    return encode_op(enum_types::SET) | encode_reg(r0) | immd;
-}
-// for op: SET_FP96, // one reg, one IMMD
-
-// for op: SET_REG , // two regs
-inline Inst make_set_reg(Reg r0, Reg r1) {
-    return encode_op(enum_types::SET) | encode_reg_reg(r0, r1);
-}
-// for op: SYSTEM_READ // one reg, one immd
-
-
-ParamForm get_op_param(OpCode op);
-
-class Cpu {
-public:
-    void do_cycle(MemorySpace & mem);
-private:
-    RegisterPack m_regs;
-};
-
-void do_cycle(RegisterPack & regs, MemorySpace & mem, ErfiGpu & gpu);
-
-} // end of erfin
-#endif
 class CoutFormatSaver {
 public:
     CoutFormatSaver():
@@ -208,84 +126,7 @@ void test_string_processing() {
     erfin::Assembler asmr;
     asmr.assemble_from_string(input_text);
 }
-#if 0
-class StringToBitmapper {
-public:
-    using UInt32 = erfin::UInt32;
-    StringToBitmapper(const char * str);
-    UInt32 next_32b();
-    bool is_done() const;
-private:
-    const char * m_str;
-};
 
-StringToBitmapper::StringToBitmapper(const char * str): m_str(str) {}
-
-erfin::UInt32 StringToBitmapper::next_32b() {
-    UInt32 rv = 0;
-    for (int i = 0; i != 32 && m_str[i]; ++i) {
-        if (m_str[i] != ' ')
-            rv |= (1 << i);
-        ++m_str;
-    }
-    return rv;
-}
-
-bool StringToBitmapper::is_done() const { return !(*m_str); }
-
-std::vector<erfin::UInt32> make_demo_app() {
-    using namespace erfin;
-    const char * const ERFINDUNG_STRING =
-    "  XX XXXXXX  X XXXXXX   XX XXXXXX  XXXXXXXXXX               X                               "
-    "  X          X      XX  XX                                  X                               "
-    "  X          X X     X  XX             XX                   X                               "
-    "  X          X X     X  XX             XX                   X                               "
-    "  X          X X     X  XX             XX                   X                               "
-    "  X          X X     X  XX             XX                   X                               "
-    "  X          X X     X  XX             XX                   X                               "
-    "  XX XXXXXX  X          XX XXXX        XX                   X                               "
-    "  XX         X  XX      X              XX      X XXXX  XXXX X  X    X  X XXXX  XXXXXX       "
-    "  XX         X    XX    X              XX      X    X  X    X  X    X  X    X  X    X       "
-    "  XX         X      X   X              XX      X    X  X    X  X    X  X    X  X    X       "
-    "  XX         X       X  X              XX      X    X  X    X  X    X  X    X  X    X       "
-    "  XX         X       X  X                      X    X  X    X  X    X  X    X  X    X       "
-    "  XXXXXXXXX  X       X  X          XXXXXXXXXX  X    X  XXXXXX  XXXX X  X    X  XXXX X       "
-    "                                                                                    X       "
-    "                                                                                    X       "
-    "                                                                                    X       "
-    "                                                                                    X       "
-    "X X X X X X X X X X X X X X X XX  XX  XX  XX  XX  XXXXXXXXXXXXXXXXXXXXXXXX     XXXXXX       ";
-    const char * const WIDTH_STR =
-    "                                                                                            ";
-
-    (void)WIDTH_STR;
-    using namespace erfin::enum_types;
-    // jump past text storage
-    std::vector<erfin::Inst> app_mem;
-    app_mem.push_back(0); // reserved for jump-over
-    StringToBitmapper stbm(ERFINDUNG_STRING);
-    while (!stbm.is_done()) {
-        app_mem.push_back(stbm.next_32b());
-    }
-#   if 0
-    //app_mem[0] = make_jump(make_immd(app_mem.size(), IMMD_ABS_INT));
-    // load it!
-    app_mem.push_back(make_gset_index(REG_A));
-
-    /*app_mem.push_back(make_set_immd(REG_X, strlen(WIDTH_STR)));
-    app_mem.push_back(make_set_immd(REG_Y,
-        (strlen(ERFINDUNG_STRING)/strlen(WIDTH_STR), IMMD_ABS_INT)));*/
-    app_mem.push_back(make_gsize(REG_X, REG_Y));
-
-    app_mem.push_back(make_gload_addr(REG_A, 1));
-
-    // draw it!
-    app_mem.push_back(make_draw(REG_A, REG_B));
-    app_mem.push_back(make_draw_flush());
-#   endif
-    return app_mem;
-}
-#endif
 int main() {
     using namespace erfin;
 #   if 0
@@ -333,8 +174,17 @@ int main() {
         win.clear();
 
         cpu.clear_flags();
-        while (!cpu.wait_was_called())
-            cpu.run_cycle(memory, &gpu);
+
+        try {
+            while (!cpu.wait_was_called())
+                cpu.run_cycle(memory, &gpu);
+        } catch (ErfiError & exp) {
+            std::cerr << "A problem has occured on source line: "
+                      << asmr.translate_to_line_number(exp.program_location())
+                      << std::endl;
+            std::cerr << exp.what() << std::endl;
+            return ~0;
+        }
 
         DrawRectangle brush;
         brush.set_size(1.f, 1.f);

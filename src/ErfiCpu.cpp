@@ -32,8 +32,13 @@ namespace {
 
 using Error = std::runtime_error;
 using UInt32 = erfin::UInt32;
-
+#if 0
 Error make_illegal_inst_error(erfin::Inst inst);
+#endif
+
+const char * op_code_to_string(erfin::Inst i);
+const char * param_form_to_string(erfin::Inst i);
+
 UInt32 decode_immd_selectively(UInt32 inst);
 
 UInt32 plus (UInt32 x, UInt32 y) { return x + y; }
@@ -86,7 +91,7 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
     case OR : do_basic_arth_inst(inst, ori ); break;
     case NOT:
         if (decode_param_form(inst) != REG)
-            throw make_illegal_inst_error(inst);
+            throw emit_error(inst);
         (void)~reg0(inst);
         break;
     case ROTATE: do_rotate(inst); break;
@@ -100,15 +105,21 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         case REG_IMMD: if (reg0(inst) & UInt32(giimd(inst)))
                 ++m_registers[REG_PC];
             break;
-        default: throw make_illegal_inst_error(inst);
+        default: throw emit_error(inst);
         }
         break;
     case LOAD: switch (decode_param_form(inst)) {
         case REG_REG: reg0(inst) = memspace[reg1(inst)]; break;
-        case REG_REG_IMMD:
-            reg0(inst) = memspace[std::size_t(int(reg1(inst)) + giimd(inst))];
+        case REG_REG_IMMD: {
+            std::size_t address = std::size_t(int(reg1(inst)) + giimd(inst));
+            if (address > memspace.size()) {
+                throw Error("Cannot load from address outside of memory space.");
+            }
+            std::cout << "loaded from address: " << address << std::endl;
+            reg0(inst) = memspace[address];
             break;
-        default: throw make_illegal_inst_error(inst);
+        }
+        default: throw emit_error(inst);
         }
         break;
     case SAVE: switch (decode_param_form(inst)) {
@@ -119,24 +130,24 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         case REG_REG_IMMD:
             memspace[std::size_t(int(reg1(inst)) + giimd(inst))] = reg0(inst);
             break;
-        default: throw make_illegal_inst_error(inst);
+        default: throw emit_error(inst);
         }
         break;
     case SET: switch (decode_param_form(inst)) {
         case REG_REG_IMMD:
 #           ifdef MACRO_DEBUG
             if (decode_reg0(inst) == REG_PC && is_fp_inst(inst))
-                throw make_illegal_inst_error(inst);
+                throw emit_error(inst);
 #           endif
             reg0(inst) = reg1(inst) + decode_immd_selectively(inst);
             break;
         case REG_REG : reg0(inst) = reg1(inst); break;
         case REG_IMMD: reg0(inst) = decode_immd_selectively(inst); break;
-        default: throw make_illegal_inst_error(inst);
+        default: throw emit_error(inst);
         }
         break;
     case SYSTEM_CALL: if (gpu) do_syscall(inst, *gpu); break;
-    default: throw make_illegal_inst_error(inst);
+    default: throw emit_error(inst);
     };
 }
 
@@ -174,8 +185,6 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     load_program_into_memory(mem, asmr.program_data());
     for (int i = 0; i != 10; ++i)
         cpu.run_cycle(mem);
-
-
 }
 
 /* private */ UInt32 & ErfiCpu::reg0(Inst inst)
@@ -194,7 +203,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     switch (decode_param_form(inst)) {
     case REG_REG : rint = int(reg1(inst))   ; break;
     case REG_IMMD: rint = decode_immd_as_int(inst); break;
-    default: throw make_illegal_inst_error(inst);
+    default: throw emit_error(inst);
     }
     r0 = reg0(inst);
     if (rint < 0) { // left
@@ -220,7 +229,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     case WAIT_FOR_FRAME: m_wait_called = true; break;
     case READ_INPUT    : break;
     default:
-        throw make_illegal_inst_error(inst);
+        throw emit_error(inst);
     }
 }
 
@@ -235,23 +244,27 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     case REG_REG_IMMD:
         reg0(inst) = func(reg1(inst), decode_immd_selectively(inst));
         break;
-    default: throw make_illegal_inst_error(inst);
+    default: throw emit_error(inst);
     }
+}
+
+/* private */ std::string ErfiCpu::disassemble_instruction(Inst i) const {
+    return std::string("Unsupport instruction \"") +
+           op_code_to_string(i) + "\" with parameter form of: " +
+           param_form_to_string(i);
 }
 
 } // end of erfin namespace
 
 namespace {
 
-const char * op_code_to_string(erfin::Inst i);
-const char * param_form_to_string(erfin::Inst i);
-
+#if 0
 Error make_illegal_inst_error(erfin::Inst i) {
     return Error(std::string("Unsupport instruction \"") +
                  op_code_to_string(i) + "\" with parameter form of: " +
                  param_form_to_string(i));
 }
-
+#endif
 UInt32 decode_immd_selectively(UInt32 inst) {
     if (erfin::decode_is_fixed_point_flag_set(inst))
         return erfin::decode_immd_as_fp(inst);

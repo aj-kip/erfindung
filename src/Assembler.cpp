@@ -50,8 +50,7 @@ using SuffixAssumption = erfin::Assembler::SuffixAssumption;
 struct TextProcessState {
     friend void erfin::Assembler::run_tests();
     using ProgramData = erfin::Assembler::ProgramData;
-    TextProcessState(): in_square_brackets(false), in_data_directive(false),
-                        current_source_line(1),
+    TextProcessState(): current_source_line(1),
                         assumptions(erfin::Assembler::NO_ASSUMPTION) {}
     struct LabelPair { std::size_t program_location, source_line; };
     struct UnfilledLabelPair {
@@ -63,10 +62,6 @@ struct TextProcessState {
         std::string label;
     };
 
-    bool in_square_brackets;
-    bool in_data_directive;
-
-    std::vector<UInt32> data;
     std::size_t current_source_line;
     SuffixAssumption assumptions;
 
@@ -89,6 +84,13 @@ private:
     std::map<std::string, LabelPair> labels;
 };
 
+template <typename T, typename ... Types>
+bool equal_to_any(T, Types...) { return false; }
+
+template <typename T, typename Head, typename ... Types>
+bool equal_to_any(T primary, Head head, Types ... args)
+    { return primary == head || equal_to_any(primary, args...); }
+
 // high level textual processing
 std::vector<std::string> seperate_into_lines(const std::string & str);
 
@@ -107,7 +109,6 @@ int get_file_size(const char * filename);
 namespace erfin {
 
 void Assembler::assemble_from_file(const char * file) {
-    m_error_string = "";
     std::string file_contents;
     int fsize = get_file_size(file);
     if (fsize < 0) {
@@ -124,7 +125,6 @@ void Assembler::assemble_from_file(const char * file) {
 }
 
 void Assembler::assemble_from_string(const std::string & source) {
-    m_error_string = "";
     m_program.clear();
     std::string source_copy = source;
     convert_to_lower_case(source_copy);
@@ -146,6 +146,15 @@ void Assembler::assemble_from_string(const std::string & source) {
 
 const Assembler::ProgramData & Assembler::program_data() const
     { return m_program; }
+
+std::size_t Assembler::translate_to_line_number
+    (std::size_t instruction_address) const noexcept
+{
+    if (instruction_address >= m_inst_to_line_map.size()) {
+        return INVALID_LINE_NUMBER;
+    }
+    return m_inst_to_line_map[instruction_address];
+}
 
 UInt32 encode_immd(double d) {
     UInt32 fullwidth = to_fixed_point(d);
@@ -325,26 +334,29 @@ LineToInstFunc get_line_processing_func
     (SuffixAssumption assumptions, const std::string & fname);
 
 StringCIter process_data
-    (TextProcessState & state, StringCIter beg, StringCIter end);
+    (TextProcessState & state, StringCIter beg, StringCIter end,
+     std::vector<UInt32> * cached_cont = nullptr);
 
 Error make_error(TextProcessState & state, const std::string & str);
 
 void skip_new_lines(TextProcessState & state, StringCIter * itr, StringCIter end);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
-    if (beg == end) return;
-    skip_new_lines(state, &beg, end);
-    auto func = get_line_processing_func(state.assumptions, *beg);
-    if (func) {
-        process_text(state, ++func(state, beg, end), end);
-    } else if (*beg == "data") {
-        process_text(state, process_data(state, beg, end), end);
-    } else if (*beg == ":") {
-        process_text(state, state.process_label(beg, end), end);
-    } else {
-        throw make_error(state,
-                         " first token \"" + *beg +
-                         "\" is neither directive, label, or instruction.");
+    std::vector<UInt32> data_cache;
+    while (beg != end) {
+        skip_new_lines(state, &beg, end);
+        auto func = get_line_processing_func(state.assumptions, *beg);
+        if (func) {
+            beg = ++func(state, beg, end);
+        } else if (*beg == "data") {
+            beg = process_data(state, beg, end, &data_cache);
+        } else if (*beg == ":") {
+            beg = state.process_label(beg, end);
+        } else {
+            throw make_error(state,
+                             " first token \"" + *beg +
+                             "\" is neither directive, label, or instruction.");
+        }
     }
 }
 
@@ -409,13 +421,18 @@ void TextProcessState::resolve_unfulfilled_labels() {
 // <--------------------------- level 3 helpers ------------------------------>
 
 StringCIter process_binary
-    (TextProcessState & state, StringCIter beg, StringCIter end);
+    (TextProcessState & state, std::vector<UInt32> & data,
+     StringCIter beg, StringCIter end);
 
 erfin::Reg string_to_register(const std::string & str);
 
 StringCIter process_data
-    (TextProcessState & state, StringCIter beg, StringCIter end)
+    (TextProcessState & state, StringCIter beg, StringCIter end,
+     std::vector<UInt32> * cached_cont)
 {
+    std::vector<UInt32> non_cached_cont;
+    std::vector<UInt32> * data = cached_cont ? cached_cont : &non_cached_cont;
+
     if (beg == end) {
         throw make_error(state, ": stray data directive found at the end of "
                                 "the source code.");
@@ -437,7 +454,8 @@ StringCIter process_data
                                 "start of data.");
     }
     ++beg;
-    beg = process_func(state, beg, end);
+    assert(data);
+    beg = process_func(state, *data, beg, end);
     skip_new_lines(state, &beg, end);
     return beg;
 }
@@ -606,7 +624,8 @@ LineToInstFunc get_line_processing_func
 }
 
 StringCIter process_binary
-    (TextProcessState & state, StringCIter beg, StringCIter end)
+    (TextProcessState & state, std::vector<UInt32> & data,
+     StringCIter beg, StringCIter end)
 {
     static constexpr const char * const BAD_CHAR_MSG =
         ": binary encodings only handle five characters '1','x' for one and "
@@ -614,20 +633,21 @@ StringCIter process_binary
     static constexpr const char * const SOURCE_ENDED_TOO_SOON_MSG =
         ": source code ended without ending the current data sequence, is must "
         "be closed with a \"]\"";
+
     int bit_pos = 0;
-    assert(state.data.empty());
+    data.clear();
     while (*beg != "]") {
         for (char c : *beg) {
             switch (c) {
             case '_': case 'o': case '0': case '.': case '1': case 'x':
                 if (bit_pos == 0)
-                    state.data.push_back(0);
+                    data.push_back(0);
                 break;
             default: break;
             }
             switch (c) {
             case '1': case 'x':
-                state.data.back() |= (1 << (31 - bit_pos));
+                data.back() |= (1 << (31 - bit_pos));
                 MACRO_FALLTHROUGH;
             case '_': case 'o': case '0': case '.':
                 bit_pos = (bit_pos + 1) % 32;
@@ -651,10 +671,10 @@ StringCIter process_binary
                          "bits, this data sequence is off by " +
                          std::to_string(32 - bit_pos) + " bits.");
     }
-    for (UInt32 datum : state.data) {
+    for (UInt32 datum : data) {
         state.add_instruction(erfin::Inst(datum));
     }
-    state.data.clear();
+
     return ++beg;
 }
 
@@ -1091,9 +1111,9 @@ StringCIter assume_directive
 }
 
 // <--------------------------- level 6 helpers ------------------------------>
-
+#if 0
 erfin::ParamForm narrow_param_form(ExtendedParamForm xpf);
-
+#endif
 UInt32 deal_with_int_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
 
@@ -1316,49 +1336,48 @@ StringCIter make_generic_memory_access
 
     const auto eol = get_eol(++beg, end);
     assert(!get_line_processing_func(Assembler::NO_ASSUMPTION, *beg));
-    Reg reg;
-    Reg addr_reg = REG_COUNT;
-    int arg_count = 2;
+
+    const std::string * label = nullptr;
+    Inst inst = encode_op(op_code);
     const auto pf = get_lines_param_form(beg, eol);
+
+    if (pf == XPF_1R && op_code == SAVE)
+        throw make_error(state, ": deference psuedo instruction only available for loading.");
+
     switch (pf) {
-    case XPF_2R: case XPF_2R_INT: case XPF_2R_LABEL:
-        ++arg_count;
-        addr_reg = string_to_register(*(beg + 1));
-        MACRO_FALLTHROUGH;
-    case XPF_1R: case XPF_1R_INT: case XPF_1R_LABEL:
-        reg = string_to_register(*beg);
+    case XPF_3R: case XPF_1R: case XPF_2R: case XPF_2R_LABEL:
+        inst |= encode_param_form(REG_REG_REG);
         break;
-    default:
-        throw make_error(state, ": unsupported parameters.");
+    case XPF_1R_INT: case XPF_1R_LABEL:
+        inst |= encode_param_form(REG_IMMD);
+        break;
+    default: throw make_error(state, ": unsupported parameters.");
     }
 
-    UInt32 immd = 0;
-    const std::string * label = nullptr;
+    if (pf == XPF_2R_INT || pf == XPF_1R_INT) {
+        inst |= int_immd_only(state, eol - 1);
+    }
+
+    if (pf == XPF_1R_LABEL || pf == XPF_2R_LABEL)
+        label = &*(eol - 1);
+
+    Reg reg = string_to_register(*beg);
+    if (equal_to_any(pf, PF_3R, XPF_2R, XPF_2R_INT, XPF_2R_LABEL)) {
+        inst |= encode_reg_reg(reg, string_to_register(*(beg + 1)));
+    }
+    if (equal_to_any(pf, XPF_1R_INT, XPF_1R_LABEL)) {
+        inst |= encode_reg(reg);
+    }
+#   if 0
     switch (pf) {
-    case XPF_1R:
-        if (op_code == SAVE)
-            throw make_error(state, ": deference psuedo instruction only available for loading.");
-        addr_reg = reg;
+    case XPF_3R: case XPF_2R: case XPF_2R_INT: case XPF_2R_LABEL:
+        inst |= encode_reg_reg(reg, string_to_register(*(beg + 1)));
         break;
-    case XPF_1R_LABEL: case XPF_2R_LABEL:
-        label = &*(beg + arg_count - 1);
-        break;
-    case XPF_1R_INT: case XPF_2R_INT:
-        immd = int_immd_only(state, beg + arg_count - 1);
-        break;
-    case XPF_2R: break;
+    case XPF_1R: inst |= encode_reg_reg(reg, reg); break;
+    case XPF_1R_INT: case XPF_1R_LABEL: inst |= encode_reg(reg); break;
     default: assert(false); break;
     }
-
-    Inst inst = encode_param_form(narrow_param_form(pf)) | encode_op(op_code) | immd;
-    if (arg_count == 2) {
-        inst |= encode_reg(reg);
-    } else if (arg_count == 3) {
-        assert(addr_reg != REG_COUNT);
-        inst |= encode_reg_reg(reg, addr_reg);
-    } else {
-        assert(false);
-    }
+#   endif
     state.add_instruction(inst, label);
     ++state.current_source_line;
     return eol;
@@ -1419,7 +1438,7 @@ StringCIter get_eol(StringCIter beg, StringCIter end) {
 }
 
 // <--------------------------- level 7 helpers ------------------------------>
-
+#if 0
 erfin::ParamForm narrow_param_form(ExtendedParamForm xpf) {
     using namespace erfin::enum_types;
     switch (xpf) {
@@ -1439,7 +1458,7 @@ erfin::ParamForm narrow_param_form(ExtendedParamForm xpf) {
     assert(false);
     throw Error("Impossible branch?!");
 }
-
+#endif
 } // end of anonymous namespace
 
 namespace {
@@ -1459,7 +1478,8 @@ namespace {
         "____xxxx", "____x_xxx___x__x", "xx__x_x_", "\n",
         "]"
     };
-    (void)process_binary(state, sample_binary.begin(), sample_binary.end());
+    std::vector<UInt32> data;
+    (void)process_binary(state, data, sample_binary.begin(), sample_binary.end());
     assert(state.program_data.back() == 252414410);
     }
     {

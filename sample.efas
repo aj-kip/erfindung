@@ -35,13 +35,6 @@ ____________ ]
 : loop call clear
        call wait
 
-       load z sp -4
-       load b sp -3
-       load c sp -2
-       load x sp -1
-       load y sp 0
-       sub  sp 5
-
        call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
        add  x b x # x = b + x
        add  y c y
@@ -68,6 +61,13 @@ ____________ ]
        set  pc check_y
        sub  sp 1
        save a sp -2
+
+       load z sp -4
+       load b sp -3
+       load c sp -2
+       load x sp -1
+       load y sp 0
+       sub  sp 5
 
        set pc loop
        
