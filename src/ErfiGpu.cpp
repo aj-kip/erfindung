@@ -58,7 +58,7 @@ struct GpuContext {
 /* static */ const int ErfiGpu::SCREEN_HEIGHT = 240;
 
 ErfiGpu::ErfiGpu():
-    m_screen_width(SCREEN_WIDTH),
+    //m_screen_width(SCREEN_WIDTH),
     m_index_pos(0),
     m_cold(new GpuContext()),
     m_hot(new GpuContext())
@@ -240,14 +240,15 @@ std::size_t coord_to_index(erfin::UInt32 x, erfin::UInt32 y) {
 }
 
 void push_bits_to(std::vector<bool> & v, erfin::UInt8 bits) {
-    v.push_back(bits & 0x80);
-    v.push_back(bits & 0x40);
-    v.push_back(bits & 0x20);
-    v.push_back(bits & 0x10);
-    v.push_back(bits & 0x08);
-    v.push_back(bits & 0x04);
-    v.push_back(bits & 0x02);
-    v.push_back(bits & 0x01);
+    auto push_not_zero = [&v](erfin::UInt8 b) { v.push_back(b != 0); };
+    push_not_zero(bits & 0x80);
+    push_not_zero(bits & 0x40);
+    push_not_zero(bits & 0x20);
+    push_not_zero(bits & 0x10);
+    push_not_zero(bits & 0x08);
+    push_not_zero(bits & 0x04);
+    push_not_zero(bits & 0x02);
+    push_not_zero(bits & 0x01);
 }
 
 } // end of <anonymous> namespace

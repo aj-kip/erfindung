@@ -109,7 +109,8 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
         }
         break;
     case LOAD: switch (decode_param_form(inst)) {
-        case REG_REG: reg0(inst) = memspace[reg1(inst)]; break;
+        case REG_IMMD: reg0(inst) = memspace[std::size_t(giimd(inst))]; break;
+        case REG_REG : reg0(inst) = memspace[reg1(inst)]; break;
         case REG_REG_IMMD: {
             std::size_t address = std::size_t(int(reg1(inst)) + giimd(inst));
             if (address > memspace.size()) {

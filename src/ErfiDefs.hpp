@@ -305,10 +305,6 @@ using ParamForm    = enum_types::ParamForm_e;
 using RegisterPack = std::array<UInt32, 8>;
 using MemorySpace  = std::array<UInt32, 65536/sizeof(UInt32)>;
 
-template <typename T>
-T mag(T t) { return t < T(0) ? -t : t; }
-
-
 } // end of erfin namespace
 
 #endif

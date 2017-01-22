@@ -91,7 +91,7 @@ private:
     static void do_gpu_tasks(GpuContext & context, const UInt32 * memory);
 
     std::map<UInt32, SpriteMeta> m_sprite_map;
-    int m_screen_width;
+    //int m_screen_width;
     UInt32 m_index_pos;
     std::thread m_gfx_thread;
 

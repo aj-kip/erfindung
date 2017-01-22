@@ -21,6 +21,7 @@
 
 #include "Assembler.hpp"
 #include "FixedPointUtil.hpp"
+#include "StringUtil.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -347,7 +348,7 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
         skip_new_lines(state, &beg, end);
         auto func = get_line_processing_func(state.assumptions, *beg);
         if (func) {
-            beg = ++func(state, beg, end);
+            beg = func(state, beg, end);
         } else if (*beg == "data") {
             beg = process_data(state, beg, end, &data_cache);
         } else if (*beg == ":") {
@@ -399,7 +400,9 @@ void TextProcessState::resolve_unfulfilled_labels() {
     for (UnfilledLabelPair & unfl_pair : unfulfilled_labels) {
         auto itr = labels.find(unfl_pair.label);
         if (itr == labels.end()) {
-            throw Error("Label on line: ??, \"" + unfl_pair.label +
+            auto line_num = m_inst_to_source_line[unfl_pair.program_location];
+            throw Error("Label on line: " + std::to_string(line_num) +
+                        ", \"" + unfl_pair.label +
                         "\" not found anywhere in source code.");
         }
         const LabelPair & lbl_pair = itr->second;
@@ -710,6 +713,54 @@ enum ExtendedParamForm {
     XPF_INVALID
 };
 
+struct NumericParseInfo {
+    NumericClassification type;
+    union {
+        int    integer;
+        double floating_point;
+    };
+};
+
+NumericParseInfo parse_number(const std::string & str) {
+    NumericParseInfo rv;
+    // first try to find a prefex
+    auto str_has_at = [&str] (char c, std::size_t idx) -> bool {
+        if (str.size() >= idx) return false;
+        return tolower(str[idx]) == c;
+    };
+    bool neg = str_has_at('-', 0);
+    bool zero_prefixed = str_has_at('0', neg ? 1 : 0);
+    int  base;
+    auto beg = str.begin();
+    if (zero_prefixed && str_has_at('x', neg ? 2 : 1)) {
+        beg += (neg ? 3 : 2);
+        base = 16;
+    } else if (zero_prefixed && str_has_at('b', neg ? 2 : 1)) {
+        beg += (neg ? 3 : 2);
+        base = 2;
+    } else {
+        // reg decimal
+        beg += (neg ? 1 : 0);
+        base = 10;
+    }
+
+    bool has_dot = false;
+    for (char c : str) has_dot = (c == '.') ? true : has_dot; // n.-
+    if (has_dot) {
+        if (string_to_number(beg, str.end(), rv.floating_point, double(base))) {
+            rv.type = DECIMAL;
+            return rv;
+        }
+    } else {
+        if (string_to_number(beg, str.end(), rv.integer, base)) {
+            rv.type = INTEGER;
+            return rv;
+        }
+    }
+    rv.type = NOT_NUMERIC;
+    return rv;
+}
+
 class AssumptionResetRAII {
 public:
     using SuffixAssumption = erfin::Assembler::SuffixAssumption;
@@ -741,11 +792,12 @@ StringCIter make_generic_memory_access
 bool op_code_supports_fpoint_immd(erfin::Inst inst);
 
 bool op_code_supports_integer_immd(erfin::Inst inst);
-
+#if 0
 NumericClassification convert_to_number_strict
     (StringCIter itr, double & d, int & i);
-
-ExtendedParamForm get_lines_param_form(StringCIter beg, StringCIter end);
+#endif
+ExtendedParamForm get_lines_param_form
+    (StringCIter beg, StringCIter end, NumericParseInfo * npi = nullptr);
 
 // <----------------------- Arithmetic operations ---------------------------->
 
@@ -867,18 +919,16 @@ StringCIter make_rotate
         ": Rotate may only take a register target and another register or "
         "integer for number of places to rotate the data.";
     auto eol = get_eol(++beg, end);
-    union {
-        int i;
-        double d;
-    } u;
-    switch (get_lines_param_form(beg, eol)) {
+
+    NumericParseInfo npi;
+    switch (get_lines_param_form(beg, eol, &npi)) {
     case XPF_1R_INT:
-        switch (convert_to_number_strict(beg + 1, u.d, u.i)) {
+        switch (npi.type) {
         case INTEGER: break;
         default:
             throw make_error(state, NON_INT_IMMD_MSG);
         }
-        state.add_instruction(encode(ROTATE, string_to_register(*beg), u.i));
+        state.add_instruction(encode(ROTATE, string_to_register(*beg), npi.integer));
 
         break;
     case XPF_2R:
@@ -898,23 +948,23 @@ StringCIter make_syscall
     using namespace erfin::enum_types;
 
     auto eol = get_eol(++beg, end);
-    union { int i; double d; } u;
+    NumericParseInfo npi = parse_number(*beg);
 
-    switch (convert_to_number_strict(beg, u.d, u.i)) {
+    switch (npi.type) {
     case INTEGER: break;
     case NOT_NUMERIC:
         if (*beg == "upload")
-            u.i = UPLOAD_SPRITE;
+            npi.integer = UPLOAD_SPRITE;
         else if (*beg == "unload")
-            u.i = UNLOAD_SPRITE;
+            npi.integer = UNLOAD_SPRITE;
         else if (*beg == "clear")
-            u.i = SCREEN_CLEAR;
+            npi.integer = SCREEN_CLEAR;
         else if (*beg == "wait")
-            u.i = WAIT_FOR_FRAME;
+            npi.integer = WAIT_FOR_FRAME;
         else if (*beg == "read")
-            u.i = READ_INPUT;
+            npi.integer = READ_INPUT;
         else if (*beg == "draw")
-            u.i = DRAW_SPRITE;
+            npi.integer = DRAW_SPRITE;
         else
             throw make_error(state, ": \"" + *beg + "\" is not a system call.");
         break;
@@ -922,7 +972,7 @@ StringCIter make_syscall
         throw make_error(state, ": fixed points are not system call names.");
     }
 
-    state.add_instruction(encode_op(SYSTEM_CALL) | encode_immd(u.i));
+    state.add_instruction(encode_op(SYSTEM_CALL) | encode_immd(npi.integer));
     ++state.current_source_line;
     return eol;
 }
@@ -957,7 +1007,15 @@ StringCIter make_skip
 
     auto string_to_int_immd = [] (StringCIter itr) -> UInt32 {
         int i;
-        bool b = string_to_number<10>(&*itr->begin(), &*itr->end(), i);
+
+        static_assert(
+            (std::is_pointer<decltype(itr->begin())>::value ||
+             std::is_base_of<std::forward_iterator_tag,
+                             typename std::iterator_traits<decltype(itr->begin())>::iterator_category>::value
+            )
+            && std::is_arithmetic<decltype(i)>::value, "");
+
+        bool b = string_to_number(itr->begin(),itr->end(), i);
         assert(b); (void)b;
         return encode_immd(i);
     };
@@ -1014,20 +1072,17 @@ StringCIter make_set
     StringCIter line_end = get_eol(beg, end);
     auto itr2reg = [](StringCIter itr) { return string_to_register(*itr); };
     Inst inst;
-    int i;
-    double d;
+    NumericParseInfo npi;
     const std::string * label = nullptr;
-    switch (get_lines_param_form(beg, line_end)) {
+    switch (get_lines_param_form(beg, line_end, &npi)) {
     case XPF_2R:
         inst = encode(SET, itr2reg(beg), itr2reg(beg + 1));
         break;
     case XPF_1R_INT:
-        convert_to_number_strict(beg + 1, d, i);
-        inst = encode(SET, itr2reg(beg), i);
+        inst = encode(SET, itr2reg(beg), npi.integer);
         break;
     case XPF_1R_FP:
-        convert_to_number_strict(beg + 1, d, i);
-        inst = encode(SET, itr2reg(beg), d);
+        inst = encode(SET, itr2reg(beg), npi.floating_point);
         break;
     case XPF_1R_LABEL:
         label = &*(beg + 1);
@@ -1062,17 +1117,16 @@ StringCIter make_jump
     auto eol = get_eol(++beg, end);
     static constexpr const auto PC = enum_types::REG_PC;
     Inst inst = encode_op(enum_types::SET);
-    union { int i; double d; } u;
-    (void)convert_to_number_strict(beg, u.d, u.i);
+    NumericParseInfo npi;
     const std::string * label = nullptr;
-    switch (get_lines_param_form(beg, eol)) {
+    switch (get_lines_param_form(beg, eol, &npi)) {
     case XPF_1R:
         inst |= encode_param_form(enum_types::REG_REG) |
                 encode_reg_reg(PC, string_to_register(*beg));
         break;
     case XPF_INT:
         inst |= encode_param_form(enum_types::REG_IMMD) |
-                encode_reg(PC) | encode_immd(u.i);
+                encode_reg(PC) | encode_immd(npi.integer);
         break;
     case XPF_LABEL:
         // not quite sure... will need to insert the offset...? maybe not
@@ -1111,18 +1165,17 @@ StringCIter assume_directive
 }
 
 // <--------------------------- level 6 helpers ------------------------------>
-#if 0
-erfin::ParamForm narrow_param_form(ExtendedParamForm xpf);
-#endif
+
 UInt32 deal_with_int_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
 
 UInt32 deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
-
+#if 0
 NumericClassification convert_to_number_strict
     (StringCIter itr, double & d, int & i)
 {
+
     bool has_dec = false;
     for (char c : *itr) {
         if (c == '.') {
@@ -1131,27 +1184,28 @@ NumericClassification convert_to_number_strict
         }
     }
     if (has_dec) {
-        if (string_to_number<10>(&*itr->begin(), &*itr->end(), d))
+        if (string_to_number(itr->begin(), itr->end(), d))
             return DECIMAL;
     } else {
-        if (string_to_number<10>(&*itr->begin(), &*itr->end(), i))
+        if (string_to_number(itr->begin(), itr->end(), i))
             return INTEGER;
     }
     return NOT_NUMERIC;
 }
-
-ExtendedParamForm get_lines_param_form(StringCIter beg, StringCIter end) {
+#endif
+ExtendedParamForm get_lines_param_form
+    (StringCIter beg, StringCIter end, NumericParseInfo * npi)
+{
     using namespace erfin;
     using namespace erfin::enum_types;
+
     // this had better not be the begging of the line
     assert(!get_line_processing_func(erfin::Assembler::NO_ASSUMPTION, *beg));
 
     // naturally anyone can read this (oh god it's shit)
     const int arg_count = int(end - beg);
-    union {
-        int i;
-        double d;
-    } u;
+    NumericParseInfo local_npi;
+    if (!npi) npi = &local_npi;
     switch (arg_count) {
     case 4:
         for (int i = 0; i != 4; ++i)
@@ -1165,14 +1219,16 @@ ExtendedParamForm get_lines_param_form(StringCIter beg, StringCIter end) {
         if (string_to_register(*(beg + arg_count - 1)) != REG_COUNT) {
             return arg_count == 2 ? XPF_2R : XPF_3R;
         }
-        switch (convert_to_number_strict(beg + arg_count - 1, u.d, u.i)) {
+        *npi = parse_number(*(beg + arg_count - 1));
+        switch (npi->type) {
         case INTEGER: return arg_count == 2 ? XPF_1R_INT : XPF_2R_INT;
         case DECIMAL: return arg_count == 2 ? XPF_1R_FP  : XPF_2R_FP ;
         default: return arg_count == 2 ? XPF_1R_LABEL : XPF_2R_LABEL ;
         }
     case 1: // reg only
         if (string_to_register(*beg) != REG_COUNT) return XPF_1R;
-        switch (convert_to_number_strict(beg, u.d, u.i)) {
+        *npi = parse_number(*beg);
+        switch (npi->type) {
         case INTEGER: return XPF_INT;
         case DECIMAL: return XPF_FP;
         default     : return XPF_LABEL;
@@ -1196,7 +1252,7 @@ UInt32 deal_with_int_immd
     if (!op_code_supports_integer_immd(op_code))
         throw make_error(state, int_unsupported_msg);
     int i;
-    string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), i);
+    string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), i);
     return erfin::encode_immd(i);
 }
 
@@ -1208,7 +1264,7 @@ UInt32 deal_with_fp_immd
     if (!op_code_supports_fpoint_immd(op_code))
         throw make_error(state, fp_unsupported_msg);
     double d;
-    string_to_number<10>(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
+    string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
     return erfin::encode_immd(d);
 }
 
@@ -1305,7 +1361,7 @@ StringCIter make_generic_arithemetic
         inst = encode(op_code, a1, a1, handle_immd(eol, op_code, state));
         break;
     default: assert(false); break;
-    }    
+    }
 
     state.add_instruction(inst, label);
     ++state.current_source_line;
@@ -1323,12 +1379,11 @@ StringCIter make_generic_memory_access
     // too lazy to seperate function
     const auto int_immd_only =
     [] (TextProcessState & state, StringCIter itr) -> UInt32 {
-        int i;
-        double d;
-        switch (convert_to_number_strict(itr, d, i)) {
+        NumericParseInfo npi = parse_number(*itr);
+        switch (npi.type) {
         case DECIMAL:
             throw make_error(state, ": fixed points are not valid offsets.");
-        case INTEGER: return encode_immd(i);
+        case INTEGER: return encode_immd(npi.integer);
         default: assert(false); break;
         }
         throw Error("Impossible branch reached!");
@@ -1362,22 +1417,13 @@ StringCIter make_generic_memory_access
         label = &*(eol - 1);
 
     Reg reg = string_to_register(*beg);
-    if (equal_to_any(pf, PF_3R, XPF_2R, XPF_2R_INT, XPF_2R_LABEL)) {
+    if (equal_to_any(pf, XPF_3R, XPF_2R, XPF_2R_INT, XPF_2R_LABEL)) {
         inst |= encode_reg_reg(reg, string_to_register(*(beg + 1)));
     }
     if (equal_to_any(pf, XPF_1R_INT, XPF_1R_LABEL)) {
         inst |= encode_reg(reg);
     }
-#   if 0
-    switch (pf) {
-    case XPF_3R: case XPF_2R: case XPF_2R_INT: case XPF_2R_LABEL:
-        inst |= encode_reg_reg(reg, string_to_register(*(beg + 1)));
-        break;
-    case XPF_1R: inst |= encode_reg_reg(reg, reg); break;
-    case XPF_1R_INT: case XPF_1R_LABEL: inst |= encode_reg(reg); break;
-    default: assert(false); break;
-    }
-#   endif
+
     state.add_instruction(inst, label);
     ++state.current_source_line;
     return eol;
@@ -1406,26 +1452,28 @@ bool op_code_supports_integer_immd(erfin::Inst inst) {
 }
 
 erfin::Reg string_to_register(const std::string & str) {
+    using namespace erfin;
     using namespace erfin::enum_types;
+
     if (str.empty()) return REG_COUNT;
-    auto rv = REG_COUNT;
-    switch (str[0]) {
-    case 'x': rv = REG_X    ; break;
-    case 'y': rv = REG_Y    ; break;
-    case 'z': rv = REG_Z    ; break;
-    case 'a': rv = REG_A    ; break;
-    case 'b': rv = REG_B    ; break;
-    case 'c': rv = REG_C; break;
-    default: break;
-    }
-    if (rv != REG_COUNT)
-        return str.size() == 1 ? rv : REG_COUNT;
-    if (str == "sp") {
-        return REG_BP;
-    } else if (str == "pc") {
-        return REG_PC;
-    } else {
+
+    auto is1ch = [&str] (Reg r) { return (str.size() == 1) ? r : REG_COUNT; };
+    auto _2ndch = [&str] (Reg r, char c) {
+        if (str.size() == 2)
+            return str[1] == c ? r : REG_COUNT;
         return REG_COUNT;
+    };
+
+    switch (str[0]) {
+    case 'x': return is1ch(REG_X);
+    case 'y': return is1ch(REG_Y);
+    case 'z': return is1ch(REG_Z);
+    case 'a': return is1ch(REG_A);
+    case 'b': return is1ch(REG_B);
+    case 'c': return is1ch(REG_C);
+    case 's': return _2ndch(REG_BP, 'p');
+    case 'p': return _2ndch(REG_PC, 'c');
+    default: return REG_COUNT;
     }
 }
 
@@ -1438,27 +1486,7 @@ StringCIter get_eol(StringCIter beg, StringCIter end) {
 }
 
 // <--------------------------- level 7 helpers ------------------------------>
-#if 0
-erfin::ParamForm narrow_param_form(ExtendedParamForm xpf) {
-    using namespace erfin::enum_types;
-    switch (xpf) {
-    case XPF_4R: return REG_REG_REG_REG;
-    case XPF_3R: return REG_REG_REG;
-    case XPF_2R_INT: case XPF_2R_FP: case XPF_2R_LABEL:
-        return REG_REG_IMMD;
-    case XPF_2R: return REG_REG;
-    case XPF_1R_INT: case XPF_1R_FP: case XPF_1R_LABEL:
-        return REG_IMMD;
-    case XPF_1R: return REG;
-    case XPF_INVALID: return INVALID_PARAMS;
-    default:
-        throw Error("Attempted to convert a parameter form that is only "
-                    "available for psuedo-instructions.");
-    }
-    assert(false);
-    throw Error("Impossible branch?!");
-}
-#endif
+
 } // end of anonymous namespace
 
 namespace {

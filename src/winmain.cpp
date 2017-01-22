@@ -1,6 +1,6 @@
 /****************************************************************************
 
-    File: FixedPointUtil.hpp
+    File: winmain.cpp
     Author: Andrew Janke
     License: GPLv3
 
@@ -19,42 +19,31 @@
 
 *****************************************************************************/
 
-#ifndef MACRO_HEADER_GUARD_FIXED_POINT_UTIL_HPP
-#define MACRO_HEADER_GUARD_FIXED_POINT_UTIL_HPP
+#include <Windows.h>
 
-#include "ErfiDefs.hpp"
+#include <iostream>
 
-#include <type_traits>
+#include <cassert>
+#include <cstdio>
 
-namespace erfin {
+int main();
 
-template <typename T>
-typename std::enable_if<std::is_signed<T>::value, T>::type
-    mag(T t) { return t < T(0) ? -t : t; }
+int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+#   ifdef MACRO_DEBUG
+    AllocConsole();
+    FILE * so = nullptr;
+    FILE * se = nullptr;
+    freopen_s(&so, "CONOUT$", "w", stdout);
+    freopen_s(&se, "CONOUT$", "w", stderr);
+    assert(so);
+    assert(se);
+#   endif
+	int rv = main();
+#   ifdef MACRO_DEBUG
+    fclose(so);
+    fclose(se);
 
-UInt32 reverse_bits(UInt32 num);
-
-UInt32 fp_multiply(UInt32 a, UInt32 b);
-
-UInt32 fp_inverse(UInt32 a);
-
-UInt32 fp_divide(UInt32 a, UInt32 b);
-
-UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num);
-
-UInt32 fp_compare(UInt32 a, UInt32 b);
-
-UInt32 to_fixed_point(double fp);
-
-double fixed_point_to_double(UInt32 fp);
-#if 0
-class FixedPoint : public boost::dividable<FixedPoint> {
-public:
-
-private:
-    UInt32 m_rep;
-};
-#endif
-} // end of erfin namespace
-
-#endif
+    std::cin.get();
+#   endif
+	return rv;
+}

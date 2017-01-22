@@ -90,7 +90,7 @@ UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num) {
 
 UInt32 fp_compare(UInt32 a, UInt32 b) {
     using namespace erfin::enum_types;
-    auto is_neg = [] (UInt32 a) -> bool { return bool(a & 0xF0000000); };
+    auto is_neg = [] (UInt32 a) -> bool { return (a & 0xF0000000) != 0; };
     bool neg;
     if ((neg = is_neg(a)) == is_neg(b)) {
         if ((a & 0xFFFFFF00) == (b & 0xFFFFFF00))
@@ -117,13 +117,13 @@ UInt32 to_fixed_point(double fp) {
     fp = mag(fp);
     UInt32 high = static_cast<UInt32>(std::floor(fp)     );
     UInt32 low  = static_cast<UInt32>(std::round((fp - std::floor(fp))*65535.0));
-    assert(mag(low) <= 65535);
+    assert(low <= 65535);
     UInt32 rv = ((high & 0x7FFF) << 16) | (low);
-    return is_neg ? -rv : rv;
+    return is_neg ? 0xF0000000 | rv : rv;
 }
 
 double fixed_point_to_double(UInt32 fp) {
-    bool is_neg = fp & 0x80000000;
+    bool is_neg = (fp & 0x80000000) != 0;
     double sign = is_neg ? -1.0 : 1.0;
     UInt32 magi = is_neg ? ~fp : fp;
     return sign*static_cast<double>(magi) / 65536.0;

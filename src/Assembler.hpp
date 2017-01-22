@@ -27,11 +27,7 @@
 
 #include <vector>
 #include <limits>
-
-template <unsigned BASE = 10, typename CharType, typename RealType>
-typename std::enable_if<std::is_arithmetic<RealType>::value, bool>::
-type /* bool */ string_to_number
-    (const CharType * start, const CharType * end, RealType & out);
+#include <string>
 
 namespace erfin {
 
@@ -149,96 +145,11 @@ inline UInt32 decode_immd_as_fp(Inst inst) {
     return sign_part | significand;
 }
 
-inline bool decode_is_fixed_point_flag_set(UInt32 i) { return i & 0x80000000; }
+inline bool decode_is_fixed_point_flag_set(UInt32 i)
+    { return (i & 0x80000000) != 0; }
 
 const char * register_to_string(Reg r);
 
 } // end of erfin namespace
-
-template <unsigned BASE, typename CharType, typename RealType>
-typename std::enable_if<std::is_arithmetic<RealType>::value, bool>::
-type /* bool */ string_to_number
-    (const CharType * start, const CharType * end, RealType & out)
-{
-    static_assert(BASE <= 16, "Bases for this function can only go as high as 16");
-    static_assert(BASE >= 2 , "Smallest available base 2: binary");
-
-    static constexpr bool IS_SIGNED  = std::is_signed<RealType>::value;
-    static constexpr bool IS_INTEGER = !std::is_floating_point<RealType>::value;
-
-    const bool IS_NEGATIVE = (*start) == CharType('-');
-
-    // negative numbers cannot be parsed into an unsigned type
-    if (!IS_SIGNED && IS_NEGATIVE)
-        return false;
-
-    if (IS_NEGATIVE) ++start;
-
-    RealType working = RealType(0), multi = RealType(1);
-
-    // the adder is a one digit number that corresponds to a character
-    RealType adder = RealType(0);
-
-    bool found_dot = false;
-
-    // main digit reading loop, iterates characters in the selection in reverse
-    do {
-        --end;
-        switch (*end) {
-        case CharType('.'):
-            if (found_dot) return false;
-            found_dot = true;
-            if (IS_INTEGER) {
-                if (adder >= RealType(BASE)/RealType(2))
-                    working = RealType(1);
-                else
-                    working = RealType(0);
-            } else {
-                working /= multi;
-            }
-            adder = RealType(0);
-            multi = RealType(1);
-            continue;
-        case CharType('0'): case CharType('1'): case CharType('2'):
-        case CharType('3'): case CharType('4'): case CharType('5'):
-        case CharType('6'): case CharType('7'): case CharType('8'):
-        case CharType('9'):
-            adder = RealType(*end - CharType('0'));
-            break;
-        case CharType('a'): case CharType('b'): case CharType('c'):
-        case CharType('d'): case CharType('e'): case CharType('f'):
-            adder = RealType(*end - 'a' + 10);
-            break;
-        case CharType('A'): case CharType('B'): case CharType('C'):
-        case CharType('D'): case CharType('E'): case CharType('F'):
-            adder = RealType(*end - 'A' + 10);
-        default: return false;
-        }
-        if (adder >= RealType(BASE))
-            return false;
-        // detect overflow
-        RealType temp = working + adder*multi;
-        if (temp < working) {
-            // attempt a recovery... (edge case, min int)
-            const RealType MIN_INT = std::numeric_limits<RealType>::min();
-            if (IS_NEGATIVE && -working - adder*multi == MIN_INT) {
-                out = MIN_INT;
-                return true;
-            }
-            return false;
-        }
-        multi *= RealType(BASE);
-        working = temp;
-    }
-    while (end != start);
-
-    // we've produced a positive integer, so make the adjustment if needed
-    if (IS_NEGATIVE)
-        working *= RealType(-1);
-
-    // write to parameter
-    out = working;
-    return true;
-}
 
 #endif

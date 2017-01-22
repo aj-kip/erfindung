@@ -58,7 +58,7 @@ public:
     }
 
 private:
-    int old_precision;
+    decltype(std::cout.precision()) old_precision;
     std::ios::fmtflags old_flags;
 };
 
@@ -154,8 +154,9 @@ int main() {
     {
     sf::View view = win.getView();
     //view.zoom(0.999f);
-    view.setCenter(ErfiGpu::SCREEN_WIDTH/2, ErfiGpu::SCREEN_HEIGHT/2);
-    view.setSize(ErfiGpu::SCREEN_WIDTH, ErfiGpu::SCREEN_HEIGHT);
+    view.setCenter(float(ErfiGpu::SCREEN_WIDTH /2),
+                   float(ErfiGpu::SCREEN_HEIGHT/2));
+    view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
     win.setView(view);
     }
     while (win.isOpen()) {
