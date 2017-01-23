@@ -125,7 +125,7 @@ UInt32 to_fixed_point(double fp) {
 double fixed_point_to_double(UInt32 fp) {
     bool is_neg = (fp & 0x80000000) != 0;
     double sign = is_neg ? -1.0 : 1.0;
-    UInt32 magi = is_neg ? ~fp : fp;
+    UInt32 magi = is_neg ? (fp ^ 0x80000000) : fp;
     return sign*static_cast<double>(magi) / 65536.0;
 }
 

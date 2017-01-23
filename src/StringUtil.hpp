@@ -138,7 +138,7 @@ typename EnableStrToNum<IterType, RealType>::type
 
     // main digit reading loop, iterates characters in the selection in reverse
     do {
-        switch (*end--) {
+        switch (*--end) {
         case CharType('.'):
             if (found_dot) return false;
             found_dot = true;

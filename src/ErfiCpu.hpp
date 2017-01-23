@@ -53,10 +53,12 @@ private:
     void do_syscall(Inst inst, ErfiGpu & gpu);
     void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
 
-    //template <typename StringType>
-    ErfiError emit_error(Inst i) const {
-        throw ErfiError(m_registers[enum_types::REG_PC],
-                        std::move(disassemble_instruction(i)));
+    ErfiError emit_error(Inst i) const noexcept {
+        //               PC increment while the instruction is executing
+        //               so it will be one too great if an illegal instruction
+        //               is encountered
+        return ErfiError(m_registers[enum_types::REG_PC] - 1,
+                         std::move(disassemble_instruction(i)));
     }
 
     std::string disassemble_instruction(Inst i) const;

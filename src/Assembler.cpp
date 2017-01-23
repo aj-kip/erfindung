@@ -48,11 +48,13 @@ using UInt32 = erfin::UInt32;
 using Error = std::runtime_error;
 using SuffixAssumption = erfin::Assembler::SuffixAssumption;
 
-struct TextProcessState {
+class TextProcessState {
+public:
+    friend class StrWrapTextStateAttorney;
     friend void erfin::Assembler::run_tests();
     using ProgramData = erfin::Assembler::ProgramData;
-    TextProcessState(): current_source_line(1),
-                        assumptions(erfin::Assembler::NO_ASSUMPTION) {}
+    TextProcessState(): assumptions(erfin::Assembler::NO_ASSUMPTION),
+                        m_current_source_line(1) {}
     struct LabelPair { std::size_t program_location, source_line; };
     struct UnfilledLabelPair {
         UnfilledLabelPair(std::size_t i_, const std::string & s_):
@@ -63,7 +65,6 @@ struct TextProcessState {
         std::string label;
     };
 
-    std::size_t current_source_line;
     SuffixAssumption assumptions;
 
     // having some encapsulation, helps me to change the state in predictable
@@ -78,11 +79,21 @@ struct TextProcessState {
 
     StringCIter process_label(StringCIter beg, StringCIter end);
 
+    void handle_newlines(StringCIter * itr, StringCIter end_of_text);
+
+    Error make_error(const std::string & str) noexcept {
+        return Error("On line " + std::to_string(m_current_source_line) + str);
+    }
+
+    std::size_t current_source_line() const
+        { return m_current_source_line; }
+
 private:
-    ProgramData program_data;
+    std::size_t m_current_source_line;
+    ProgramData m_program_data;
     std::vector<std::size_t> m_inst_to_source_line;
-    std::vector<UnfilledLabelPair> unfulfilled_labels;
-    std::map<std::string, LabelPair> labels;
+    std::vector<UnfilledLabelPair> m_unfulfilled_labels;
+    std::map<std::string, LabelPair> m_labels;
 };
 
 template <typename T, typename ... Types>
@@ -338,14 +349,14 @@ StringCIter process_data
     (TextProcessState & state, StringCIter beg, StringCIter end,
      std::vector<UInt32> * cached_cont = nullptr);
 
-Error make_error(TextProcessState & state, const std::string & str);
-
-void skip_new_lines(TextProcessState & state, StringCIter * itr, StringCIter end);
-
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     std::vector<UInt32> data_cache;
     while (beg != end) {
-        skip_new_lines(state, &beg, end);
+        state.handle_newlines(&beg, end);
+        // each function should expect to start after a newline
+        // and a newline character is what is expected to be returned, expect
+        // for the special functions which are not gotten from
+        // get_line_processing_func
         auto func = get_line_processing_func(state.assumptions, *beg);
         if (func) {
             beg = func(state, beg, end);
@@ -354,10 +365,11 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
         } else if (*beg == ":") {
             beg = state.process_label(beg, end);
         } else {
-            throw make_error(state,
+            throw state.make_error(
                              " first token \"" + *beg +
                              "\" is neither directive, label, or instruction.");
         }
+
     }
 }
 
@@ -370,36 +382,27 @@ int get_file_size(const char * filename) {
 void TextProcessState::add_instruction
     (erfin::Inst inst, const std::string * label)
 {
-    m_inst_to_source_line.push_back(current_source_line);
+    m_inst_to_source_line.push_back(m_current_source_line);
     if (label) {
         // if you have a label, there must be space to insert the immd
         // this is marked by leaving the 16 lsb equal to 0.
         assert((inst & 0xFFFF) == 0);
-        unfulfilled_labels.emplace_back(program_data.size(), *label);
+        m_unfulfilled_labels.emplace_back(m_program_data.size(), *label);
     }
-    program_data.push_back(inst);
+    m_program_data.push_back(inst);
 }
 
 void TextProcessState::swap_program
     (ProgramData & prog, std::vector<std::size_t> & inst_to_line)
 {
-    prog.swap(program_data);
+    prog.swap(m_program_data);
     inst_to_line.swap(m_inst_to_source_line);
 }
 
 void TextProcessState::resolve_unfulfilled_labels() {
-#   if 0//def MACRO_DEBUG
-    if (unfulfilled_labels.size() > 1) {
-        for (std::size_t i = 0; i != unfulfilled_labels.size() - 1; ++i) {
-            const auto & cont = unfulfilled_labels;
-            assert(cont[i].program_location < cont[i + 1].program_location);
-            (void)cont;
-        }
-    }
-#   endif
-    for (UnfilledLabelPair & unfl_pair : unfulfilled_labels) {
-        auto itr = labels.find(unfl_pair.label);
-        if (itr == labels.end()) {
+    for (UnfilledLabelPair & unfl_pair : m_unfulfilled_labels) {
+        auto itr = m_labels.find(unfl_pair.label);
+        if (itr == m_labels.end()) {
             auto line_num = m_inst_to_source_line[unfl_pair.program_location];
             throw Error("Label on line: " + std::to_string(line_num) +
                         ", \"" + unfl_pair.label +
@@ -410,15 +413,15 @@ void TextProcessState::resolve_unfulfilled_labels() {
                   << lbl_pair.source_line << " to integer value: "
                   << lbl_pair.program_location << std::endl;
 
-        assert((program_data[unfl_pair.program_location] & 0xFFFF) == 0);
-        program_data[unfl_pair.program_location] |=
+        assert((m_program_data[unfl_pair.program_location] & 0xFFFF) == 0);
+        m_program_data[unfl_pair.program_location] |=
             erfin::encode_immd(int(lbl_pair.program_location));
-        int i = erfin::decode_immd_as_int(program_data[unfl_pair.program_location]);
+        int i = erfin::decode_immd_as_int(m_program_data[unfl_pair.program_location]);
         assert(i == int(lbl_pair.program_location));
         int j = 0;
         ++j;
     }
-    unfulfilled_labels.clear();
+    m_unfulfilled_labels.clear();
 }
 
 // <--------------------------- level 3 helpers ------------------------------>
@@ -437,8 +440,8 @@ StringCIter process_data
     std::vector<UInt32> * data = cached_cont ? cached_cont : &non_cached_cont;
 
     if (beg == end) {
-        throw make_error(state, ": stray data directive found at the end of "
-                                "the source code.");
+        throw state.make_error(": stray data directive found at the end of "
+                               "the source code.");
     }
     ++beg; // set over "data"
     auto process_func = process_binary;
@@ -446,20 +449,20 @@ StringCIter process_data
         if (*beg == "binary") {
             // default
         } else {
-            throw make_error(state, ": encoding scheme \"" + *beg + "\" not "
-                                    "recognized.");
+            throw state.make_error(": encoding scheme \"" + *beg + "\" not "
+                                   "recognized.");
         }
         ++beg;
     }
-    skip_new_lines(state, &beg, end);
+    state.handle_newlines(&beg, end);
     if (*beg != "[") {
-        throw make_error(state, ": expected square bracket to indicate the "
-                                "start of data.");
+        throw state.make_error(": expected square bracket to indicate the "
+                               "start of data.");
     }
     ++beg;
     assert(data);
     beg = process_func(state, *data, beg, end);
-    skip_new_lines(state, &beg, end);
+    state.handle_newlines(&beg, end);
     return beg;
 }
 
@@ -469,36 +472,32 @@ StringCIter TextProcessState::process_label(StringCIter beg, StringCIter end) {
     assert(*beg == ":");
     using LabelPair = TextProcessState::LabelPair;
     ++beg;
-    skip_new_lines(*this, &beg, end);
+    handle_newlines(&beg, end);
     if (beg == end) {
-        throw make_error(*this, ": Code ends before a label was given for "
-                                "the label directive.");
+        throw make_error(": Code ends before a label was given for the label "
+                         "directive.");
     }
-    skip_new_lines(*this, &beg, end);
+    handle_newlines(&beg, end);
     if (string_to_register(*beg) != erfin::enum_types::REG_COUNT) {
-        throw make_error(*this, ": register cannot be used as a label.");
+        throw make_error(": register cannot be used as a label.");
     }
-    auto itr = labels.find(*beg);
-    if (itr == labels.end()) {
-        labels[*beg] = LabelPair { program_data.size(), current_source_line };
+    auto itr = m_labels.find(*beg);
+    if (itr == m_labels.end()) {
+        m_labels[*beg] = LabelPair { m_program_data.size(), m_current_source_line };
     } else {
-        throw make_error(*this, ": dupelicate label, previously defined "
-                         "on line: " + std::to_string(itr->second.source_line));
+        throw make_error(": dupelicate label, previously defined on line: " +
+                         std::to_string(itr->second.source_line));
     }
     return ++beg;
 }
 
-void skip_new_lines(TextProcessState & state, StringCIter * itr, StringCIter end) {
-    if (*itr == end) return;
+void TextProcessState::handle_newlines(StringCIter * itr, StringCIter end_of_text) {
+    if (*itr == end_of_text) return;
     while (**itr == "\n") {
         ++(*itr);
-        ++state.current_source_line;
-        if (*itr == end) return;
+        ++m_current_source_line;
+        if (*itr == end_of_text) return;
     }
-}
-
-Error make_error(TextProcessState & state, const std::string & str) {
-    return Error("On line " + std::to_string(state.current_source_line) + str);
 }
 
 // <--------------------------- level 4 helpers ------------------------------>
@@ -657,22 +656,30 @@ StringCIter process_binary
                 break;
             // characters we should never see
             case '\n':
-                ++state.current_source_line;
-                if (beg->size() == 1) break;
+                // only valid newline token has one character
+                if (beg->size() == 1) {
+                    state.handle_newlines(&beg, end);
+                    // beg will start at the newline, however this will mean
+                    // that we'll skip the first token!
+                    // to fix this error AND make sure that multiple newlines
+                    // are passed like normal, I use a crude "off-by-one" fix
+                    --beg;
+                    break;
+                }
                 MACRO_FALLTHROUGH;
             case '[': case ']': assert(false); break;
-            default: throw make_error(state, BAD_CHAR_MSG);
+            default: throw state.make_error(BAD_CHAR_MSG);
             }
         }
         ++beg;
         if (beg == end) {
-            throw make_error(state, SOURCE_ENDED_TOO_SOON_MSG);
+            throw state.make_error(SOURCE_ENDED_TOO_SOON_MSG);
         }
     }
     if (bit_pos != 0) {
-        throw make_error(state, ": all data sequences must be divisible by 32 "
-                         "bits, this data sequence is off by " +
-                         std::to_string(32 - bit_pos) + " bits.");
+        throw state.make_error(": all data sequences must be divisible by 32 "
+                               "bits, this data sequence is off by " +
+                               std::to_string(32 - bit_pos) + " bits.");
     }
     for (UInt32 datum : data) {
         state.add_instruction(erfin::Inst(datum));
@@ -721,45 +728,9 @@ struct NumericParseInfo {
     };
 };
 
-NumericParseInfo parse_number(const std::string & str) {
-    NumericParseInfo rv;
-    // first try to find a prefex
-    auto str_has_at = [&str] (char c, std::size_t idx) -> bool {
-        if (str.size() >= idx) return false;
-        return tolower(str[idx]) == c;
-    };
-    bool neg = str_has_at('-', 0);
-    bool zero_prefixed = str_has_at('0', neg ? 1 : 0);
-    int  base;
-    auto beg = str.begin();
-    if (zero_prefixed && str_has_at('x', neg ? 2 : 1)) {
-        beg += (neg ? 3 : 2);
-        base = 16;
-    } else if (zero_prefixed && str_has_at('b', neg ? 2 : 1)) {
-        beg += (neg ? 3 : 2);
-        base = 2;
-    } else {
-        // reg decimal
-        beg += (neg ? 1 : 0);
-        base = 10;
-    }
+const char * extended_param_form_to_string(ExtendedParamForm xpf);
 
-    bool has_dot = false;
-    for (char c : str) has_dot = (c == '.') ? true : has_dot; // n.-
-    if (has_dot) {
-        if (string_to_number(beg, str.end(), rv.floating_point, double(base))) {
-            rv.type = DECIMAL;
-            return rv;
-        }
-    } else {
-        if (string_to_number(beg, str.end(), rv.integer, base)) {
-            rv.type = INTEGER;
-            return rv;
-        }
-    }
-    rv.type = NOT_NUMERIC;
-    return rv;
-}
+NumericParseInfo parse_number(const std::string & str);
 
 class AssumptionResetRAII {
 public:
@@ -792,10 +763,7 @@ StringCIter make_generic_memory_access
 bool op_code_supports_fpoint_immd(erfin::Inst inst);
 
 bool op_code_supports_integer_immd(erfin::Inst inst);
-#if 0
-NumericClassification convert_to_number_strict
-    (StringCIter itr, double & d, int & i);
-#endif
+
 ExtendedParamForm get_lines_param_form
     (StringCIter beg, StringCIter end, NumericParseInfo * npi = nullptr);
 
@@ -869,10 +837,71 @@ StringCIter make_modulus_int
 StringCIter make_modulus_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
+    (void)extended_param_form_to_string;
     AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
     return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
 }
 
+const char * extended_param_form_to_string(ExtendedParamForm xpf) {
+    switch (xpf) {
+    case XPF_4R      : return "4 registers"                         ;
+    case XPF_3R      : return "3 registers"                         ;
+    case XPF_2R_INT  : return "2 registers and an integer"          ;
+    case XPF_2R_FP   : return "2 registers and a fixed point number";
+    case XPF_2R_LABEL: return "2 registers and a label"             ;
+    case XPF_2R      : return "2 registers"                         ;
+    case XPF_1R_INT  : return "a register and an integer"           ;
+    case XPF_1R_FP   : return "a register and a fixed point number" ;
+    case XPF_1R_LABEL: return "a register and a label"              ;
+    case XPF_1R      : return "a register"                          ;
+    case XPF_INT     : return "an integer"                          ;
+    case XPF_FP      : return "a fixed point number"                ;
+    case XPF_LABEL   : return "a label"                             ;
+    case XPF_INVALID : return "an invalid parameter form"           ;
+    default: std::cerr << "This should be unreachable!" << std::endl;
+             std::terminate();
+    }
+}
+
+NumericParseInfo parse_number(const std::string & str) {
+    NumericParseInfo rv;
+    // first try to find a prefex
+    auto str_has_at = [&str] (char c, std::size_t idx) -> bool {
+        if (str.size() >= idx) return false;
+        return tolower(str[idx]) == c;
+    };
+    bool neg = str_has_at('-', 0);
+    bool zero_prefixed = str_has_at('0', neg ? 1 : 0);
+    int  base;
+    auto beg = str.begin();
+    if (zero_prefixed && str_has_at('x', neg ? 2 : 1)) {
+        beg += (neg ? 3 : 2);
+        base = 16;
+    } else if (zero_prefixed && str_has_at('b', neg ? 2 : 1)) {
+        beg += (neg ? 3 : 2);
+        base = 2;
+    } else {
+        // reg decimal
+        beg += (neg ? 1 : 0);
+        base = 10;
+    }
+
+    bool has_dot = false;
+    for (char c : str) has_dot = (c == '.') ? true : has_dot; // n.-
+    if (has_dot) {
+        if (string_to_number(beg, str.end(), rv.floating_point, double(base))) {
+            rv.type = DECIMAL;
+            return rv;
+        }
+    } else {
+        if (string_to_number(beg, str.end(), rv.integer, base)) {
+            rv.type = INTEGER;
+            return rv;
+        }
+    }
+    rv.type = NOT_NUMERIC;
+    return rv;
+}
 
 // <------------------------- Logic operations ------------------------------->
 
@@ -900,11 +929,10 @@ StringCIter make_not
     switch (get_lines_param_form(beg, eol)) {
     case XPF_1R:
         state.add_instruction(encode(NOT ,string_to_register(*beg)));
-        ++state.current_source_line;
         return eol;
     default:
-        throw make_error(state, ": exactly one argument permitted for logical "
-                                "complement (not).");
+        throw state.make_error(": exactly one argument permitted for logical "
+                               "complement (not).");
     }
 }
 
@@ -926,7 +954,7 @@ StringCIter make_rotate
         switch (npi.type) {
         case INTEGER: break;
         default:
-            throw make_error(state, NON_INT_IMMD_MSG);
+            throw state.make_error(NON_INT_IMMD_MSG);
         }
         state.add_instruction(encode(ROTATE, string_to_register(*beg), npi.integer));
 
@@ -935,9 +963,8 @@ StringCIter make_rotate
         state.add_instruction(encode(ROTATE, string_to_register(*beg),
                                      string_to_register(*(beg + 1))   ));
         break;
-    default: throw make_error(state, INVALID_PARAMS_MSG);
+    default: throw state.make_error(INVALID_PARAMS_MSG);
     }
-    ++state.current_source_line;
     return eol;
 }
 
@@ -966,14 +993,13 @@ StringCIter make_syscall
         else if (*beg == "draw")
             npi.integer = DRAW_SPRITE;
         else
-            throw make_error(state, ": \"" + *beg + "\" is not a system call.");
+            throw state.make_error(": \"" + *beg + "\" is not a system call.");
         break;
     default:
-        throw make_error(state, ": fixed points are not system call names.");
+        throw state.make_error(": fixed points are not system call names.");
     }
 
     state.add_instruction(encode_op(SYSTEM_CALL) | encode_immd(npi.integer));
-    ++state.current_source_line;
     return eol;
 }
 
@@ -1038,8 +1064,8 @@ StringCIter make_skip
         } else if (label == "!=") {
             temp = COMP_NOT_EQUAL_MASK;
         } else {
-            throw make_error(state, ": labels are not support with skip "
-                                    "instructions.");
+            throw state.make_error(": labels are not support with skip "
+                                   "instructions.");
         }
         }
         state.add_instruction(encode(SKIP, string_to_register(*beg), temp));
@@ -1049,14 +1075,13 @@ StringCIter make_skip
         state.add_instruction(encode(SKIP, string_to_register(*beg), temp));
         break;
     case XPF_1R_FP:
-        throw make_error(state, ": a fixed point is not an appropiate mask.");
+        throw state.make_error(": a fixed point is not an appropiate mask.");
     case XPF_1R:
         state.add_instruction(encode(SKIP, string_to_register(*beg)));
         break;
-    default: throw make_error(state, ": unsupported parameters.");
+    default: throw state.make_error(": unsupported parameters.");
     }
 
-    ++state.current_source_line;
     return eol;
 }
 
@@ -1090,11 +1115,10 @@ StringCIter make_set
                encode_reg(itr2reg(beg));
         break;
     default:
-        throw make_error(state, ": set instruction may only have exactly "
-                                 "two arguments.");
+        throw state.make_error(": set instruction may only have exactly "
+                                "two arguments.");
     }
     state.add_instruction(inst, label);
-    ++state.current_source_line;
     return line_end;
 }
 
@@ -1134,11 +1158,10 @@ StringCIter make_jump
         inst |= encode_reg(PC);
         break;
     default:
-        throw make_error(state, ": jump only excepts one argument, the "
-                                "destination.");
+        throw state.make_error(": jump only excepts one argument, the "
+                               "destination.");
     }
     state.add_instruction(inst, label);
-    ++state.current_source_line;
     return eol;
 }
 
@@ -1155,12 +1178,11 @@ StringCIter assume_directive
         } else if (*beg == "none" || *beg == "nothing") {
             state.assumptions = Assembler::USING_FP;
         } else {
-            make_error(state, ": \"" + *beg + "\" is not a valid assumption.");
+            state.make_error(": \"" + *beg + "\" is not a valid assumption.");
         }
     } else {
-        throw make_error(state, ": too many assumptions/arguments.");
+        throw state.make_error(": too many assumptions/arguments.");
     }
-    ++state.current_source_line;
     return eol;
 }
 
@@ -1171,28 +1193,7 @@ UInt32 deal_with_int_immd
 
 UInt32 deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
-#if 0
-NumericClassification convert_to_number_strict
-    (StringCIter itr, double & d, int & i)
-{
 
-    bool has_dec = false;
-    for (char c : *itr) {
-        if (c == '.') {
-            has_dec = true;
-            break;
-        }
-    }
-    if (has_dec) {
-        if (string_to_number(itr->begin(), itr->end(), d))
-            return DECIMAL;
-    } else {
-        if (string_to_number(itr->begin(), itr->end(), i))
-            return INTEGER;
-    }
-    return NOT_NUMERIC;
-}
-#endif
 ExtendedParamForm get_lines_param_form
     (StringCIter beg, StringCIter end, NumericParseInfo * npi)
 {
@@ -1250,7 +1251,7 @@ UInt32 deal_with_int_immd
     static constexpr const char * const int_unsupported_msg =
         ": instruction does not support integer immediates.";
     if (!op_code_supports_integer_immd(op_code))
-        throw make_error(state, int_unsupported_msg);
+        throw state.make_error(int_unsupported_msg);
     int i;
     string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), i);
     return erfin::encode_immd(i);
@@ -1262,7 +1263,7 @@ UInt32 deal_with_fp_immd
     static constexpr const char * const fp_unsupported_msg =
         ": instruction does not support fixed point immediates.";
     if (!op_code_supports_fpoint_immd(op_code))
-        throw make_error(state, fp_unsupported_msg);
+        throw state.make_error(fp_unsupported_msg);
     double d;
     string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
     return erfin::encode_immd(d);
@@ -1298,7 +1299,7 @@ StringCIter make_generic_arithemetic
     case XPF_3R   : case XPF_2R:
         // perfect chance to check if assumptions are ok!
         if (assumption_matters && state.assumptions == Assembler::NO_ASSUMPTION) {
-            throw make_error(state, fp_int_ambig_msg);
+            throw state.make_error(fp_int_ambig_msg);
         }
         MACRO_FALLTHROUGH;
     case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
@@ -1306,7 +1307,7 @@ StringCIter make_generic_arithemetic
         a1 = string_to_register(*beg);
         break;
     default:
-        throw make_error(state, ": unsupported parameters.");
+        throw state.make_error(": unsupported parameters.");
     }
 
     Reg a2, ans;
@@ -1364,7 +1365,6 @@ StringCIter make_generic_arithemetic
     }
 
     state.add_instruction(inst, label);
-    ++state.current_source_line;
     return eol;
 }
 
@@ -1376,56 +1376,48 @@ StringCIter make_generic_memory_access
     using namespace erfin::enum_types;
     assert(op_code == LOAD || op_code == SAVE);
 
-    // too lazy to seperate function
-    const auto int_immd_only =
-    [] (TextProcessState & state, StringCIter itr) -> UInt32 {
-        NumericParseInfo npi = parse_number(*itr);
-        switch (npi.type) {
-        case DECIMAL:
-            throw make_error(state, ": fixed points are not valid offsets.");
-        case INTEGER: return encode_immd(npi.integer);
-        default: assert(false); break;
-        }
-        throw Error("Impossible branch reached!");
-    };
-
     const auto eol = get_eol(++beg, end);
     assert(!get_line_processing_func(Assembler::NO_ASSUMPTION, *beg));
 
     const std::string * label = nullptr;
     Inst inst = encode_op(op_code);
-    const auto pf = get_lines_param_form(beg, eol);
+    NumericParseInfo npi;
+    const auto pf = get_lines_param_form(beg, eol, &npi);
 
-    if (pf == XPF_1R && op_code == SAVE)
-        throw make_error(state, ": deference psuedo instruction only available for loading.");
+    if (equal_to_any(pf, XPF_1R, XPF_1R_INT, XPF_1R_LABEL) && op_code == SAVE)
+        throw state.make_error(": deference psuedo instruction only available for loading.");
 
     switch (pf) {
-    case XPF_3R: case XPF_1R: case XPF_2R: case XPF_2R_LABEL:
-        inst |= encode_param_form(REG_REG_REG);
+    case XPF_1R: case XPF_2R:
+        inst |= encode_param_form(REG_REG);
+        break;
+    case XPF_2R_LABEL: case XPF_2R_INT:
+        inst |= encode_param_form(REG_REG_IMMD);
         break;
     case XPF_1R_INT: case XPF_1R_LABEL:
-        inst |= encode_param_form(REG_IMMD);
+        inst |= encode_param_form(REG_REG_IMMD);
         break;
-    default: throw make_error(state, ": unsupported parameters.");
+    default:
+        throw state.make_error(std::string(": <op_code> does not support ") +
+                               extended_param_form_to_string(pf) +
+                               " for parameters.");
     }
 
-    if (pf == XPF_2R_INT || pf == XPF_1R_INT) {
-        inst |= int_immd_only(state, eol - 1);
-    }
+    if (equal_to_any(pf, XPF_2R_INT, XPF_1R_INT))
+        inst |= npi.integer;
 
-    if (pf == XPF_1R_LABEL || pf == XPF_2R_LABEL)
+    if (equal_to_any(pf, XPF_1R_LABEL, XPF_2R_LABEL))
         label = &*(eol - 1);
 
     Reg reg = string_to_register(*beg);
     if (equal_to_any(pf, XPF_3R, XPF_2R, XPF_2R_INT, XPF_2R_LABEL)) {
         inst |= encode_reg_reg(reg, string_to_register(*(beg + 1)));
     }
-    if (equal_to_any(pf, XPF_1R_INT, XPF_1R_LABEL)) {
-        inst |= encode_reg(reg);
+    if (equal_to_any(pf, XPF_1R, XPF_1R_INT, XPF_1R_LABEL)) {
+        inst |= encode_reg_reg(reg, reg);
     }
 
     state.add_instruction(inst, label);
-    ++state.current_source_line;
     return eol;
 }
 
@@ -1508,7 +1500,7 @@ namespace {
     };
     std::vector<UInt32> data;
     (void)process_binary(state, data, sample_binary.begin(), sample_binary.end());
-    assert(state.program_data.back() == 252414410);
+    assert(state.m_program_data.back() == 252414410);
     }
     {
     const std::vector<std::string> sample_data = {
@@ -1518,7 +1510,7 @@ namespace {
         "]"
     };
     (void)process_data(state, sample_data.begin(), sample_data.end());
-    assert(state.program_data.back() == 264902409);
+    assert(state.m_program_data.back() == 264902409);
     }
     {
     const std::vector<std::string> sample_label = {
@@ -1526,7 +1518,7 @@ namespace {
                     , "jump", "hello"
     };
     (void)state.process_label(sample_label.begin(), sample_label.end());
-    assert(state.labels.find("hello") != state.labels.end());
+    assert(state.m_labels.find("hello") != state.m_labels.end());
     }
     // test basic instructions
     {
@@ -1541,7 +1533,7 @@ namespace {
     beg = make_set(state, ++beg, end);
     beg = make_set(state, ++beg, end);
     auto supposed_top = encode(OpCode::SET, Reg::REG_X, 12.34);
-    assert(state.program_data.back() == supposed_top);
+    assert(state.m_program_data.back() == supposed_top);
     (void)supposed_top;
     }
     // test that "generic arthemetic" instruction maker functions
@@ -1556,7 +1548,7 @@ namespace {
     beg = make_and  (state, ++beg, end);
     beg = make_minus(state, ++beg, end);
     const auto supposed_top = encode(OpCode::MINUS, Reg::REG_X, Reg::REG_X, 123);
-    assert(supposed_top == state.program_data.back());
+    assert(supposed_top == state.m_program_data.back());
     (void)supposed_top;
     }
     {
@@ -1572,7 +1564,7 @@ namespace {
     beg = make_save(state, ++beg, end);
     beg = make_save(state, ++beg, end);
     const auto supposed_top = encode(OpCode::SAVE, Reg::REG_Y, Reg::REG_A, 4);
-    assert(supposed_top == state.program_data.back());
+    assert(supposed_top == state.m_program_data.back());
     (void)supposed_top;
     }
     {
@@ -1584,7 +1576,7 @@ namespace {
     beg = make_cmp (state,   beg, end);
     beg = make_skip(state, ++beg, end);
     const auto supposed_top = encode(OpCode::SKIP, Reg::REG_X, 1);
-    assert(supposed_top == state.program_data.back());
+    assert(supposed_top == state.m_program_data.back());
     (void)supposed_top;
     }
     // test unfulfilled labels!
@@ -1604,8 +1596,8 @@ namespace {
     beg = make_plus    (state,   beg, end);
     beg = make_minus   (state, ++beg, end);
     state.resolve_unfulfilled_labels();
-    assert(state.program_data[0] == encode(OpCode::SET , Reg::REG_PC, 2));
-    assert(state.program_data[1] == encode(OpCode::LOAD, Reg::REG_X , 2));
+    assert(state.m_program_data[0] == encode(OpCode::SET , Reg::REG_PC, 2));
+    assert(state.m_program_data[1] == encode(OpCode::LOAD, Reg::REG_X , 2));
     }
     {
     constexpr const char * const sample_code =

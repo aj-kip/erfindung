@@ -134,6 +134,8 @@ int main() {
     ErfiCpu::run_tests();
     test_string_processing();
 #   endif
+    test_fp_multiply(-1.0, 1.0);
+
     Assembler asmr;
     ErfiCpu cpu;
     ErfiGpu gpu;
