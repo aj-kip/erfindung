@@ -45,34 +45,8 @@ using TextProcessState = erfin::TextProcessState;
 using UInt32 = erfin::UInt32;
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end);
-#if 0
-erfin::Reg string_to_register(const std::string & str) {
-    using namespace erfin;
-    using namespace erfin::enum_types;
 
-    if (str.empty()) return REG_COUNT;
-
-    auto is1ch = [&str] (Reg r) { return (str.size() == 1) ? r : REG_COUNT; };
-    auto _2ndch = [&str] (Reg r, char c) {
-        if (str.size() == 2)
-            return str[1] == c ? r : REG_COUNT;
-        return REG_COUNT;
-    };
-
-    switch (str[0]) {
-    case 'x': return is1ch(REG_X);
-    case 'y': return is1ch(REG_Y);
-    case 'z': return is1ch(REG_Z);
-    case 'a': return is1ch(REG_A);
-    case 'b': return is1ch(REG_B);
-    case 'c': return is1ch(REG_C);
-    case 's': return _2ndch(REG_BP, 'p');
-    case 'p': return _2ndch(REG_PC, 'c');
-    default: return REG_COUNT;
-    }
-}
-#endif
-}
+} // end of <anonymous> namespace
 
 namespace erfin {
 
@@ -176,16 +150,7 @@ std::size_t TextProcessState::current_source_line() const
 } // end of erfin namespace
 
 namespace {
-#if 0
-using LineToInstFunc = StringCIter(*)(TextProcessState & state,
-                                      StringCIter beg, StringCIter end);
 
-// each of the line to inst functions should have uniform requirements
-LineToInstFunc get_line_processing_func
-    (SuffixAssumption assumptions, const std::string & fname);
-
-erfin::Reg string_to_register(const std::string & str);
-#endif
 StringCIter process_data
     (TextProcessState & state, StringCIter beg, StringCIter end,
      std::vector<UInt32> * cached_cont = nullptr);

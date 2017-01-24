@@ -177,72 +177,6 @@ LineToInstFunc get_line_processing_function
 namespace {
 
 // <-------------------------------------------------------------------------->
-#if 0
-// helpers -> different source file?!
-enum TokenClassification {
-    REGISTER,
-    IMMEDIATE_INTEGER,
-    IMMEDIATE_FIXED_POINT,
-    INVALID_CLASS
-};
-
-enum NumericClassification {
-    INTEGER,
-    DECIMAL,
-    NOT_NUMERIC
-};
-
-enum ExtendedParamForm {
-    XPF_4R,
-    XPF_3R,
-    XPF_2R_INT,
-    XPF_2R_FP,
-    XPF_2R_LABEL,
-    XPF_2R,
-    XPF_1R_INT,
-    XPF_1R_FP,
-    XPF_1R_LABEL,
-    XPF_1R,
-    XPF_INT,
-    XPF_FP,
-    XPF_LABEL,
-    XPF_INVALID
-};
-
-struct NumericParseInfo {
-    NumericClassification type;
-    union {
-        int    integer;
-        double floating_point;
-    };
-};
-
-const char * extended_param_form_to_string(ExtendedParamForm xpf);
-
-NumericParseInfo parse_number(const std::string & str);
-
-class AssumptionResetRAII {
-public:
-    using SuffixAssumption = erfin::Assembler::SuffixAssumption;
-
-    AssumptionResetRAII(TextProcessState & state, SuffixAssumption new_assumpt):
-        m_state(&state),
-        m_old_assumpt(state.assumptions)
-    { state.assumptions = new_assumpt; }
-
-    ~AssumptionResetRAII() { m_state->assumptions = m_old_assumpt; }
-
-private:
-    TextProcessState * m_state;
-    const SuffixAssumption m_old_assumpt;
-};
-
-StringCIter get_eol(StringCIter beg, StringCIter end);
-
-ExtendedParamForm get_lines_param_form
-    (StringCIter beg, StringCIter end, NumericParseInfo * npi = nullptr);
-#endif
-// <-------------------------------------------------------------------------->
 
 bool op_code_supports_fpoint_immd(erfin::Inst inst);
 
@@ -461,14 +395,6 @@ StringCIter make_skip
 
     auto string_to_int_immd = [] (StringCIter itr) -> UInt32 {
         int i;
-
-        static_assert(
-            (std::is_pointer<decltype(itr->begin())>::value ||
-             std::is_base_of<std::forward_iterator_tag,
-                             typename std::iterator_traits<decltype(itr->begin())>::iterator_category>::value
-            )
-            && std::is_arithmetic<decltype(i)>::value, "");
-
         bool b = string_to_number(itr->begin(),itr->end(), i);
         assert(b); (void)b;
         return encode_immd(i);
@@ -835,106 +761,6 @@ UInt32 deal_with_fp_immd
     string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
     return erfin::encode_immd(d);
 }
-
-#if 0
-// these helpers -> different source file?!
-const char * extended_param_form_to_string(ExtendedParamForm xpf) {
-    switch (xpf) {
-    case XPF_4R      : return "4 registers"                         ;
-    case XPF_3R      : return "3 registers"                         ;
-    case XPF_2R_INT  : return "2 registers and an integer"          ;
-    case XPF_2R_FP   : return "2 registers and a fixed point number";
-    case XPF_2R_LABEL: return "2 registers and a label"             ;
-    case XPF_2R      : return "2 registers"                         ;
-    case XPF_1R_INT  : return "a register and an integer"           ;
-    case XPF_1R_FP   : return "a register and a fixed point number" ;
-    case XPF_1R_LABEL: return "a register and a label"              ;
-    case XPF_1R      : return "a register"                          ;
-    case XPF_INT     : return "an integer"                          ;
-    case XPF_FP      : return "a fixed point number"                ;
-    case XPF_LABEL   : return "a label"                             ;
-    case XPF_INVALID : return "an invalid parameter form"           ;
-    default: std::cerr << "This should be unreachable!" << std::endl;
-             std::terminate();
-    }
-}
-
-NumericParseInfo parse_number(const std::string & str) {
-    NumericParseInfo rv;
-    // first try to find a prefex
-    auto str_has_at = [&str] (char c, std::size_t idx) -> bool {
-        if (str.size() >= idx) return false;
-        return tolower(str[idx]) == c;
-    };
-    bool neg = str_has_at('-', 0);
-    bool zero_prefixed = str_has_at('0', neg ? 1 : 0);
-    int  base;
-    auto beg = str.begin();
-    if (zero_prefixed && str_has_at('x', neg ? 2 : 1)) {
-        beg += (neg ? 3 : 2);
-        base = 16;
-    } else if (zero_prefixed && str_has_at('b', neg ? 2 : 1)) {
-        beg += (neg ? 3 : 2);
-        base = 2;
-    } else {
-        // reg decimal
-        beg += (neg ? 1 : 0);
-        base = 10;
-    }
-
-    bool has_dot = false;
-    for (char c : str) has_dot = (c == '.') ? true : has_dot; // n.-
-    if (has_dot) {
-        if (string_to_number(beg, str.end(), rv.floating_point, double(base))) {
-            rv.type = DECIMAL;
-            return rv;
-        }
-    } else {
-        if (string_to_number(beg, str.end(), rv.integer, base)) {
-            rv.type = INTEGER;
-            return rv;
-        }
-    }
-    rv.type = NOT_NUMERIC;
-    return rv;
-}
-
-// --- DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE
-erfin::Reg string_to_register(const std::string & str) {
-    using namespace erfin;
-    using namespace erfin::enum_types;
-
-    if (str.empty()) return REG_COUNT;
-
-    auto is1ch = [&str] (Reg r) { return (str.size() == 1) ? r : REG_COUNT; };
-    auto _2ndch = [&str] (Reg r, char c) {
-        if (str.size() == 2)
-            return str[1] == c ? r : REG_COUNT;
-        return REG_COUNT;
-    };
-
-    switch (str[0]) {
-    case 'x': return is1ch(REG_X);
-    case 'y': return is1ch(REG_Y);
-    case 'z': return is1ch(REG_Z);
-    case 'a': return is1ch(REG_A);
-    case 'b': return is1ch(REG_B);
-    case 'c': return is1ch(REG_C);
-    case 's': return _2ndch(REG_BP, 'p');
-    case 'p': return _2ndch(REG_PC, 'c');
-    default: return REG_COUNT;
-    }
-}
-// --- DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE DUPE
-
-StringCIter get_eol(StringCIter beg, StringCIter end) {
-    while (*beg != "\n") {
-        ++beg;
-        if (beg == end) break;
-    }
-    return beg;
-}
-#endif
 
 // <-------------------------------------------------------------------------->
 
