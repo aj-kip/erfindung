@@ -9,7 +9,10 @@ SOURCES += \
     ../src/ErfiGpu.cpp \
     ../src/Assembler.cpp \
     ../src/ErfiCpu.cpp  \
-    ../src/FixedPointUtil.cpp
+    ../src/FixedPointUtil.cpp \
+    ../src/AssemblerPrivate/TextProcessState.cpp \
+    ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \
+    ../src/AssemblerPrivate/LineParsingHelpers.cpp
     
 HEADERS += \
     ../src/DrawRectangle.hpp \
@@ -19,7 +22,11 @@ HEADERS += \
     ../src/Assembler.hpp \
     ../src/ErfiCpu.hpp \
     ../src/ErfiError.hpp \
-    ../src/StringUtil.hpp
+    ../src/StringUtil.hpp \
+    ../src/AssemblerPrivate/TextProcessState.hpp \
+    ../src/AssemblerPrivate/GetLineProcessingFunction.hpp \
+    ../src/AssemblerPrivate/LineParsingHelpers.hpp \
+    ../src/AssemblerPrivate/CommonDefinitions.hpp
 
 TARGET = erfindung
 

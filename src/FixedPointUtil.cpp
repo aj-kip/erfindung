@@ -119,14 +119,14 @@ UInt32 to_fixed_point(double fp) {
     UInt32 low  = static_cast<UInt32>(std::round((fp - std::floor(fp))*65535.0));
     assert(low <= 65535);
     UInt32 rv = ((high & 0x7FFF) << 16) | (low);
-    return is_neg ? 0xF0000000 | rv : rv;
+    return is_neg ? 0x80000000 | rv : rv;
 }
 
 double fixed_point_to_double(UInt32 fp) {
     bool is_neg = (fp & 0x80000000) != 0;
     double sign = is_neg ? -1.0 : 1.0;
     UInt32 magi = is_neg ? (fp ^ 0x80000000) : fp;
-    return sign*static_cast<double>(magi) / 65536.0;
+    return sign*double(magi) / 65536.0;
 }
 
 } // end of erfin namespace

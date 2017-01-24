@@ -20,6 +20,7 @@
 *****************************************************************************/
 
 #include "Assembler.hpp"
+#include "AssemblerPrivate/TextProcessState.hpp"
 #include "FixedPointUtil.hpp"
 #include "StringUtil.hpp"
 
@@ -47,7 +48,8 @@ using StringCIter = std::vector<std::string>::const_iterator;
 using UInt32 = erfin::UInt32;
 using Error = std::runtime_error;
 using SuffixAssumption = erfin::Assembler::SuffixAssumption;
-
+using TextProcessState = erfin::TextProcessState;
+#if 0 // TPS
 class TextProcessState {
 public:
     friend class StrWrapTextStateAttorney;
@@ -72,7 +74,7 @@ public:
 
     void add_instruction(erfin::Inst inst, const std::string * label = nullptr);
 
-    void swap_program
+    void move_program
         (ProgramData & prog, std::vector<std::size_t> & inst_to_line);
 
     void resolve_unfulfilled_labels();
@@ -95,14 +97,15 @@ private:
     std::vector<UnfilledLabelPair> m_unfulfilled_labels;
     std::map<std::string, LabelPair> m_labels;
 };
-
+#endif
+#if 0
 template <typename T, typename ... Types>
 bool equal_to_any(T, Types...) { return false; }
 
 template <typename T, typename Head, typename ... Types>
 bool equal_to_any(T primary, Head head, Types ... args)
     { return primary == head || equal_to_any(primary, args...); }
-
+#endif
 // high level textual processing
 std::vector<std::string> seperate_into_lines(const std::string & str);
 
@@ -111,9 +114,9 @@ void remove_comments_from(std::string & str);
 std::vector<std::string> tokenize(const std::vector<std::string> & lines);
 
 void convert_to_lower_case(std::string & str);
-
+#if 0
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end);
-
+#endif
 int get_file_size(const char * filename);
 
 } // end of <anonymous> namespace
@@ -149,11 +152,11 @@ void Assembler::assemble_from_string(const std::string & source) {
 
     TextProcessState tpstate;
 
-    process_text(tpstate, tokens.begin(), tokens.end());
-    tpstate.resolve_unfulfilled_labels();
+    tpstate.process_tokens(tokens.begin(), tokens.end());
+    //process_text(tpstate, tokens.begin(), tokens.end());
     // only when a valid program has been assembled do we swap in the actual
     // instructions, as a throw may occur at any point of the text processing
-    tpstate.swap_program(m_program, m_inst_to_line_map);
+    tpstate.move_program(m_program, m_inst_to_line_map);
 }
 
 const Assembler::ProgramData & Assembler::program_data() const
@@ -225,21 +228,29 @@ Inst encode(OpCode op, Reg r0, Reg r1, UInt32 i) {
            encode_op(op) | encode_reg_reg(r0, r1) | i;
 }
 
+namespace with_int {
+
 Inst encode(OpCode op, Reg r0, int i) {
-    return encode(op, r0, encode_immd(i));
+    return ::erfin::encode(op, r0, encode_immd(i));
 }
 
 Inst encode(OpCode op, Reg r0, Reg r1, int i) {
-    return encode(op, r0, r1, encode_immd(i));
+    return ::erfin::encode(op, r0, r1, encode_immd(i));
 }
 
+} // end of with_int namespace
+
+namespace with_fp {
+
 Inst encode(OpCode op, Reg r0, double d) {
-    return encode(op, r0, encode_immd(d));
+    return ::erfin::encode(op, r0, encode_immd(d));
 }
 
 Inst encode(OpCode op, Reg r0, Reg r1, double d) {
-    return encode(op, r0, r1, encode_immd(d));
+    return ::erfin::encode(op, r0, r1, encode_immd(d));
 }
+
+} // end of with_fp namespace
 
 } // end of erfin namespace
 
@@ -337,7 +348,7 @@ void convert_to_lower_case(std::string & str) {
 }
 
 // <---------------------------- level 2 helpers ----------------------------->
-
+#if 0
 using LineToInstFunc = StringCIter(*)(TextProcessState & state,
                                       StringCIter beg, StringCIter end);
 
@@ -345,12 +356,17 @@ using LineToInstFunc = StringCIter(*)(TextProcessState & state,
 LineToInstFunc get_line_processing_func
     (SuffixAssumption assumptions, const std::string & fname);
 
+erfin::Reg string_to_register(const std::string & str);
+
 StringCIter process_data
     (TextProcessState & state, StringCIter beg, StringCIter end,
      std::vector<UInt32> * cached_cont = nullptr);
 
 void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
     std::vector<UInt32> data_cache;
+    // :TODO: another thing I should be checking here is if the single line
+    // processing functions are infact processing only one line and no more
+    // the way to do this is to check that the rv did not pass any newlines
     while (beg != end) {
         state.handle_newlines(&beg, end);
         // each function should expect to start after a newline
@@ -369,16 +385,15 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
                              " first token \"" + *beg +
                              "\" is neither directive, label, or instruction.");
         }
-
     }
 }
-
+#endif
 int get_file_size(const char * filename) {
     struct stat stat_buf;
     int rc = stat(filename, &stat_buf);
     return rc == 0 ? int(stat_buf.st_size) : -1;
 }
-
+#if 0 // TPS
 void TextProcessState::add_instruction
     (erfin::Inst inst, const std::string * label)
 {
@@ -392,11 +407,18 @@ void TextProcessState::add_instruction
     m_program_data.push_back(inst);
 }
 
-void TextProcessState::swap_program
+void TextProcessState::move_program
     (ProgramData & prog, std::vector<std::size_t> & inst_to_line)
 {
+    resolve_unfulfilled_labels();
     prog.swap(m_program_data);
     inst_to_line.swap(m_inst_to_source_line);
+
+    m_current_source_line = 1;
+    m_program_data.clear();
+    m_inst_to_source_line.clear();
+    m_unfulfilled_labels.clear();
+    m_labels.clear();
 }
 
 void TextProcessState::resolve_unfulfilled_labels() {
@@ -422,48 +444,6 @@ void TextProcessState::resolve_unfulfilled_labels() {
         ++j;
     }
     m_unfulfilled_labels.clear();
-}
-
-// <--------------------------- level 3 helpers ------------------------------>
-
-StringCIter process_binary
-    (TextProcessState & state, std::vector<UInt32> & data,
-     StringCIter beg, StringCIter end);
-
-erfin::Reg string_to_register(const std::string & str);
-
-StringCIter process_data
-    (TextProcessState & state, StringCIter beg, StringCIter end,
-     std::vector<UInt32> * cached_cont)
-{
-    std::vector<UInt32> non_cached_cont;
-    std::vector<UInt32> * data = cached_cont ? cached_cont : &non_cached_cont;
-
-    if (beg == end) {
-        throw state.make_error(": stray data directive found at the end of "
-                               "the source code.");
-    }
-    ++beg; // set over "data"
-    auto process_func = process_binary;
-    if (*beg != "[") {
-        if (*beg == "binary") {
-            // default
-        } else {
-            throw state.make_error(": encoding scheme \"" + *beg + "\" not "
-                                   "recognized.");
-        }
-        ++beg;
-    }
-    state.handle_newlines(&beg, end);
-    if (*beg != "[") {
-        throw state.make_error(": expected square bracket to indicate the "
-                               "start of data.");
-    }
-    ++beg;
-    assert(data);
-    beg = process_func(state, *data, beg, end);
-    state.handle_newlines(&beg, end);
-    return beg;
 }
 
 StringCIter TextProcessState::process_label(StringCIter beg, StringCIter end) {
@@ -499,11 +479,51 @@ void TextProcessState::handle_newlines(StringCIter * itr, StringCIter end_of_tex
         if (*itr == end_of_text) return;
     }
 }
+#endif
+// <--------------------------- level 3 helpers ------------------------------>
+#if 0
+StringCIter process_binary
+    (TextProcessState & state, std::vector<UInt32> & data,
+     StringCIter beg, StringCIter end);
 
+StringCIter process_data
+    (TextProcessState & state, StringCIter beg, StringCIter end,
+     std::vector<UInt32> * cached_cont)
+{
+    std::vector<UInt32> non_cached_cont;
+    std::vector<UInt32> * data = cached_cont ? cached_cont : &non_cached_cont;
+
+    if (beg == end) {
+        throw state.make_error(": stray data directive found at the end of "
+                               "the source code.");
+    }
+    ++beg; // set over "data"
+    auto process_func = process_binary;
+    if (*beg != "[") {
+        if (*beg == "binary") {
+            // default
+        } else {
+            throw state.make_error(": encoding scheme \"" + *beg + "\" not "
+                                   "recognized.");
+        }
+        ++beg;
+    }
+    state.handle_newlines(&beg, end);
+    if (*beg != "[") {
+        throw state.make_error(": expected square bracket to indicate the "
+                               "start of data.");
+    }
+    ++beg;
+    assert(data);
+    beg = process_func(state, *data, beg, end);
+    state.handle_newlines(&beg, end);
+    return beg;
+}
+#endif
 // <--------------------------- level 4 helpers ------------------------------>
 
 // <----------------------- Arithmetic operations ---------------------------->
-
+#if 0
 StringCIter make_plus(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_minus(TextProcessState &, StringCIter, StringCIter);
@@ -567,8 +587,8 @@ StringCIter assume_directive(TextProcessState &, StringCIter, StringCIter);
 LineToInstFunc get_line_processing_func
     (SuffixAssumption assumptions, const std::string & fname)
 {
-    static bool is_initialized = false;
     using LineFuncMap = std::map<std::string, LineToInstFunc>;
+    static bool is_initialized = false;
     static LineFuncMap fmap;
     if (is_initialized) {
         auto itr = fmap.find(fname);
@@ -624,7 +644,8 @@ LineToInstFunc get_line_processing_func
     is_initialized = true;
     return get_line_processing_func(assumptions, fname);
 }
-
+#endif
+#if 0
 StringCIter process_binary
     (TextProcessState & state, std::vector<UInt32> & data,
      StringCIter beg, StringCIter end)
@@ -687,9 +708,9 @@ StringCIter process_binary
 
     return ++beg;
 }
-
+#endif
 // <--------------------------- level 5 helpers ------------------------------>
-
+#if 0
 enum TokenClassification {
     REGISTER,
     IMMEDIATE_INTEGER,
@@ -766,9 +787,9 @@ bool op_code_supports_integer_immd(erfin::Inst inst);
 
 ExtendedParamForm get_lines_param_form
     (StringCIter beg, StringCIter end, NumericParseInfo * npi = nullptr);
-
+#endif
 // <----------------------- Arithmetic operations ---------------------------->
-
+#if 0
 StringCIter make_plus
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
@@ -841,7 +862,8 @@ StringCIter make_modulus_fp
     AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
     return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
 }
-
+#endif
+#if 0
 const char * extended_param_form_to_string(ExtendedParamForm xpf) {
     switch (xpf) {
     case XPF_4R      : return "4 registers"                         ;
@@ -902,11 +924,12 @@ NumericParseInfo parse_number(const std::string & str) {
     rv.type = NOT_NUMERIC;
     return rv;
 }
-
+#endif
 // <------------------------- Logic operations ------------------------------->
-
+#if 0
 StringCIter get_eol(StringCIter beg, StringCIter end);
-
+#endif
+#if 0
 StringCIter make_and
     (TextProcessState & state, StringCIter beg, StringCIter end)
 { return make_generic_logic(erfin::OpCode::AND, state, beg, end); }
@@ -1185,15 +1208,16 @@ StringCIter assume_directive
     }
     return eol;
 }
-
+#endif
 // <--------------------------- level 6 helpers ------------------------------>
-
+#if 0
 UInt32 deal_with_int_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
 
 UInt32 deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
-
+#endif
+#if 0
 ExtendedParamForm get_lines_param_form
     (StringCIter beg, StringCIter end, NumericParseInfo * npi)
 {
@@ -1237,14 +1261,16 @@ ExtendedParamForm get_lines_param_form
     default: return XPF_INVALID;
     }
 }
-
+#endif
+#if 0
 StringCIter make_generic_logic
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
 {
     return make_generic_arithemetic(op_code, state, beg, end);
 }
-
+#endif
+#if 0
 UInt32 deal_with_int_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state)
 {
@@ -1268,7 +1294,8 @@ UInt32 deal_with_fp_immd
     string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
     return erfin::encode_immd(d);
 }
-
+#endif
+#if 0
 StringCIter make_generic_arithemetic
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end)
@@ -1420,7 +1447,8 @@ StringCIter make_generic_memory_access
     state.add_instruction(inst, label);
     return eol;
 }
-
+#endif
+#if 0
 bool op_code_supports_fpoint_immd(erfin::Inst inst) {
     using namespace erfin::enum_types;
     switch (inst) {
@@ -1476,19 +1504,24 @@ StringCIter get_eol(StringCIter beg, StringCIter end) {
     }
     return beg;
 }
-
+#endif
 // <--------------------------- level 7 helpers ------------------------------>
 
 } // end of anonymous namespace
 
+// we'll have to bring this back later
+#if 0
 namespace {
     const LineToInstFunc init_f = get_line_processing_func
                                   (erfin::Assembler::NO_ASSUMPTION, "");
 }  // end of anonymous namespace
-
+#endif
 /* static */ void erfin::Assembler::run_tests() {
+#   if 1
+    TextProcessState::run_tests();
+#   endif
+#   if 0
     using namespace erfin;
-    (void)init_f;
     // with such a deep call tree, unit tests on each function on each level
     // becomes quite useful
     TextProcessState state;
@@ -1520,6 +1553,8 @@ namespace {
     (void)state.process_label(sample_label.begin(), sample_label.end());
     assert(state.m_labels.find("hello") != state.m_labels.end());
     }
+#   endif
+#   if 0
     // test basic instructions
     {
     const std::vector<std::string> sample_code = {
@@ -1614,4 +1649,5 @@ namespace {
     assert(pdata[3] == encode(OpCode::SET , Reg::REG_PC, 2));
     (void)pdata;
     }
+#   endif
 }

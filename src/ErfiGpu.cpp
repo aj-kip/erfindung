@@ -201,7 +201,7 @@ void draw_sprite(erfin::GpuContext & ctx) {
     SpriteMeta * sprite = front_and_pop(ctx.sprite_data);
     UInt32 x_ = front_and_pop(ctx.command_buffer);
     UInt32 y_ = front_and_pop(ctx.command_buffer);
-    //UInt32 i = 0;
+
     const UInt32 SCREEN_WIDTH  = UInt32(ErfiGpu::SCREEN_WIDTH );
     const UInt32 SCREEN_HEIGHT = UInt32(ErfiGpu::SCREEN_HEIGHT);
     const auto sprite_height = sprite->height;

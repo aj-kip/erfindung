@@ -81,10 +81,22 @@ Inst encode(OpCode op, Reg r0, Reg r1);
 Inst encode(OpCode op, Reg r0, Reg r1, Reg r2);
 Inst encode(OpCode op, Reg r0, Reg r1, Reg r2, Reg r3);
 
+Inst encode(OpCode op, Reg r0, UInt32 i);
+Inst encode(OpCode op, Reg r0, Reg r1, UInt32 i);
+
+namespace with_int {
+
 Inst encode(OpCode op, Reg r0, int i);
 Inst encode(OpCode op, Reg r0, Reg r1, int i);
+
+}
+
+namespace with_fp {
+
 Inst encode(OpCode op, Reg r0, double d);
 Inst encode(OpCode op, Reg r0, Reg r1, double d);
+
+}
 
 inline void load_program_into_memory
     (MemorySpace & memspace, const Assembler::ProgramData & pdata)

@@ -1,4 +1,3 @@
-
   set pc main
 : erfindung_text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
@@ -33,9 +32,9 @@ ____________ ]
        set  b 1 
        set  c 1
 : loop call clear
-       call wait
 
        call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
+       call wait
        add  x b x # x = b + x
        add  y c y
 
