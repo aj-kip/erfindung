@@ -134,7 +134,7 @@ const char * register_to_string(Reg r) {
     case REG_A : return "a" ;
     case REG_B : return "b" ;
     case REG_C : return "c" ;
-    case REG_BP: return "bp";
+    case REG_SP: return "bp";
     case REG_PC: return "pc";
     default: throw Error("Invalid register, cannot convert to a string.");
     }

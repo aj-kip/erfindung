@@ -111,7 +111,7 @@ erfin::Reg string_to_register(const std::string & str) {
     case 'a': return is1ch(REG_A);
     case 'b': return is1ch(REG_B);
     case 'c': return is1ch(REG_C);
-    case 's': return _2ndch(REG_BP, 'p');
+    case 's': return _2ndch(REG_SP, 'p');
     case 'p': return _2ndch(REG_PC, 'c');
     default: return REG_COUNT;
     }

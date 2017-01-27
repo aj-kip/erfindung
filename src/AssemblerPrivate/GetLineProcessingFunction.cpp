@@ -27,6 +27,7 @@
 #include "../Assembler.hpp" // for tests
 
 #include <iostream>
+#include <bitset>
 
 #include <cassert>
 
@@ -107,6 +108,10 @@ StringCIter make_jump(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter assume_directive(TextProcessState &, StringCIter, StringCIter);
 
+StringCIter make_push(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_pop(TextProcessState &, StringCIter, StringCIter);
+
 } // end of <anonymous> namespace
 
 namespace erfin {
@@ -167,6 +172,8 @@ LineToInstFunc get_line_processing_function
     fmap["mod-fp"] = fmap["modulus-fp"] = fmap["%-fp"] = make_modulus_fp;
 
     fmap["assume"] = assume_directive;
+    fmap["push"] = make_push;
+    fmap["pop"] = make_pop;
 
     is_initialized = true;
     return get_line_processing_function(assumptions, fname);
@@ -196,6 +203,10 @@ StringCIter make_generic_arithemetic
 StringCIter make_generic_memory_access
     (erfin::OpCode op_code, TextProcessState & state,
      StringCIter beg, StringCIter end);
+
+StringCIter make_stack_op
+    (TextProcessState & state, StringCIter beg, StringCIter end,
+     erfin::OpCode val_op, erfin::OpCode unto_stack);
 
 StringCIter make_plus
     (TextProcessState & state, StringCIter beg, StringCIter end)
@@ -492,24 +503,26 @@ StringCIter make_jump
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     using namespace erfin;
+    using namespace erfin::enum_types;
+
     auto eol = get_eol(++beg, end);
-    static constexpr const auto PC = enum_types::REG_PC;
-    Inst inst = encode_op(enum_types::SET);
+    Inst inst = encode_op(SET);
     NumericParseInfo npi;
     const std::string * label = nullptr;
+
     switch (get_lines_param_form(beg, eol, &npi)) {
     case XPF_1R:
-        inst |= encode_param_form(enum_types::REG_REG) |
-                encode_reg_reg(PC, string_to_register(*beg));
+        inst |= encode_param_form(REG_REG) |
+                encode_reg_reg(REG_PC, string_to_register(*beg));
         break;
     case XPF_INT:
-        inst |= encode_param_form(enum_types::REG_IMMD) |
-                encode_reg(PC) | encode_immd(npi.integer);
+        inst |= encode_param_form(REG_IMMD) |
+                encode_reg(REG_PC) | encode_immd(npi.integer);
         break;
     case XPF_LABEL:
         // not quite sure... will need to insert the offset...? maybe not
         label = &*beg;
-        inst |= encode_reg(PC);
+        inst |= encode_param_form(REG_IMMD) | encode_reg(REG_PC);
         break;
     default:
         throw state.make_error(": jump only excepts one argument, the "
@@ -532,12 +545,26 @@ StringCIter assume_directive
         } else if (equal_to_any(*beg, "none", "nothing")) {
             state.assumptions = Assembler::USING_FP;
         } else {
-            state.make_error(": \"" + *beg + "\" is not a valid assumption.");
+            throw state.make_error(": \"" + *beg + "\" is not a valid assumption.");
         }
     } else {
         throw state.make_error(": too many assumptions/arguments.");
     }
     return eol;
+}
+
+StringCIter make_push
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin::enum_types;
+    return make_stack_op(state, beg, end, SAVE, PLUS);
+}
+
+StringCIter make_pop
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin::enum_types;
+    return make_stack_op(state, beg, end, LOAD, MINUS);
 }
 
 // <-------------------------------------------------------------------------->
@@ -734,6 +761,31 @@ StringCIter make_generic_memory_access
 
     state.add_instruction(inst, label);
     return eol;
+}
+
+StringCIter make_stack_op
+    (TextProcessState & state, StringCIter beg, StringCIter end,
+     erfin::OpCode val_op, erfin::OpCode unto_stack)
+{
+    using namespace erfin;
+    using namespace enum_types;
+    assert(val_op == SAVE || val_op == LOAD);
+    int stack_offset = 0;
+    int dir          = val_op == SAVE ? 1 : -1;
+    auto eol = get_eol(beg, end);
+    while (++beg != eol) {
+        auto reg = string_to_register(*beg);
+        if (reg == REG_COUNT) {
+            throw state.make_error(": \"" + *beg + "\" is not a valid register.");
+        }
+        state.add_instruction(encode(val_op, reg, REG_SP, dir*stack_offset));
+        ++stack_offset;
+    }
+    if (stack_offset != 0) {
+        state.add_instruction(encode(unto_stack, REG_SP, REG_SP,
+                                     encode_immd(stack_offset)));
+    }
+    return beg;
 }
 
 // <-------------------------------------------------------------------------->

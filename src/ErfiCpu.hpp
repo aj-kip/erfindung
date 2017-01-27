@@ -34,10 +34,14 @@ class ErfiCpu {
 public:
     ErfiCpu();
 
+    void reset();
+
     void run_cycle(MemorySpace & memspace, ErfiGpu * gpu = nullptr);
+
+    void clear_flags() { m_wait_called = false; }
+
     void print_registers(std::ostream & out) const;
     bool wait_was_called() const { return m_wait_called; }
-    void clear_flags() { m_wait_called = false; }
 
     static void run_tests();
 

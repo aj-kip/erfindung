@@ -86,7 +86,6 @@ private:
     std::map<std::string, LabelPair> m_labels;
 };
 
-
 } // end of erfin namespace
 
 #endif

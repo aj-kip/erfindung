@@ -35,15 +35,11 @@ ____________ ]
 
        call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
        call wait
+
        add  x b x # x = b + x
        add  y c y
 
-       save z sp 0
-       save b sp 1
-       save c sp 2
-       save x sp 3
-       save y sp 4
-       add  sp 5
+       push z b c x y
 
        set  y b  # set velocity, x_pos already set
        add  sp 1
@@ -61,12 +57,7 @@ ____________ ]
        sub  sp 1
        save a sp -2
 
-       load z sp -4
-       load b sp -3
-       load c sp -2
-       load x sp -1
-       load y sp 0
-       sub  sp 5
+       pop y x c b z
 
        set pc loop
        
@@ -74,41 +65,41 @@ ____________ ]
 : check_x
     comp b x   0
     skip b   <
-        load pc check_x_next
+        set pc check_x_next
     comp b y    1
     skip b   ==
-        load pc check_x_next
+        set pc check_x_next
     set a -1
-    load pc sp
+    set pc sp
 : check_x_next
     comp b x   100
     skip b   >
-        load pc check_x_next
+        set pc check_x_exit
     comp b y     -1
     skip b   ==
-        load pc check_x_exit
+        set pc check_x_exit
     set a -1
-: check_x_exit load pc sp
+: check_x_exit set pc sp
 
 # this is a """function"""
 : check_y
     comp b x   0             # this code is redundent
     skip b   <               # however I have no praticle way 
-        load pc check_y_next # of copy/pasting code in
+        set pc check_y_next # of copy/pasting code in
     comp b y    1
     skip b   ==
-        load pc check_y_next
+        set pc check_y_next
     set a -1
-    load pc sp
+    set pc sp
 : check_y_next
     comp b x   100
     skip b   >
-        load pc check_y_next
+        set pc check_y_exit
     comp b y     -1
     skip b   ==
-        load pc check_y_exit
+        set pc check_y_exit
     set a -1
-: check_y_exit load pc sp
+: check_y_exit set pc sp
 # setup stack somewhere, no convention
 : bp_start data [ ________ ________ ________ ________ ]
          # have to be careful not to up the cognitive load too much!

@@ -137,6 +137,7 @@ int main() {
     test_fp_multiply(-1.0, 1.0);
 
     Assembler::run_tests();
+    ErfiCpu::run_tests();
 
     Assembler asmr;
     ErfiCpu cpu;
@@ -181,8 +182,9 @@ int main() {
         cpu.clear_flags();
 
         try {
-            while (!cpu.wait_was_called())
+            while (!cpu.wait_was_called()) {
                 cpu.run_cycle(memory, &gpu);
+            }
         } catch (ErfiError & exp) {
             std::cerr << "A problem has occured on source line: "
                       << asmr.translate_to_line_number(exp.program_location())

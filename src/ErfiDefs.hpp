@@ -111,8 +111,8 @@ enum Reg_e {
     REG_A ,
     REG_B ,
     REG_C ,
-    // stack (base) pointer
-    REG_BP,
+    // stack (base) pointer [what's so special about it?]
+    REG_SP,
     // [special] program counter
     REG_PC,
     // sentinel value [not a valid register]
@@ -201,23 +201,24 @@ enum OpCode_e : UInt32 {
     // therefore:
     // answer    registers are: a, b, c
     // parameter registers are: x, y, z
+    // saving model: callee saves everything to stack
     // other parameters and answers that cannot fit into the three registers
     // go unto the program stack like so:
     //
     // +--------------------------+
     // | callee's stack frane     |
-    // +--------------------------+ <---+--- BP
+    // +--------------------------+ <---+--- SP
     // | callee parameter data    |     |
     // +--------------------------+     +--- size is constant
     // | callee answer data       |     |
     // +--------------------------+ <---+
-    // | old base pointer value   |
+    // | old stack pointer value  |
     // +--------------------------+
     // |                          |
     // | previous function's data |
     // |                          |
     // +--------------------------+
-    // registers BP and PC are neither (obviously)
+    // registers SP and PC are neither (obviously)
     SYSTEM_CALL,
 
     OPCODE_COUNT // sentinal value [not a valid op code]
@@ -303,7 +304,7 @@ using OpCode       = enum_types::OpCode_e   ;
 using Reg          = enum_types::Reg_e      ;
 using ParamForm    = enum_types::ParamForm_e;
 using RegisterPack = std::array<UInt32, 8>;
-using MemorySpace  = std::array<UInt32, 65536/sizeof(UInt32)>;
+using MemorySpace  = std::array<UInt32, 200>;//65536/sizeof(UInt32)>;
 
 } // end of erfin namespace
 

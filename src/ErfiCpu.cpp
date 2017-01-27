@@ -62,6 +62,11 @@ namespace erfin {
 ErfiCpu::ErfiCpu():
     m_wait_called(false)
 {
+    // std::array does not initialize values
+    reset();
+}
+
+void ErfiCpu::reset() {
     for (UInt32 & reg : m_registers)
         reg = 0;
 }
@@ -162,30 +167,41 @@ void ErfiCpu::print_registers(std::ostream & out) const {
             out << " ";
         out << " | " << int(m_registers[std::size_t(i)]);
         out << " | " << fixed_point_to_double(m_registers[std::size_t(i)]);
+        out << "\n";
     }
     out.precision(old_pre);
+    out << std::flush;
 }
 
 /* static */ void ErfiCpu::run_tests() {
     assert(decode_immd_as_int(encode_immd(-1)) == -1);
-    Assembler::run_tests();
-
     Assembler asmr;
-    asmr.assemble_from_string(
-        "     set  x -10\n"
-        "     set  y  10\n"
-        ":inc add  x 5\n"
-        "     comp x y a\n"
-        "     skip a 2 # x > y\n"
-        "     set pc inc\n"
-        ":safety-loop set pc safety-loop"
-    );
     ErfiCpu cpu;
     MemorySpace mem;
-    for (UInt32 & i : mem) i = 0;
-    load_program_into_memory(mem, asmr.program_data());
-    for (int i = 0; i != 10; ++i)
-        cpu.run_cycle(mem);
+
+    try {
+        asmr.assemble_from_string(
+            "     assume integer \n"
+            "     set  x -10\n"
+            "     set  y  10\n"
+            ":inc add  x   5\n"
+            "     comp a x y\n"
+            "     skip a >= \n"
+            "     jump   inc\n"
+            ":safety-loop set pc safety-loop"
+        );
+        for (UInt32 & i : mem) i = 0;
+        load_program_into_memory(mem, asmr.program_data());
+        for (int i = 0; i != 20; ++i)
+            cpu.run_cycle(mem);
+    } catch (ErfiError & err) {
+        auto sline = asmr.translate_to_line_number(err.program_location());
+        std::cerr << "Illegal instruction occured!\n";
+        std::cerr << "See line " << sline << " in source\n";
+        std::cerr << "Details: " << err.what() << std::endl;
+    } catch (std::exception & exp) {
+        std::cerr << "General exception: " << exp.what() << std::endl;
+    }
 }
 
 /* private */ UInt32 & ErfiCpu::reg0(Inst inst)
