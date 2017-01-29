@@ -12,7 +12,8 @@ SOURCES += \
     ../src/FixedPointUtil.cpp \
     ../src/AssemblerPrivate/TextProcessState.cpp \
     ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \
-    ../src/AssemblerPrivate/LineParsingHelpers.cpp
+    ../src/AssemblerPrivate/LineParsingHelpers.cpp \
+    ../src/Debugger.cpp
     
 HEADERS += \
     ../src/DrawRectangle.hpp \
@@ -26,7 +27,8 @@ HEADERS += \
     ../src/AssemblerPrivate/TextProcessState.hpp \
     ../src/AssemblerPrivate/GetLineProcessingFunction.hpp \
     ../src/AssemblerPrivate/LineParsingHelpers.hpp \
-    ../src/AssemblerPrivate/CommonDefinitions.hpp
+    ../src/AssemblerPrivate/CommonDefinitions.hpp \
+    ../src/Debugger.hpp
 
 TARGET = erfindung
 

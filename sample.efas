@@ -25,84 +25,85 @@ ____________ ]
        set  y 19
        set  z erfindung_text
        call upload # upload sprite
-       call clear  # screen flush
        set  z a
-       set  x 0
-       set  y 0
-       set  b 1 
-       set  c 1
-: loop call clear
+       set  x 1#0
+       set  y 2#0
+       set  b 3#1 
+       set  c 4#1
+       # stack pointer, points to an "initialized variable"
+       # +---+        push +---+        pop +---+ 
+       # | ? | [+3]        | c | <- sp      | ? | <- [ 0]  sp (was)
+       # | ? | [+2]        | b |            | ? |    [-1]
+       # | ? | [+1]        | a |            | ? |    [-2]
+       # +---+ <- sp       +---+            +---+ <- sp
+       # therefore push and pop offsets must be different
+       push z b c x y
+       set x 0
+       set y 0
+       set z 0
+       set b 0
+       set c 0
+       pop  y x c b z
+       push z b c x y
+
+: loop call wait
+       call clear
+
+       pop y x c b z
 
        call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
-       call wait
 
        add  x b x # x = b + x
        add  y c y
-
+       #    4 3 2 1 0
        push z b c x y
 
-       set  y b  # set velocity, x_pos already set
-       add  sp 1
-       save pc sp
-       set  pc check_x # x = x_pos, y = x_vel -> a = new_x_vel
+       # x = x_pos (already set)
+       set  y b  # y = x velocity
+       set  z 400
+       # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds 
+       push pc
+       jump check_bounds # x = x_pos, y = x_vel -> a = new_x_vel       
        sub  sp 1
+
        save a sp -3 # I guess where x velocity is
        
        # load y_pos, y_vel
        load x sp 
        load y sp -2
-       add  sp 1
-       save pc sp
-       set  pc check_y
+       set  z 300
+       push pc
+       jump check_bounds
        sub  sp 1
-       save a sp -2
 
-       pop y x c b z
-
-       set pc loop
+       # save to y velocity
+       save sp a -2
+       jump loop
        
 # this is a """function"""
-: check_x
+assume integer
+: check_bounds
     comp b x   0
     skip b   <
-        set pc check_x_next
+        jump check_next
+    comp b y    -1
+    skip b   ==
+        jump check_next
+    set a  1
+    jump sp # returns
+: check_next
+    comp b x   z
+    skip b   >
+        jump check_exit
     comp b y    1
     skip b   ==
-        set pc check_x_next
+        jump check_exit
     set a -1
-    set pc sp
-: check_x_next
-    comp b x   100
-    skip b   >
-        set pc check_x_exit
-    comp b y     -1
-    skip b   ==
-        set pc check_x_exit
-    set a -1
-: check_x_exit set pc sp
+    jump sp # returns
+: check_exit 
+    # do not change velocity
+    set a  y
+    jump sp
 
-# this is a """function"""
-: check_y
-    comp b x   0             # this code is redundent
-    skip b   <               # however I have no praticle way 
-        set pc check_y_next # of copy/pasting code in
-    comp b y    1
-    skip b   ==
-        set pc check_y_next
-    set a -1
-    set pc sp
-: check_y_next
-    comp b x   100
-    skip b   >
-        set pc check_y_exit
-    comp b y     -1
-    skip b   ==
-        set pc check_y_exit
-    set a -1
-: check_y_exit set pc sp
 # setup stack somewhere, no convention
 : bp_start data [ ________ ________ ________ ________ ]
-         # have to be careful not to up the cognitive load too much!
-         #comp fp  x y a # explicit type needed!
-         #comp int x y a # explicit integer
-         #comp     x y a # defaults to integer

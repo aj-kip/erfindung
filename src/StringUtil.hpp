@@ -31,40 +31,7 @@
 #include <type_traits>
 #include <stdexcept>
 
-// ew
 // <------------------------- Implementation Detail -------------------------->
-#if 0
-template <typename IterType, typename RealType>
-struct StringToNumberDetailPublic;
-
-template <typename IterType, typename RealType>
-class StringToNumberDetailPrivate {
-
-    friend struct StringToNumberDetailPublic<IterType, RealType>;
-
-    constexpr static const bool IS_FORWARD_ITER =
-        std::is_base_of<std::forward_iterator_tag,
-                        typename std::iterator_traits<IterType>::iterator_category>
-           ::value;
-
-    constexpr static const bool IS_POINTER = std::is_pointer<IterType>::value;
-
-    constexpr static const bool IS_ARITHEMTIC =
-        std::is_arithmetic<RealType>::value;
-
-    //static_assert(IS_FORWARD_ITER, "");
-    //static_assert(IS_ARITHEMTIC  , "");
-
-    //using IteratorType = typename std::enable_if<IS_FORWARD_ITER && IS_ARITHEMTIC, bool>::type;
-    //using PointerType  = typename std::enable_if<IS_POINTER && IS_ARITHEMTIC, bool>::type;
-};
-
-template <typename IterType, typename RealType>
-struct StringToNumberDetailPublic {
-    using IteratorType = typename StringToNumberDetailPrivate<IterType, RealType>::IteratorType;
-    using PointerType = typename StringToNumberDetailPrivate<IterType, RealType>::PointerType;
-};
-#endif
 
 template <typename IterType, typename RealType>
 using EnableStrToNumIter = typename std::enable_if<
@@ -91,14 +58,6 @@ bool
 >;
 
 // <---------------------------- Public Interface ---------------------------->
-
-#if 0
-template <typename CharType, typename RealType>
-typename EnableStrToNumPtr<const CharType *, RealType>::Type
-/* bool */ string_to_number
-    (const CharType * start, const CharType * end, RealType & out,
-     const RealType base_c);
-#endif
 
 template <typename IterType, typename RealType>
 typename EnableStrToNum<IterType, RealType>::type
@@ -194,17 +153,5 @@ typename EnableStrToNum<IterType, RealType>::type
     out = working;
     return true;
 }
-
-#if 0
-template <typename CharPointerType, typename RealType>
-typename EnableStrToNumPtr<CharPointerType, RealType>::Type
-/* bool */ string_to_number
-    (CharPointerType start, CharPointerType end, RealType & out,
-     const RealType base_c)
-{
-    //using Pointer = const CharType *;
-    return string_to_number<Pointer, RealType>(start, end, out, base_c);
-}
-#endif
 
 #endif

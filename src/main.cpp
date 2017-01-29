@@ -35,6 +35,7 @@
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
 #include "DrawRectangle.hpp"
+#include "Debugger.hpp"
 
 #include <cstring>
 
@@ -136,9 +137,10 @@ int main() {
 #   endif
     test_fp_multiply(-1.0, 1.0);
 
-    Assembler::run_tests();
+    //Assembler::run_tests();
     ErfiCpu::run_tests();
 
+    Debugger dbgr;
     Assembler asmr;
     ErfiCpu cpu;
     ErfiGpu gpu;
@@ -151,6 +153,12 @@ int main() {
         return ~0;
     }
 
+    asmr.setup_debugger(dbgr);
+    {
+    auto i = dbgr.add_break_point(45);
+    assert(i != Debugger::NO_LINE);
+    }
+
     load_program_into_memory(memory, asmr.program_data());
 
     sf::RenderWindow win;
@@ -158,7 +166,7 @@ int main() {
                              unsigned(ErfiGpu::SCREEN_HEIGHT*3)), " ");
     {
     sf::View view = win.getView();
-    //view.zoom(0.999f);
+
     view.setCenter(float(ErfiGpu::SCREEN_WIDTH /2),
                    float(ErfiGpu::SCREEN_HEIGHT/2));
     view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
@@ -177,6 +185,7 @@ int main() {
             }
         }
         }
+        cpu.update_debugger(dbgr);
         win.clear();
 
         cpu.clear_flags();
@@ -184,6 +193,11 @@ int main() {
         try {
             while (!cpu.wait_was_called()) {
                 cpu.run_cycle(memory, &gpu);
+                if (dbgr.at_break_point()) {
+                    int j = 00;
+                    ++j;
+                    (void)j;
+                }
             }
         } catch (ErfiError & exp) {
             std::cerr << "A problem has occured on source line: "

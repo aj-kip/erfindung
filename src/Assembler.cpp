@@ -23,6 +23,7 @@
 #include "AssemblerPrivate/TextProcessState.hpp"
 #include "FixedPointUtil.hpp"
 #include "StringUtil.hpp"
+#include "Debugger.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -103,6 +104,11 @@ void Assembler::assemble_from_string(const std::string & source) {
 
 const Assembler::ProgramData & Assembler::program_data() const
     { return m_program; }
+
+void Assembler::setup_debugger(Debugger & dbgr) {
+    AssemblerDebuggerAttorney::copy_line_inst_map_to_debugger
+        (m_inst_to_line_map, dbgr);
+}
 
 std::size_t Assembler::translate_to_line_number
     (std::size_t instruction_address) const noexcept
@@ -249,18 +255,19 @@ std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
             // check for end of words
             if (old_pos != str.end()) {
                 switch (*itr) {
-                case ':': case ' ': case '\t':
+                case ':': case ' ': case '\t': case ']':
                     tokens.push_back(std::string { old_pos, itr });
                     old_pos = str.end();
                     break;
                 default: break;
                 }
             }
+
             switch (*itr) {
             // label declarations
             // "operators" :[]
             case ':': case '[': case ']':
-                // end of word processed by
+                // operators are fickle creatures
                 tokens.push_back(std::string { *itr });
                 break;
             case '\n': case '\r':
@@ -276,6 +283,7 @@ std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
         if (old_pos != str.end()) {
             tokens.push_back(std::string { old_pos, itr });
         }
+
         tokens.push_back("\n");
     }
     return tokens;

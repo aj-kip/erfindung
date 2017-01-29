@@ -770,7 +770,7 @@ StringCIter make_stack_op
     using namespace erfin;
     using namespace enum_types;
     assert(val_op == SAVE || val_op == LOAD);
-    int stack_offset = 0;
+    int stack_offset = 1;
     int dir          = val_op == SAVE ? 1 : -1;
     auto eol = get_eol(beg, end);
     while (++beg != eol) {
@@ -778,12 +778,12 @@ StringCIter make_stack_op
         if (reg == REG_COUNT) {
             throw state.make_error(": \"" + *beg + "\" is not a valid register.");
         }
-        state.add_instruction(encode(val_op, reg, REG_SP, dir*stack_offset));
+        state.add_instruction(with_int::encode(val_op, reg, REG_SP, dir*stack_offset));
         ++stack_offset;
     }
     if (stack_offset != 0) {
-        state.add_instruction(encode(unto_stack, REG_SP, REG_SP,
-                                     encode_immd(stack_offset)));
+        UInt32 immd_value = encode_immd(stack_offset);
+        state.add_instruction(encode(unto_stack, REG_SP, REG_SP, immd_value));
     }
     return beg;
 }

@@ -70,6 +70,7 @@
 
 #include <cstdint>
 #include <array>
+#include <vector>
 
 namespace erfin {
 
@@ -305,6 +306,9 @@ using Reg          = enum_types::Reg_e      ;
 using ParamForm    = enum_types::ParamForm_e;
 using RegisterPack = std::array<UInt32, 8>;
 using MemorySpace  = std::array<UInt32, 200>;//65536/sizeof(UInt32)>;
+
+// high level type alaises
+using DebuggerInstToLineMap = std::vector<std::size_t>;
 
 } // end of erfin namespace
 

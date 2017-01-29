@@ -23,6 +23,7 @@
 #include "Assembler.hpp"
 #include "FixedPointUtil.hpp"
 #include "ErfiGpu.hpp"
+#include "Debugger.hpp"
 
 #include <iostream>
 
@@ -32,9 +33,6 @@ namespace {
 
 using Error = std::runtime_error;
 using UInt32 = erfin::UInt32;
-#if 0
-Error make_illegal_inst_error(erfin::Inst inst);
-#endif
 
 const char * op_code_to_string(erfin::Inst i);
 const char * param_form_to_string(erfin::Inst i);
@@ -135,6 +133,7 @@ void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
             break;
         case REG_REG_IMMD:
             memspace[std::size_t(int(reg1(inst)) + giimd(inst))] = reg0(inst);
+            std::cout << "saved from address: " << (std::size_t(int(reg1(inst)) + giimd(inst))) << std::endl;
             break;
         default: throw emit_error(inst);
         }
@@ -173,26 +172,55 @@ void ErfiCpu::print_registers(std::ostream & out) const {
     out << std::flush;
 }
 
+void ErfiCpu::update_debugger(Debugger & dbgr) const {
+    dbgr.update_internals(m_registers);
+}
+
+void try_program(const char * source_code, const int inst_limit_c);
+
 /* static */ void ErfiCpu::run_tests() {
     assert(decode_immd_as_int(encode_immd(-1)) == -1);
+#   if 0
+    try_program(
+        "     assume integer \n"
+        "     set  x -10\n"
+        "     set  y  10\n"
+        ":inc add  x   5\n"
+        "     comp a x y\n"
+        "     skip a >= \n"
+        "     jump   inc\n"
+        ":safety-loop set pc safety-loop", 20);
+#   endif
+    try_program(
+        "     set sp stack-start\n"
+        "     set x 1\n"
+        "     set y 2\n"
+        "     set z 3\n"
+        "     set a 4\n"
+        "     set b 5\n"
+        "     set c 6\n"
+        "     push a b c x y z\n"
+        "     set x 0\n"
+        "     set y 0\n"
+        "     set z 0\n"
+        "     set a 0\n"
+        "     set b 0\n"
+        "     set c 0\n"
+        "     pop a b c x y z\n"
+        ":safety-loop set pc safety-loop\n"
+        ":stack-start data [________ ________ ________ ________]", 30);
+}
+
+void try_program(const char * source_code, const int inst_limit_c) {
     Assembler asmr;
     ErfiCpu cpu;
     MemorySpace mem;
 
     try {
-        asmr.assemble_from_string(
-            "     assume integer \n"
-            "     set  x -10\n"
-            "     set  y  10\n"
-            ":inc add  x   5\n"
-            "     comp a x y\n"
-            "     skip a >= \n"
-            "     jump   inc\n"
-            ":safety-loop set pc safety-loop"
-        );
+        asmr.assemble_from_string(source_code);
         for (UInt32 & i : mem) i = 0;
         load_program_into_memory(mem, asmr.program_data());
-        for (int i = 0; i != 20; ++i)
+        for (int i = 0; i != inst_limit_c; ++i)
             cpu.run_cycle(mem);
     } catch (ErfiError & err) {
         auto sline = asmr.translate_to_line_number(err.program_location());
@@ -275,13 +303,6 @@ void ErfiCpu::print_registers(std::ostream & out) const {
 
 namespace {
 
-#if 0
-Error make_illegal_inst_error(erfin::Inst i) {
-    return Error(std::string("Unsupport instruction \"") +
-                 op_code_to_string(i) + "\" with parameter form of: " +
-                 param_form_to_string(i));
-}
-#endif
 UInt32 decode_immd_selectively(UInt32 inst) {
     if (erfin::decode_is_fixed_point_flag_set(inst))
         return erfin::decode_immd_as_fp(inst);
@@ -342,7 +363,8 @@ const char * op_code_to_string(erfin::Inst i) {
     case PLUS       : return "plus";
     case MINUS      : return "minus";
     case TIMES      : return "times";
-    case DIVIDE : return "divmod";
+    case DIVIDE     : return "div";
+    case MODULUS    : return "mod";
     case AND        : return "and";
     case XOR        : return "xor";
     case OR         : return "or";

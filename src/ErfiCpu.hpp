@@ -30,6 +30,8 @@
 namespace erfin {
 
 class ErfiGpu;
+class Debugger;
+
 class ErfiCpu {
 public:
     ErfiCpu();
@@ -41,6 +43,7 @@ public:
     void clear_flags() { m_wait_called = false; }
 
     void print_registers(std::ostream & out) const;
+    void update_debugger(Debugger & dbgr) const;
     bool wait_was_called() const { return m_wait_called; }
 
     static void run_tests();

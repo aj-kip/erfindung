@@ -28,8 +28,11 @@
 #include <vector>
 #include <limits>
 #include <string>
+#include <set>
 
 namespace erfin {
+
+class Debugger;
 
 class Assembler {
 public:
@@ -54,6 +57,8 @@ public:
 
     const ProgramData & program_data() const;
 
+    void setup_debugger(Debugger & dbgr);
+
     /**
      *  @note also clears error information
      *  @param other
@@ -71,7 +76,7 @@ private:
     ProgramData m_program;
 
     // debugging erfi program info
-    std::vector<std::size_t> m_inst_to_line_map;
+    DebuggerInstToLineMap m_inst_to_line_map;
 };
 
 // "wholesale" encoding functions
