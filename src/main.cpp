@@ -137,9 +137,6 @@ int main() {
 #   endif
     test_fp_multiply(-1.0, 1.0);
 
-    //Assembler::run_tests();
-    ErfiCpu::run_tests();
-
     Debugger dbgr;
     Assembler asmr;
     ErfiCpu cpu;
@@ -155,7 +152,7 @@ int main() {
 
     asmr.setup_debugger(dbgr);
     {
-    auto i = dbgr.add_break_point(45);
+    auto i = dbgr.add_break_point(98);
     assert(i != Debugger::NO_LINE);
     }
 
@@ -172,6 +169,7 @@ int main() {
     view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
     win.setView(view);
     }
+    int frame_count = 0;
     while (win.isOpen()) {
         {
         sf::Event e;
@@ -192,17 +190,25 @@ int main() {
 
         try {
             while (!cpu.wait_was_called()) {
-                cpu.run_cycle(memory, &gpu);
-                if (dbgr.at_break_point()) {
-                    int j = 00;
-                    ++j;
-                    (void)j;
+                if (frame_count == 35) {
+                    int k = 0;
+                    ++k;
+                    (void)k;
                 }
+                cpu.run_cycle(memory, &gpu);
+                ++frame_count;
             }
         } catch (ErfiError & exp) {
-            std::cerr << "A problem has occured on source line: "
-                      << asmr.translate_to_line_number(exp.program_location())
-                      << std::endl;
+            constexpr const char * const NO_LINE_NUM_MSG =
+                "<no source line associated with this program location>";
+            auto line_num = asmr.translate_to_line_number(exp.program_location());
+            std::cerr << "A problem has occured on source line: ";
+            if (line_num == Assembler::INVALID_LINE_NUMBER)
+                std::cerr << NO_LINE_NUM_MSG;
+            else
+                std::cerr << line_num;
+            std::cerr << "\n(At address " << exp.program_location() << ")";
+            std::cerr << std::endl;
             std::cerr << exp.what() << std::endl;
             return ~0;
         }
@@ -253,6 +259,6 @@ int main() {
         return 1;
     }
 
-    std::cout << "# of op codes " << erfin::enum_types::OPCODE_COUNT << std::endl;
+    std::cout << "# of op codes " << static_cast<int>(erfin::OpCode::OPCODE_COUNT) << std::endl;
     return 0;
 }

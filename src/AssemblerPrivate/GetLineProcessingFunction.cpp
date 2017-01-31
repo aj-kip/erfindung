@@ -185,9 +185,9 @@ namespace {
 
 // <-------------------------------------------------------------------------->
 
-bool op_code_supports_fpoint_immd(erfin::Inst inst);
+bool op_code_supports_fpoint_immd(erfin::OpCode op_code);
 
-bool op_code_supports_integer_immd(erfin::Inst inst);
+bool op_code_supports_integer_immd(erfin::OpCode op_code);
 
 template <typename T, typename ... Types>
 bool equal_to_any(T, Types...);
@@ -301,7 +301,7 @@ StringCIter make_not
     auto eol = get_eol(beg, end);
     switch (get_lines_param_form(beg, eol)) {
     case XPF_1R:
-        state.add_instruction(encode(NOT ,string_to_register(*beg)));
+        state.add_instruction(encode(OpCode::NOT ,string_to_register(*beg)));
         return eol;
     default:
         throw state.make_error(": exactly one argument permitted for logical "
@@ -329,11 +329,11 @@ StringCIter make_rotate
         default:
             throw state.make_error(NON_INT_IMMD_MSG);
         }
-        state.add_instruction(with_int::encode(
-            ROTATE, string_to_register(*beg), npi.integer));
+        state.add_instruction(encode(
+            OpCode::ROTATE, string_to_register(*beg), encode_immd(npi.integer)));
         break;
     case XPF_2R:
-        state.add_instruction(encode(ROTATE, string_to_register(*beg),
+        state.add_instruction(encode(OpCode::ROTATE, string_to_register(*beg),
                                      string_to_register(*(beg + 1))   ));
         break;
     default: throw state.make_error(INVALID_PARAMS_MSG);
@@ -346,6 +346,7 @@ StringCIter make_syscall
 {
     using namespace erfin;
     using namespace erfin::enum_types;
+    using Sys = SystemCallValue_e;
 
     auto eol = get_eol(++beg, end);
     NumericParseInfo npi = parse_number(*beg);
@@ -354,17 +355,17 @@ StringCIter make_syscall
     case INTEGER: break;
     case NOT_NUMERIC:
         if (*beg == "upload")
-            npi.integer = UPLOAD_SPRITE;
+            npi.integer = int(Sys::UPLOAD_SPRITE);
         else if (*beg == "unload")
-            npi.integer = UNLOAD_SPRITE;
+            npi.integer = int(Sys::UNLOAD_SPRITE);
         else if (*beg == "clear")
-            npi.integer = SCREEN_CLEAR;
+            npi.integer = int(Sys::SCREEN_CLEAR);
         else if (*beg == "wait")
-            npi.integer = WAIT_FOR_FRAME;
+            npi.integer = int(Sys::WAIT_FOR_FRAME);
         else if (*beg == "read")
-            npi.integer = READ_INPUT;
+            npi.integer = int(Sys::READ_INPUT);
         else if (*beg == "draw")
-            npi.integer = DRAW_SPRITE;
+            npi.integer = int(Sys::DRAW_SPRITE);
         else
             throw state.make_error(": \"" + *beg + "\" is not a system call.");
         break;
@@ -372,7 +373,8 @@ StringCIter make_syscall
         throw state.make_error(": fixed points are not system call names.");
     }
 
-    state.add_instruction(encode_op(SYSTEM_CALL) | encode_immd(npi.integer));
+    state.add_instruction(Inst(encode_op(OpCode::SYSTEM_CALL)) |
+                          encode_immd(npi.integer)              );
     return eol;
 }
 
@@ -404,45 +406,45 @@ StringCIter make_skip
     ++beg;
     auto eol = get_eol(beg, end);
 
-    auto string_to_int_immd = [] (StringCIter itr) -> UInt32 {
+    auto string_to_int_immd = [] (StringCIter itr) -> Immd {
         int i;
         bool b = string_to_number(itr->begin(),itr->end(), i);
         assert(b); (void)b;
         return encode_immd(i);
     };
 
-    UInt32 temp;
+    Immd temp;
 
     switch (get_lines_param_form(beg, eol)) {
-    case XPF_1R_LABEL:{
+    case XPF_1R_LABEL: {
         const auto & label = *(beg + 1);
         if (label == "==") {
-            temp = COMP_EQUAL_MASK;
+            temp = ImmdConst::COMP_EQUAL_MASK;
         } else if (label == "<") {
-            temp = COMP_LESS_THAN_MASK;
+            temp = ImmdConst::COMP_LESS_THAN_MASK;
         } else if (label == ">") {
-            temp = COMP_GREATER_THAN_MASK;
+            temp = ImmdConst::COMP_GREATER_THAN_MASK;
         } else if (label == "<=") {
-            temp = COMP_EQUAL_MASK | COMP_LESS_THAN_MASK;
+            temp = ImmdConst::COMP_LESS_THAN_OR_EQUAL_MASK;
         } else if (label == ">=") {
-            temp = COMP_EQUAL_MASK | COMP_GREATER_THAN_MASK;
+            temp = ImmdConst::COMP_GREATER_THAN_OR_EQUAL_MASK;
         } else if (label == "!=") {
-            temp = COMP_NOT_EQUAL_MASK;
+            temp = ImmdConst::COMP_NOT_EQUAL_MASK;
         } else {
             throw state.make_error(": labels are not support with skip "
                                    "instructions.");
         }
         }
-        state.add_instruction(encode(SKIP, string_to_register(*beg), temp));
+        state.add_instruction(encode(OpCode::SKIP, string_to_register(*beg), temp));
         break;
     case XPF_1R_INT:
         temp = string_to_int_immd(beg + 1);
-        state.add_instruction(encode(SKIP, string_to_register(*beg), temp));
+        state.add_instruction(encode(OpCode::SKIP, string_to_register(*beg), temp));
         break;
     case XPF_1R_FP:
         throw state.make_error(": a fixed point is not an appropiate mask.");
     case XPF_1R:
-        state.add_instruction(encode(SKIP, string_to_register(*beg)));
+        state.add_instruction(encode(OpCode::SKIP, string_to_register(*beg)));
         break;
     default: throw state.make_error(": unsupported parameters.");
     }
@@ -466,17 +468,17 @@ StringCIter make_set
     const std::string * label = nullptr;
     switch (get_lines_param_form(beg, line_end, &npi)) {
     case XPF_2R:
-        inst = encode(SET, itr2reg(beg), itr2reg(beg + 1));
+        inst = encode(OpCode::SET, itr2reg(beg), itr2reg(beg + 1));
         break;
     case XPF_1R_INT:
-        inst = with_int::encode(SET, itr2reg(beg), npi.integer);
+        inst = encode(OpCode::SET, itr2reg(beg), encode_immd(npi.integer));
         break;
     case XPF_1R_FP:
-        inst = with_fp::encode(SET, itr2reg(beg), npi.floating_point);
+        inst = encode(OpCode::SET, itr2reg(beg), encode_immd(npi.floating_point));
         break;
     case XPF_1R_LABEL:
         label = &*(beg + 1);
-        inst = encode_op(SET) | encode_param_form(REG_IMMD) |
+        inst = encode_op(OpCode::SET) | encode_param_form(ParamForm::REG_IMMD) |
                encode_reg(itr2reg(beg));
         break;
     default:
@@ -506,23 +508,23 @@ StringCIter make_jump
     using namespace erfin::enum_types;
 
     auto eol = get_eol(++beg, end);
-    Inst inst = encode_op(SET);
+    Inst inst = encode_op(OpCode::SET);
     NumericParseInfo npi;
     const std::string * label = nullptr;
 
     switch (get_lines_param_form(beg, eol, &npi)) {
     case XPF_1R:
-        inst |= encode_param_form(REG_REG) |
-                encode_reg_reg(REG_PC, string_to_register(*beg));
+        inst |= encode_param_form(ParamForm::REG_REG) |
+                encode_reg_reg(Reg::REG_PC, string_to_register(*beg));
         break;
     case XPF_INT:
-        inst |= encode_param_form(REG_IMMD) |
-                encode_reg(REG_PC) | encode_immd(npi.integer);
+        inst |= encode_param_form(ParamForm::REG_IMMD) |
+                encode_reg(Reg::REG_PC) | encode_immd(npi.integer);
         break;
     case XPF_LABEL:
         // not quite sure... will need to insert the offset...? maybe not
         label = &*beg;
-        inst |= encode_param_form(REG_IMMD) | encode_reg(REG_PC);
+        inst |= encode_param_form(ParamForm::REG_IMMD) | encode_reg(Reg::REG_PC);
         break;
     default:
         throw state.make_error(": jump only excepts one argument, the "
@@ -556,41 +558,42 @@ StringCIter assume_directive
 StringCIter make_push
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    using namespace erfin::enum_types;
-    return make_stack_op(state, beg, end, SAVE, PLUS);
+    using namespace erfin;
+    return make_stack_op(state, beg, end, OpCode::SAVE, OpCode::PLUS);
 }
 
 StringCIter make_pop
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    using namespace erfin::enum_types;
-    return make_stack_op(state, beg, end, LOAD, MINUS);
+    using namespace erfin;
+    return make_stack_op(state, beg, end, OpCode::LOAD, OpCode::MINUS);
 }
 
 // <-------------------------------------------------------------------------->
 
-UInt32 deal_with_int_immd
+erfin::Immd deal_with_int_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
 
-UInt32 deal_with_fp_immd
+erfin::Immd deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
 
-bool op_code_supports_fpoint_immd(erfin::Inst inst) {
-    using namespace erfin::enum_types;
-    switch (inst) {
-    case PLUS: case MINUS: return true;
-    case TIMES: case AND: case XOR: case OR: case DIVIDE: case COMP:
+bool op_code_supports_fpoint_immd(erfin::OpCode op_code) {
+    using O = erfin::OpCode;
+    switch (op_code) {
+    case O::PLUS: case O::MINUS: return true;
+    case O::TIMES: case O::AND: case O::XOR: case O::OR: case O::DIVIDE:
+    case O::COMP:
         return false;
     default: assert(false); break;
     }
     std::terminate();
 }
 
-bool op_code_supports_integer_immd(erfin::Inst inst) {
-    using namespace erfin::enum_types;
-    switch (inst) {
-    case PLUS: case MINUS: case TIMES: case AND: case XOR: case OR:
-    case DIVIDE: case COMP:
+bool op_code_supports_integer_immd(erfin::OpCode op_code) {
+    using O = erfin::OpCode;
+    switch (op_code) {
+    case O::PLUS: case O::MINUS: case O::TIMES: case O::AND: case O::XOR:
+    case O::OR: case O::DIVIDE: case O::COMP:
         return true;
     default: assert(false); break;
     }
@@ -616,7 +619,7 @@ StringCIter make_generic_arithemetic
      StringCIter beg, StringCIter end)
 {
     using namespace erfin;
-    using namespace erfin::enum_types;
+    using O = OpCode;
 
     static constexpr const char * const fp_int_ambig_msg =
         ": cannot deduce whether a fixed point or integer operation was "
@@ -625,8 +628,8 @@ StringCIter make_generic_arithemetic
     bool assumption_matters;
     switch (op_code) {
     // this does require some impl knowledge...
-    case PLUS: case MINUS:
-    case AND: case OR: case XOR: case NOT:
+    case O::PLUS: case O::MINUS:
+    case O::AND: case O::OR: case O::XOR: case O::NOT:
         assumption_matters = false;
         break;
     default: assumption_matters = true; break;
@@ -653,11 +656,11 @@ StringCIter make_generic_arithemetic
     }
 
     Reg a2, ans;
-    Inst inst = 0;
-    UInt32 (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
+    Inst inst;
+    Immd (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
     const std::string * label = nullptr;
     auto do_nothing_for_label =
-        [](StringCIter, OpCode, TextProcessState &) -> UInt32 { return 0; };
+        [](StringCIter, OpCode, TextProcessState &) { return ImmdConst::ZERO_INIT; };
     static constexpr const int IS_FP = 0, IS_INT = 1, INDETERMINATE = -1;
     int type_indentity = INDETERMINATE;
     switch (pf) {
@@ -716,7 +719,7 @@ StringCIter make_generic_memory_access
 {
     using namespace erfin;
     using namespace erfin::enum_types;
-    assert(op_code == LOAD || op_code == SAVE);
+    assert(op_code == OpCode::LOAD || op_code == OpCode::SAVE);
 
     const auto eol = get_eol(++beg, end);
     assert(!get_line_processing_function(Assembler::NO_ASSUMPTION, *beg));
@@ -726,18 +729,15 @@ StringCIter make_generic_memory_access
     NumericParseInfo npi;
     const auto pf = get_lines_param_form(beg, eol, &npi);
 
-    if (equal_to_any(pf, XPF_1R, XPF_1R_INT, XPF_1R_LABEL) && op_code == SAVE)
+    if (equal_to_any(pf, XPF_1R, XPF_1R_INT, XPF_1R_LABEL) && op_code == OpCode::SAVE)
         throw state.make_error(": deference psuedo instruction only available for loading.");
 
     switch (pf) {
     case XPF_1R: case XPF_2R:
-        inst |= encode_param_form(REG_REG);
+        inst |= encode_param_form(ParamForm::REG_REG);
         break;
-    case XPF_2R_LABEL: case XPF_2R_INT:
-        inst |= encode_param_form(REG_REG_IMMD);
-        break;
-    case XPF_1R_INT: case XPF_1R_LABEL:
-        inst |= encode_param_form(REG_REG_IMMD);
+    case XPF_2R_LABEL: case XPF_2R_INT: case XPF_1R_INT: case XPF_1R_LABEL:
+        inst |= encode_param_form(ParamForm::REG_REG_IMMD);
         break;
     default:
         throw state.make_error(std::string(": <op_code> does not support ") +
@@ -746,7 +746,7 @@ StringCIter make_generic_memory_access
     }
 
     if (equal_to_any(pf, XPF_2R_INT, XPF_1R_INT))
-        inst |= npi.integer;
+        inst |= encode_immd(npi.integer);
 
     if (equal_to_any(pf, XPF_1R_LABEL, XPF_2R_LABEL))
         label = &*(eol - 1);
@@ -769,28 +769,28 @@ StringCIter make_stack_op
 {
     using namespace erfin;
     using namespace enum_types;
-    assert(val_op == SAVE || val_op == LOAD);
+    assert(val_op == OpCode::SAVE || val_op == OpCode::LOAD);
     int stack_offset = 1;
-    int dir          = val_op == SAVE ? 1 : -1;
+    int dir          = val_op == OpCode::SAVE ? 1 : -1;
     auto eol = get_eol(beg, end);
     while (++beg != eol) {
         auto reg = string_to_register(*beg);
-        if (reg == REG_COUNT) {
+        if (reg == Reg::REG_COUNT) {
             throw state.make_error(": \"" + *beg + "\" is not a valid register.");
         }
-        state.add_instruction(with_int::encode(val_op, reg, REG_SP, dir*stack_offset));
+        state.add_instruction(encode(val_op, reg, Reg::REG_SP, encode_immd(dir*stack_offset)));
         ++stack_offset;
     }
     if (stack_offset != 0) {
-        UInt32 immd_value = encode_immd(stack_offset);
-        state.add_instruction(encode(unto_stack, REG_SP, REG_SP, immd_value));
+        Immd immd_value = encode_immd(stack_offset - 1);
+        state.add_instruction(encode(unto_stack, Reg::REG_SP, Reg::REG_SP, immd_value));
     }
     return beg;
 }
 
 // <-------------------------------------------------------------------------->
 
-UInt32 deal_with_int_immd
+erfin::Immd deal_with_int_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state)
 {
     static constexpr const char * const int_unsupported_msg =
@@ -802,7 +802,7 @@ UInt32 deal_with_int_immd
     return erfin::encode_immd(i);
 }
 
-UInt32 deal_with_fp_immd
+erfin::Immd deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state)
 {
     static constexpr const char * const fp_unsupported_msg =
@@ -836,7 +836,7 @@ void run_get_line_processing_function_tests() {
     beg = make_set(state, beg, end);
     beg = make_set(state, ++beg, end);
     beg = make_set(state, ++beg, end);
-    auto supposed_top = with_fp::encode(OpCode::SET, Reg::REG_X, 12.34);
+    auto supposed_top = encode(OpCode::SET, Reg::REG_X, encode_immd(12.34));
     assert(state.m_program_data.back() == supposed_top);
     (void)supposed_top;
     }
@@ -851,7 +851,8 @@ void run_get_line_processing_function_tests() {
     beg = make_plus (state, beg, end);
     beg = make_and  (state, ++beg, end);
     beg = make_minus(state, ++beg, end);
-    const auto supposed_top = with_int::encode(OpCode::MINUS, Reg::REG_X, Reg::REG_X, 123);
+    const auto supposed_top = encode(OpCode::MINUS, Reg::REG_X, Reg::REG_X,
+                                     encode_immd(123));
     assert(supposed_top == state.m_program_data.back());
     (void)supposed_top;
     }
@@ -867,7 +868,7 @@ void run_get_line_processing_function_tests() {
     beg = make_load(state, ++beg, end);
     beg = make_save(state, ++beg, end);
     beg = make_save(state, ++beg, end);
-    const auto supposed_top = with_int::encode(OpCode::SAVE, Reg::REG_Y, Reg::REG_A, 4);
+    const auto supposed_top = encode(OpCode::SAVE, Reg::REG_Y, Reg::REG_A, encode_immd(4));
     assert(supposed_top == state.m_program_data.back());
     (void)supposed_top;
     }
@@ -881,7 +882,7 @@ void run_get_line_processing_function_tests() {
     beg = assume_directive(state,   beg, end);
     beg = make_cmp        (state, ++beg, end);
     beg = make_skip       (state, ++beg, end);
-    const auto supposed_top = with_int::encode(OpCode::SKIP, Reg::REG_X, 1);
+    const auto supposed_top = encode(OpCode::SKIP, Reg::REG_X, encode_immd(1));
     assert(supposed_top == state.m_program_data.back());
     (void)supposed_top;
     }
@@ -902,9 +903,9 @@ void run_get_line_processing_function_tests() {
     beg = make_plus    (state,   beg, end);
     beg = make_minus   (state, ++beg, end);
     state.resolve_unfulfilled_labels();
-    assert(state.m_program_data[0] == with_int::encode(OpCode::SET , Reg::REG_PC, 2));
+    assert(state.m_program_data[0] == encode(OpCode::SET , Reg::REG_PC, encode_immd(2)));
     // remember load reg immd is a psuedo instruction
-    assert(state.m_program_data[1] == with_int::encode(OpCode::LOAD, Reg::REG_X, Reg::REG_X , 2));
+    assert(state.m_program_data[1] == encode(OpCode::LOAD, Reg::REG_X, Reg::REG_X, encode_immd(2)));
     }
     {
     constexpr const char * const sample_code =
@@ -915,10 +916,10 @@ void run_get_line_processing_function_tests() {
     Assembler asmr;
     asmr.assemble_from_string(sample_code);
     const auto & pdata = asmr.program_data();
-    assert(pdata[0] == with_fp::encode(OpCode::SET , Reg::REG_X, 1.0 ));
-    assert(pdata[1] == with_fp::encode(OpCode::SET , Reg::REG_Y, 1.44));
+    assert(pdata[0] == encode(OpCode::SET , Reg::REG_X, encode_immd(1.0)));
+    assert(pdata[1] == encode(OpCode::SET , Reg::REG_Y, encode_immd(1.44)));
     assert(pdata[2] == encode(OpCode::PLUS, Reg::REG_X, Reg::REG_Y, Reg::REG_X));
-    assert(pdata[3] == with_int::encode(OpCode::SET , Reg::REG_PC, 2));
+    assert(pdata[3] == encode(OpCode::SET , Reg::REG_PC, encode_immd(2)));
     (void)pdata;
     }
 }

@@ -53,7 +53,6 @@ private:
     UInt32 & reg0(Inst inst);
     UInt32 & reg1(Inst inst);
     UInt32 & reg2(Inst inst);
-    UInt32 & reg3(Inst inst);
 
     void do_rotate(Inst inst);
 
@@ -64,7 +63,7 @@ private:
         //               PC increment while the instruction is executing
         //               so it will be one too great if an illegal instruction
         //               is encountered
-        return ErfiError(m_registers[enum_types::REG_PC] - 1,
+        return ErfiError(m_registers[std::size_t(Reg::REG_PC)] - 1,
                          std::move(disassemble_instruction(i)));
     }
 

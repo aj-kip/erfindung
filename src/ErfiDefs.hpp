@@ -19,6 +19,11 @@
 
 *****************************************************************************/
 
+/** :TODO: I've made the assembler very type unsafe.
+ *  I am not regretting this decision. So to refactor, I would like to add
+ *  type-safety. I will does this in increments.
+ */
+
 /** This document/source file defines Erfindung ISA/interpreter.
  *  Target features:
  *  - RISC + some bells and wistles
@@ -78,7 +83,6 @@ using UInt8  = uint8_t;
 using UInt16 = uint16_t;
 using UInt64 = uint64_t;
 using UInt32 = uint32_t;
-using Inst   = UInt32;
 
 // program memory layout
 // needs a stack
@@ -103,7 +107,7 @@ namespace enum_types {
 
 // 32bit fixed point numbers, shhh-hhhh hhhh-hhhh llll-llll llll-llll
 // 3 bits
-enum Reg_e {
+enum class Reg_e {
     // GP/'arguement' registers
     REG_X ,
     REG_Y ,
@@ -142,7 +146,7 @@ find_unused(BitBytes * bb, unsigned len);
  */
 
 // 5 bits (back to)
-enum OpCode_e : UInt32 {
+enum class OpCode_e : UInt32 {
 
     // R-type arthemitic operations (4)
     // I will need variations that can handle immediates
@@ -230,7 +234,7 @@ constexpr const int COMP_LESS_THAN_MASK    = (1 << 1);
 constexpr const int COMP_GREATER_THAN_MASK = (1 << 2);
 constexpr const int COMP_NOT_EQUAL_MASK    = (1 << 3);
 
-enum SystemCallValue_e {
+enum class SystemCallValue_e {
     // system calls ignore paramform, and will only read the immediate
     // this will provide a space of ~32,000 possible functions
     // this enumeration defines constants that map to thier respective function
@@ -248,8 +252,7 @@ enum SystemCallValue_e {
     SYSTEM_CALL_COUNT // sentinal value
 };
 
-enum ParamForm_e {
-    REG_REG_REG_REG,
+enum class ParamForm_e {
     REG_REG_REG,
     REG_REG_IMMD,
     REG_REG,
@@ -309,6 +312,160 @@ using MemorySpace  = std::array<UInt32, 200>;//65536/sizeof(UInt32)>;
 
 // high level type alaises
 using DebuggerInstToLineMap = std::vector<std::size_t>;
+
+struct ImmdConst;
+class Immd;
+class RegParamPack;
+class FixedPointFlag;
+
+template <typename Base, typename Other>
+struct OrCommutative {
+    friend Base operator | (const Base & lhs, Other rhs)
+        { auto rv(lhs); rv |= rhs; return rv; }
+    friend Base operator | (Other lhs, const Base & rhs)
+        { auto rv(rhs); rv |= lhs; return rv; }
+};
+
+class Inst : OrCommutative<Inst, OpCode>, OrCommutative<Inst, Immd>,
+             OrCommutative<Inst, RegParamPack>,
+             OrCommutative<Inst, FixedPointFlag>
+{
+public:
+    friend Inst deserialize(UInt32);
+    friend UInt32 serialize(Inst);
+    friend bool decode_is_fixed_point_flag_set(Inst);
+
+    Inst(): v(0) {}
+    explicit Inst(OpCode);
+    explicit Inst(Immd);
+    explicit Inst(RegParamPack);
+    explicit Inst(FixedPointFlag);
+
+    Inst & operator |= (OpCode);
+    Inst & operator |= (Immd);
+    Inst & operator |= (RegParamPack);
+    Inst & operator |= (FixedPointFlag);
+    Inst & operator |= (Inst);
+
+    bool operator == (const Inst & rhs) const
+        { return v == rhs.v; }
+
+    bool operator != (const Inst & rhs) const
+        { return v != rhs.v; }
+
+private:
+    explicit Inst(UInt32 v_): v(v_) {}
+    UInt32 v;
+};
+
+class Immd {
+public:
+    Immd() {}
+private:
+    friend class Inst;
+    friend struct ImmdConst;
+    friend Immd encode_immd(int immd);
+    friend Immd encode_immd(double d);
+    friend Immd operator | (const Immd & lhs, unsigned rhs);
+
+    constexpr explicit Immd(UInt32 v): v(v) {}
+    UInt32 v;
+};
+
+struct ImmdConst { // can only friend "class-likes" AFAIK
+    constexpr static const Immd ZERO_INIT = Immd(0);
+    constexpr static const Immd COMP_EQUAL_MASK =
+        Immd(enum_types::COMP_EQUAL_MASK);
+    constexpr static const Immd COMP_NOT_EQUAL_MASK =
+        Immd(enum_types::COMP_NOT_EQUAL_MASK);
+    constexpr static const Immd COMP_LESS_THAN_MASK =
+        Immd(enum_types::COMP_LESS_THAN_MASK);
+    constexpr static const Immd COMP_GREATER_THAN_MASK =
+        Immd(enum_types::COMP_GREATER_THAN_MASK);
+    constexpr static const Immd COMP_LESS_THAN_OR_EQUAL_MASK =
+        Immd(enum_types::COMP_LESS_THAN_MASK | enum_types::COMP_EQUAL_MASK);
+    constexpr static const Immd COMP_GREATER_THAN_OR_EQUAL_MASK =
+        Immd(enum_types::COMP_GREATER_THAN_MASK | enum_types::COMP_EQUAL_MASK);
+};
+
+class RegParamPack {
+    friend class Inst;
+    explicit RegParamPack(UInt32 bits): v(bits) {}
+
+    RegParamPack(Reg r0): v(UInt32(r0) << 19) {}
+    RegParamPack(Reg r0, Reg r1): RegParamPack(r0) { v |= (UInt32(r1) << 16); }
+    RegParamPack(Reg r0, Reg r1, Reg r2):
+        RegParamPack(r0, r1) { v |= (UInt32(r2) << 13); }
+
+    friend RegParamPack encode_reg(Reg r0);
+
+    friend RegParamPack encode_reg_reg(Reg r0, Reg r1);
+
+    friend RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2);
+
+    UInt32 v;
+};
+
+class FixedPointFlag {
+    friend class Inst;
+    friend FixedPointFlag encode_set_is_fixed_point_flag();
+    FixedPointFlag(UInt32 v_): v(v_) {}
+    UInt32 v;
+};
+
+inline Inst operator | (Inst lhs, Inst rhs)
+    { return lhs |= rhs; }
+
+inline Inst deserialize(UInt32 v) { return Inst(v); }
+
+inline UInt32 serialize(Inst i) { return i.v; }
+
+// "wholesale" encoding functions
+
+Inst encode(OpCode op, Reg r0);
+Inst encode(OpCode op, Reg r0, Reg r1);
+Inst encode(OpCode op, Reg r0, Reg r1, Reg r2);
+Inst encode(OpCode op, Reg r0, Immd i);
+Inst encode(OpCode op, Reg r0, Reg r1, Immd i);
+
+Immd operator | (const Immd & lhs, unsigned rhs);
+Immd operator | (unsigned lhs, const Immd & rhs);
+
+Inst encode_op(OpCode op);
+
+Inst encode_param_form(ParamForm pf);
+
+// for ParamForm: REG
+RegParamPack encode_reg(Reg r0);
+
+// for ParamForm: REG_REG
+RegParamPack encode_reg_reg(Reg r0, Reg r1);
+
+// for ParamForm: REG_REG_REG
+RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2);
+
+Immd encode_immd(int immd);
+
+Immd encode_immd(double d);
+
+FixedPointFlag encode_set_is_fixed_point_flag();
+
+// helpers for vm/testing the assembler
+Reg decode_reg0(Inst inst);
+Reg decode_reg1(Inst inst);
+Reg decode_reg2(Inst inst);
+
+OpCode decode_op_code(Inst inst);
+
+ParamForm decode_param_form(Inst inst);
+
+int decode_immd_as_int(Inst inst);
+
+UInt32 decode_immd_as_fp(Inst inst);
+
+bool decode_is_fixed_point_flag_set(Inst i);
+
+const char * register_to_string(Reg r);
 
 } // end of erfin namespace
 

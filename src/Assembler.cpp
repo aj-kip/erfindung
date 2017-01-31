@@ -21,8 +21,7 @@
 
 #include "Assembler.hpp"
 #include "AssemblerPrivate/TextProcessState.hpp"
-#include "FixedPointUtil.hpp"
-#include "StringUtil.hpp"
+
 #include "Debugger.hpp"
 
 #include <algorithm>
@@ -90,13 +89,11 @@ void Assembler::assemble_from_string(const std::string & source) {
     for (std::string & str : line_list)
         remove_comments_from(str);
     // I need some means to sync line numbers with the source code
-    //remove_blank_strings(line_list);
     std::vector<std::string> tokens = tokenize(line_list);
 
     TextProcessState tpstate;
 
     tpstate.process_tokens(tokens.begin(), tokens.end());
-    //process_text(tpstate, tokens.begin(), tokens.end());
     // only when a valid program has been assembled do we swap in the actual
     // instructions, as a throw may occur at any point of the text processing
     tpstate.move_program(m_program, m_inst_to_line_map);
@@ -118,87 +115,6 @@ std::size_t Assembler::translate_to_line_number
     }
     return m_inst_to_line_map[instruction_address];
 }
-
-UInt32 encode_immd(double d) {
-    UInt32 fullwidth = to_fixed_point(d);
-    // we want a 9/6 fixed point number (+ one bit for sign)
-    UInt32 sign_part = (fullwidth & 0xF0000000u) >> 16u;
-    // full width is a 15/16 fixed point number
-    UInt32 partial = (fullwidth >> 10u) & 0x7FFFu;
-    // make sure we're not losing any of the integer part
-    if ((fullwidth >> 16u) & ~0x1FFu)
-        throw Error("Value too large to be encoded in a 9/6 fixed point number.");
-    return sign_part | partial | encode_set_is_fixed_point_flag();
-}
-
-const char * register_to_string(Reg r) {
-    using namespace enum_types;
-    switch (r) {
-    case REG_X : return "x" ;
-    case REG_Y : return "y" ;
-    case REG_Z : return "z" ;
-    case REG_A : return "a" ;
-    case REG_B : return "b" ;
-    case REG_C : return "c" ;
-    case REG_SP: return "bp";
-    case REG_PC: return "pc";
-    default: throw Error("Invalid register, cannot convert to a string.");
-    }
-}
-
-Inst encode(OpCode op, Reg r0) {
-    return encode_param_form(erfin::ParamForm::REG) |
-           encode_op(op) | encode_reg(r0);
-}
-
-Inst encode(OpCode op, Reg r0, Reg r1) {
-    return encode_param_form(erfin::ParamForm::REG_REG) |
-           encode_op(op) | encode_reg_reg(r0, r1);
-}
-
-Inst encode(OpCode op, Reg r0, Reg r1, Reg r2) {
-    return encode_param_form(erfin::ParamForm::REG_REG_REG) |
-           encode_op(op) | encode_reg_reg_reg(r0, r1, r2);
-}
-
-Inst encode(OpCode op, Reg r0, Reg r1, Reg r2, Reg r3) {
-    return encode_param_form(erfin::ParamForm::REG_REG_REG_REG) |
-           encode_op(op) | encode_reg_reg_reg_reg(r0, r1, r2, r3);
-}
-
-Inst encode(OpCode op, Reg r0, UInt32 i) {
-    return encode_param_form(erfin::ParamForm::REG_IMMD) |
-           encode_op(op) | encode_reg(r0) | i;
-}
-
-Inst encode(OpCode op, Reg r0, Reg r1, UInt32 i) {
-    return encode_param_form(erfin::ParamForm::REG_REG_IMMD) |
-           encode_op(op) | encode_reg_reg(r0, r1) | i;
-}
-
-namespace with_int {
-
-Inst encode(OpCode op, Reg r0, int i) {
-    return ::erfin::encode(op, r0, encode_immd(i));
-}
-
-Inst encode(OpCode op, Reg r0, Reg r1, int i) {
-    return ::erfin::encode(op, r0, r1, encode_immd(i));
-}
-
-} // end of with_int namespace
-
-namespace with_fp {
-
-Inst encode(OpCode op, Reg r0, double d) {
-    return ::erfin::encode(op, r0, encode_immd(d));
-}
-
-Inst encode(OpCode op, Reg r0, Reg r1, double d) {
-    return ::erfin::encode(op, r0, r1, encode_immd(d));
-}
-
-} // end of with_fp namespace
 
 } // end of erfin namespace
 

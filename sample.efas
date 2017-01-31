@@ -1,5 +1,5 @@
   set pc main
-: erfindung_text data [
+: erfindung-text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
 __X__________X______XX__XX__________________________________X_______________________________
 __X__________X_X_____X__XX_____________XX___________________X_______________________________
@@ -20,16 +20,16 @@ ________________________________________________________________________________
 ____________________________________________________________________________________X_______
 X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____XXXXXX_______
 ____________ ]
-: main set sp bp_start
+: main set sp stack-start
        set  x 92
        set  y 19
-       set  z erfindung_text
+       set  z erfindung-text
        call upload # upload sprite
        set  z a
-       set  x 1#0
-       set  y 2#0
-       set  b 3#1 
-       set  c 4#1
+       set  x 0
+       set  y 0
+       set  b 1 
+       set  c 1
        # stack pointer, points to an "initialized variable"
        # +---+        push +---+        pop +---+ 
        # | ? | [+3]        | c | <- sp      | ? | <- [ 0]  sp (was)
@@ -37,15 +37,7 @@ ____________ ]
        # | ? | [+1]        | a |            | ? |    [-2]
        # +---+ <- sp       +---+            +---+ <- sp
        # therefore push and pop offsets must be different
-       push z b c x y
-       set x 0
-       set y 0
-       set z 0
-       set b 0
-       set c 0
-       pop  y x c b z
-       push z b c x y
-
+       jump start-program
 : loop call wait
        call clear
 
@@ -56,14 +48,17 @@ ____________ ]
        add  x b x # x = b + x
        add  y c y
        #    4 3 2 1 0
+: start-program
        push z b c x y
 
        # x = x_pos (already set)
        set  y b  # y = x velocity
        set  z 400
        # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds 
-       push pc
-       jump check_bounds # x = x_pos, y = x_vel -> a = new_x_vel       
+       set  a  pc
+       add  a  4
+       save a sp
+       jump check-bounds # x = x_pos, y = x_vel -> a = new_x_vel       
        sub  sp 1
 
        save a sp -3 # I guess where x velocity is
@@ -72,8 +67,11 @@ ____________ ]
        load x sp 
        load y sp -2
        set  z 300
-       push pc
-       jump check_bounds
+
+       set a pc
+       add a 4
+       save a sp
+       jump check-bounds
        sub  sp 1
 
        # save to y velocity
@@ -82,28 +80,28 @@ ____________ ]
        
 # this is a """function"""
 assume integer
-: check_bounds
+: check-bounds
     comp b x   0
     skip b   <
-        jump check_next
+        jump check-next
     comp b y    -1
     skip b   ==
-        jump check_next
+        jump check-next
     set a  1
-    jump sp # returns
-: check_next
+    load pc sp # returns
+: check-next
     comp b x   z
     skip b   >
-        jump check_exit
+        jump check-exit
     comp b y    1
     skip b   ==
-        jump check_exit
+        jump check-exit
     set a -1
-    jump sp # returns
-: check_exit 
+    load pc sp # returns
+: check-exit
     # do not change velocity
     set a  y
-    jump sp
+    load pc sp
 
 # setup stack somewhere, no convention
-: bp_start data [ ________ ________ ________ ________ ]
+: stack-start data [ ________ ________ ________ ________ ]

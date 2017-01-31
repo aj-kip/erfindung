@@ -8,7 +8,8 @@ SOURCES += \
     ../src/DrawRectangle.cpp \
     ../src/ErfiGpu.cpp \
     ../src/Assembler.cpp \
-    ../src/ErfiCpu.cpp  \
+    ../src/ErfiCpu.cpp \
+    ../src/ErfiDefs.cpp \
     ../src/FixedPointUtil.cpp \
     ../src/AssemblerPrivate/TextProcessState.cpp \
     ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \

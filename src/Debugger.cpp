@@ -40,7 +40,7 @@ bool Debugger::at_break_point() const noexcept
 
 bool Debugger::is_outside_program() const noexcept {
     using namespace erfin::enum_types;
-    return m_regs[REG_PC] > m_inst_to_line_map.size();
+    return m_regs[std::size_t(Reg::REG_PC)] > m_inst_to_line_map.size();
 }
 
 std::size_t Debugger::add_break_point(std::size_t line_number) {
@@ -66,7 +66,8 @@ void Debugger::update_internals(const RegisterPack & cpu_regs) {
     using namespace enum_types;
     if (is_outside_program())
         return;
-    auto itr = m_break_points.find(m_inst_to_line_map[m_regs[REG_PC]]);
+    constexpr auto pc_idx = std::size_t(Reg::REG_PC);
+    auto itr = m_break_points.find(m_inst_to_line_map[m_regs[pc_idx]]);
     m_at_break_point = (itr != m_break_points.end());
     m_regs = cpu_regs;
 }
@@ -84,11 +85,12 @@ const std::string & Debugger::interpret_register
     m_reg_int_cache = register_to_string(r);
     m_reg_int_cache += ": ";
     const UInt32 * source = nullptr;
+    auto reg_idx = std::size_t(r);
     static_assert(std::is_same<const UInt32 &, decltype((*memory)[0])>::value, "");
-    if (memory && m_regs[r] <= memory->size()) {
-        source = &(*memory)[0] + m_regs[r];
+    if (memory && m_regs[reg_idx] <= memory->size()) {
+        source = &(*memory)[0] + m_regs[reg_idx];
     } else {
-        source = &m_regs[r];
+        source = &m_regs[reg_idx];
     }
     if (intr == AS_FP) {
         m_reg_int_cache += std::to_string(fixed_point_to_double(*source));
