@@ -103,25 +103,20 @@ using UInt32 = uint32_t;
 // |  Program Code
 // |
 // +-----------------
-namespace enum_types {
 
 // 32bit fixed point numbers, shhh-hhhh hhhh-hhhh llll-llll llll-llll
 // 3 bits
-enum class Reg_e {
+enum class Reg {
     // GP/'arguement' registers
-    REG_X ,
-    REG_Y ,
-    REG_Z ,
+    X, Y, Z,
     // GP/'answer' registers
-    REG_A ,
-    REG_B ,
-    REG_C ,
+    A, B, C,
     // stack (base) pointer [what's so special about it?]
-    REG_SP,
+    SP,
     // [special] program counter
-    REG_PC,
+    PC,
     // sentinel value [not a valid register]
-    REG_COUNT
+    COUNT
 };
 
 // having a fp flag, can further eliminate unneeded op codes
@@ -146,10 +141,9 @@ find_unused(BitBytes * bb, unsigned len);
  */
 
 // 5 bits (back to)
-enum class OpCode_e : UInt32 {
-
-    // R-type arthemitic operations (4)
-    // I will need variations that can handle immediates
+enum class OpCode : UInt32 {
+    // R-type type indifferent split by pf (1-bit) (integer only)
+    // PLUS, MINUS, AND, XOR, OR, ROTATE
     PLUS      , // two args, one answer
                 // "plus x y a"
                 // "plus x immd"
@@ -157,50 +151,52 @@ enum class OpCode_e : UInt32 {
                 // "minus x y a"
                 // "minus x y immd"
                 // "sub x y a"
+    AND       , // bitwise and
+                // This form applies to all logic operations
+                // "and x y a"
+                // "and x immd" only LSB
+    XOR        , // bitwise exclusive or
+    OR         , // bitwise or
+    ROTATE     , // negative -> left
+                 // positive -> right
+                 // "rotate x  4"
+                 // "rotate y -6"
+                 // "rotate x  a"
+    // R-type split by is_fp (1-bit) and pf (1-bit)
+    // TIMES, DIVIDE, MODULUS, COMP
     TIMES     , // two args, one answer
                 // "times x y a"
                 // "times x immd"
-    DIVIDE,     // two args, one answer (mod to flags)
+    DIVIDE    , // two args, one answer (mod to flags)
                 // if divide by zero, flags == denominator
                 // "divmod x y a b"
                 // "div x y a"
                 // "div x immd"
-    MODULUS,
-    // R-type LOGIC ops (4)
-    AND, // bitwise and
-         // This form applies to all logic operations
-         // "and x y a"
-         // "and x immd" only LSB
-    XOR, // bitwise exclusive or
-    OR , // bitwise or
-    NOT, // bitwise complement
-         // "not x a"
-    ROTATE , // negative -> left
-             // positive -> right
-             // "rotate x  4"
-             // "rotate y -6"
-             // "rotate x  a"
-
-    // J-type operations plus one R-type helper (COMP) (4)
-    // do all (>, <, ==, !=) (then use XOR + NON_ZERO)
-    COMP    , // two args, one answer
-              // "cmp x y a"
-    SKIP    , // one arg , conditional, if flags is zero
-              // "skip x"
-              // "skip x immd" immediate acts as a bit mask here
-    // jump is now a psuedo instruction
-    // "jump x   " -> "set pc x"
-    // "jump immd" -> "set pc immd"
-
+    MODULUS   ,
+    COMP      , // do all (>, <, ==, !=) (then use XOR + NON_ZERO)
+                // two args, one answer
+                // "cmp x y a"
+    // M-type (2bits for pf, 0 bits for is_fp) (set types)
+    // SET, SAVE, LOAD
     // loading/saving (2 ['heavy'])
-    LOAD, // two regs, one immd
-          // "load x a" loads x from address a
-          // "load x immd"
-          // "load x a immd
-          // "load x" load contents stored at address x, into register x
-    SAVE, // two regs, one immd
-          // "save x a" saves x to address a
-    SET,
+    SET       ,
+    SAVE      , // two regs, one immd
+                // "save x a" saves x to address a
+    LOAD      , // two regs, one immd
+                // "load x a" loads x from address a
+                // "load x immd"
+                // "load x a immd
+                // "load x" load contents stored at address x, into register x
+    // J-type (reducable to 0-bits for "pf")
+    // SKIP (make default immd 0b1111 ^ NOT_EQUAL)
+    SKIP      , // one arg , conditional, if flags is zero
+                // "skip x"
+                // "skip x immd" immediate acts as a bit mask here
+    // "O"-types (0 bits for "pf") (odd-out types)
+    // CALL, NOT
+    NOT        , // bitwise complement
+                 // "not x a"
+    // for SYSTEM_CALL:
     // I can reduce the instruction set size even further by defining, as all
     // ISAs do, function call conventions
     // therefore:
@@ -225,8 +221,7 @@ enum class OpCode_e : UInt32 {
     // +--------------------------+
     // registers SP and PC are neither (obviously)
     SYSTEM_CALL,
-
-    OPCODE_COUNT // sentinal value [not a valid op code]
+    COUNT        // sentinal value [not a valid op code]
 };
 
 constexpr const int COMP_EQUAL_MASK        = (1 << 0);
@@ -234,7 +229,7 @@ constexpr const int COMP_LESS_THAN_MASK    = (1 << 1);
 constexpr const int COMP_GREATER_THAN_MASK = (1 << 2);
 constexpr const int COMP_NOT_EQUAL_MASK    = (1 << 3);
 
-enum class SystemCallValue_e {
+enum class SystemCallValue {
     // system calls ignore paramform, and will only read the immediate
     // this will provide a space of ~32,000 possible functions
     // this enumeration defines constants that map to thier respective function
@@ -252,7 +247,7 @@ enum class SystemCallValue_e {
     SYSTEM_CALL_COUNT // sentinal value
 };
 
-enum class ParamForm_e {
+enum class ParamForm {
     REG_REG_REG,
     REG_REG_IMMD,
     REG_REG,
@@ -261,8 +256,6 @@ enum class ParamForm_e {
     NO_PARAMS,
     INVALID_PARAMS
 };
-
-} // end of enum_types
 
 // psuedo instructions:
 // any non-hardware instruction that can be formed from a combination of one or
@@ -304,19 +297,11 @@ enum class ParamForm_e {
 //
 // data fpnum [ # series of fixed point numbers
 //              ... ]
-using OpCode       = enum_types::OpCode_e   ;
-using Reg          = enum_types::Reg_e      ;
-using ParamForm    = enum_types::ParamForm_e;
 using RegisterPack = std::array<UInt32, 8>;
-using MemorySpace  = std::array<UInt32, 200>;//65536/sizeof(UInt32)>;
+using MemorySpace  = std::array<UInt32, 65536/sizeof(UInt32)>;
 
 // high level type alaises
 using DebuggerInstToLineMap = std::vector<std::size_t>;
-
-struct ImmdConst;
-class Immd;
-class RegParamPack;
-class FixedPointFlag;
 
 template <typename Base, typename Other>
 struct OrCommutative {
@@ -325,6 +310,20 @@ struct OrCommutative {
     friend Base operator | (Other lhs, const Base & rhs)
         { auto rv(rhs); rv |= lhs; return rv; }
 };
+
+struct ImmdConst;
+class Immd;
+class RegParamPack;
+class FixedPointFlag;
+
+// building instructions has fairly strict semantics
+// if these semantics are not enforced, it could result in mysterious bugs that
+// take forever to find
+// so let's have the compiler help us out here
+//
+// classes happen to be the only way to enforce them
+// this is NOT intended to be OOP
+// (as serielize/deserielize will reveal)
 
 class Inst : OrCommutative<Inst, OpCode>, OrCommutative<Inst, Immd>,
              OrCommutative<Inst, RegParamPack>,
@@ -358,34 +357,19 @@ private:
     UInt32 v;
 };
 
+inline Inst operator | (Inst lhs, Inst rhs) { return lhs |= rhs; }
+
 class Immd {
 public:
-    Immd() {}
+    Immd(): v(0) {}
 private:
     friend class Inst;
     friend struct ImmdConst;
-    friend Immd encode_immd(int immd);
-    friend Immd encode_immd(double d);
-    friend Immd operator | (const Immd & lhs, unsigned rhs);
+    friend Immd encode_immd_int(int immd);
+    friend Immd encode_immd_fp(double d);
 
     constexpr explicit Immd(UInt32 v): v(v) {}
     UInt32 v;
-};
-
-struct ImmdConst { // can only friend "class-likes" AFAIK
-    constexpr static const Immd ZERO_INIT = Immd(0);
-    constexpr static const Immd COMP_EQUAL_MASK =
-        Immd(enum_types::COMP_EQUAL_MASK);
-    constexpr static const Immd COMP_NOT_EQUAL_MASK =
-        Immd(enum_types::COMP_NOT_EQUAL_MASK);
-    constexpr static const Immd COMP_LESS_THAN_MASK =
-        Immd(enum_types::COMP_LESS_THAN_MASK);
-    constexpr static const Immd COMP_GREATER_THAN_MASK =
-        Immd(enum_types::COMP_GREATER_THAN_MASK);
-    constexpr static const Immd COMP_LESS_THAN_OR_EQUAL_MASK =
-        Immd(enum_types::COMP_LESS_THAN_MASK | enum_types::COMP_EQUAL_MASK);
-    constexpr static const Immd COMP_GREATER_THAN_OR_EQUAL_MASK =
-        Immd(enum_types::COMP_GREATER_THAN_MASK | enum_types::COMP_EQUAL_MASK);
 };
 
 class RegParamPack {
@@ -413,8 +397,20 @@ class FixedPointFlag {
     UInt32 v;
 };
 
-inline Inst operator | (Inst lhs, Inst rhs)
-    { return lhs |= rhs; }
+struct ImmdConst { // can only friend "class-likes" AFAIK
+    constexpr static const Immd COMP_EQUAL_MASK =
+        Immd(::erfin::COMP_EQUAL_MASK);
+    constexpr static const Immd COMP_NOT_EQUAL_MASK =
+        Immd(::erfin::COMP_NOT_EQUAL_MASK);
+    constexpr static const Immd COMP_LESS_THAN_MASK =
+        Immd(::erfin::COMP_LESS_THAN_MASK);
+    constexpr static const Immd COMP_GREATER_THAN_MASK =
+        Immd(::erfin::COMP_GREATER_THAN_MASK);
+    constexpr static const Immd COMP_LESS_THAN_OR_EQUAL_MASK =
+        Immd(::erfin::COMP_LESS_THAN_MASK | ::erfin::COMP_EQUAL_MASK);
+    constexpr static const Immd COMP_GREATER_THAN_OR_EQUAL_MASK =
+        Immd(::erfin::COMP_GREATER_THAN_MASK | ::erfin::COMP_EQUAL_MASK);
+};
 
 inline Inst deserialize(UInt32 v) { return Inst(v); }
 
@@ -428,12 +424,14 @@ Inst encode(OpCode op, Reg r0, Reg r1, Reg r2);
 Inst encode(OpCode op, Reg r0, Immd i);
 Inst encode(OpCode op, Reg r0, Reg r1, Immd i);
 
-Immd operator | (const Immd & lhs, unsigned rhs);
-Immd operator | (unsigned lhs, const Immd & rhs);
-
+//Immd operator | (const Immd & lhs, unsigned rhs);
+//Immd operator | (unsigned lhs, const Immd & rhs);
+/*
 Inst encode_op(OpCode op);
 
 Inst encode_param_form(ParamForm pf);
+*/
+Inst encode_op_with_pf(OpCode op, ParamForm pf);
 
 // for ParamForm: REG
 RegParamPack encode_reg(Reg r0);
@@ -444,9 +442,9 @@ RegParamPack encode_reg_reg(Reg r0, Reg r1);
 // for ParamForm: REG_REG_REG
 RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2);
 
-Immd encode_immd(int immd);
+Immd encode_immd_int(int immd);
 
-Immd encode_immd(double d);
+Immd encode_immd_fp(double d);
 
 FixedPointFlag encode_set_is_fixed_point_flag();
 

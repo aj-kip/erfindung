@@ -1,4 +1,4 @@
-  set pc main
+  jump main
 : erfindung-text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
 __X__________X______XX__XX__________________________________X_______________________________
@@ -39,25 +39,31 @@ ____________ ]
        # therefore push and pop offsets must be different
        jump start-program
 : loop call wait
-       call clear
+       #call clear
 
-       pop y x c b z
+       #pop y x c b z
+       load y sp  0
+       load x sp -1
+       load c sp -2
+       load b sp -3 
+       load z sp -4
+       sub  sp 5
 
-       call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
+       #call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
 
        add  x b x # x = b + x
        add  y c y
-       #    4 3 2 1 0
 : start-program
+       #    4 3 2 1 0
        push z b c x y
 
        # x = x_pos (already set)
        set  y b  # y = x velocity
-       set  z 400
+       set  z 301
        # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds 
-       set  a  pc
-       add  a  4
-       save a sp
+       set  a pc
+       add  a 4
+       push a
        jump check-bounds # x = x_pos, y = x_vel -> a = new_x_vel       
        sub  sp 1
 
@@ -66,16 +72,53 @@ ____________ ]
        # load y_pos, y_vel
        load x sp 
        load y sp -2
-       set  z 300
+       set  z 148
 
-       set a pc
-       add a 4
-       save a sp
+       assume integer
+       add a b c
+       add x y z
+       sub b c a
+       sub y x z
+       times c a b
+       times z x y
+       add x y z
+       sub b c a
+       sub y x z
+       times c a b
+       times z x y
+       add a b c
+       add x y z
+       sub b c a
+       sub y x z
+       times c a b
+       times z x y
+       add a b c
+       add x y z
+       sub b c a
+       sub y x z
+       times c a b
+       times z x y
+       add a b c
+       add x y z
+       sub b c a
+       sub y x z
+       times c a b
+       times z x y
+       add a b c
+       add x y z
+       sub b c a
+       sub y x z
+       times c a b
+       times z x y
+
+       set  a pc
+       add  a 4
+       push a
        jump check-bounds
        sub  sp 1
 
        # save to y velocity
-       save sp a -2
+       save a sp -2
        jump loop
        
 # this is a """function"""

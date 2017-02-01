@@ -32,7 +32,6 @@ using Error = std::runtime_error;
 
 namespace erfin {
 
-constexpr /* static */ const Immd ImmdConst::ZERO_INIT;
 constexpr /* static */ const Immd ImmdConst::COMP_EQUAL_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_NOT_EQUAL_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_LESS_THAN_MASK;
@@ -40,15 +39,14 @@ constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_LESS_THAN_OR_EQUAL_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_OR_EQUAL_MASK;
 
-Immd operator | (const Immd & lhs, unsigned rhs)
-    { return Immd(lhs.v | rhs); }
-
-Immd operator | (unsigned lhs, const Immd & rhs) { return rhs | lhs; }
-
 Inst encode_op(OpCode op) { return deserialize(UInt32(op) << 22); }
 
 Inst encode_param_form(ParamForm pf)
     { return deserialize(UInt32(pf) << 28); /* at most 3 bits */ }
+
+Inst encode_op_with_pf(OpCode op, ParamForm pf) {
+    return deserialize((UInt32(pf) << 28) | (UInt32(op) << 22));
+}
 
 RegParamPack encode_reg(Reg r0)
     { return RegParamPack(r0); }
@@ -59,10 +57,10 @@ RegParamPack encode_reg_reg(Reg r0, Reg r1)
 RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2)
     { return RegParamPack(r0, r1, r2); }
 
-Immd encode_immd(int immd)
-    { return immd < 0 ? 0x8000u | encode_immd(-immd) : Immd(immd & 0x7FFF); }
+Immd encode_immd_int(int i)
+    { return Immd(i < 0 ? 0x8000u | encode_immd_int(-i).v : i & 0x7FFF); }
 
-Immd encode_immd(double d) {
+Immd encode_immd_fp(double d) {
     UInt32 fullwidth = to_fixed_point(d);
     // we want a 9/6 fixed point number (+ one bit for sign)
     UInt32 sign_part = (fullwidth & 0xF0000000u) >> 16u;
@@ -103,17 +101,15 @@ bool decode_is_fixed_point_flag_set(Inst i)
     { return (i.v & 0x80000000) != 0; }
 
 const char * register_to_string(Reg r) {
-    using namespace enum_types;
-
     switch (r) {
-    case Reg::REG_X : return "x" ;
-    case Reg::REG_Y : return "y" ;
-    case Reg::REG_Z : return "z" ;
-    case Reg::REG_A : return "a" ;
-    case Reg::REG_B : return "b" ;
-    case Reg::REG_C : return "c" ;
-    case Reg::REG_SP: return "bp";
-    case Reg::REG_PC: return "pc";
+    case Reg::X : return "x" ;
+    case Reg::Y : return "y" ;
+    case Reg::Z : return "z" ;
+    case Reg::A : return "a" ;
+    case Reg::B : return "b" ;
+    case Reg::C : return "c" ;
+    case Reg::SP: return "bp";
+    case Reg::PC: return "pc";
     default: throw Error("Invalid register, cannot convert to a string.");
     }
 }

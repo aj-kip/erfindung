@@ -113,6 +113,7 @@ void test_fp_multiply(double a, double b) {
 
 void test_string_processing() {
     const char * const input_text =
+        "assume integer\n"
         "jump b\n"
         "jump 0\n\r"
         "cmp  a b\n\n\n"
@@ -131,7 +132,7 @@ void test_string_processing() {
 int main() {
     using namespace erfin;
 #   if 0
-    std::cout << enum_types::OPCODE_COUNT << std::endl;
+    std::cout << int(OpCode::COUNT) << std::endl;
     ErfiCpu::run_tests();
     test_string_processing();
 #   endif
@@ -152,11 +153,37 @@ int main() {
 
     asmr.setup_debugger(dbgr);
     {
-    auto i = dbgr.add_break_point(98);
+    auto i = dbgr.add_break_point(98); (void)i;
     assert(i != Debugger::NO_LINE);
     }
 
     load_program_into_memory(memory, asmr.program_data());
+    const int test_size = 10000000;
+    sf::Clock clk1;
+    volatile int total = 0;
+
+    while (total < test_size) {
+        cpu.clear_flags();
+        //while (!cpu.wait_was_called()) {
+            cpu.do_nothing(memory, &gpu);
+            ++total;
+        //}
+        gpu.wait(memory);
+    }
+    auto base_loop = clk1.getElapsedTime().asSeconds();
+
+    total = 0;
+    while (total < test_size) {
+        cpu.clear_flags();
+        while (!cpu.wait_was_called()) {
+            cpu.run_cycle(memory, &gpu);
+            ++total;
+        }
+        gpu.wait(memory);
+    }
+    std::cout << total << std::endl;
+    std::cout << std::fixed << float(test_size)/(clk1.getElapsedTime().asSeconds() - base_loop) << std::endl;
+    return 0;
 
     sf::RenderWindow win;
     win.create(sf::VideoMode(unsigned(ErfiGpu::SCREEN_WIDTH*3),
@@ -169,8 +196,19 @@ int main() {
     view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
     win.setView(view);
     }
+
+    sf::Clock clk;
+    int fps = 0;
     int frame_count = 0;
     while (win.isOpen()) {
+
+        if (clk.getElapsedTime().asSeconds() >= 1.0) {
+            fps = frame_count;
+            frame_count = 0;
+            clk.restart();
+        }
+        ++frame_count;
+
         {
         sf::Event e;
         while (win.pollEvent(e)) {
@@ -190,13 +228,7 @@ int main() {
 
         try {
             while (!cpu.wait_was_called()) {
-                if (frame_count == 35) {
-                    int k = 0;
-                    ++k;
-                    (void)k;
-                }
                 cpu.run_cycle(memory, &gpu);
-                ++frame_count;
             }
         } catch (ErfiError & exp) {
             constexpr const char * const NO_LINE_NUM_MSG =
@@ -212,18 +244,18 @@ int main() {
             std::cerr << exp.what() << std::endl;
             return ~0;
         }
-
+#       if 0
         DrawRectangle brush;
         brush.set_size(1.f, 1.f);
         gpu.draw_pixels([&win, &brush](int x, int y) {
             brush.set_position(float(x), float(y));
             win.draw(brush);
         });
+#       endif
         gpu.wait(memory);
-
         win.display();
     }
-
+#   if 0
     try {
         test_fixed_point(  2.0);
         test_fixed_point( -1.0);
@@ -258,7 +290,8 @@ int main() {
         std::cout << ex.what() << std::endl;
         return 1;
     }
-
-    std::cout << "# of op codes " << static_cast<int>(erfin::OpCode::OPCODE_COUNT) << std::endl;
+#   endif
+    std::cout << "# of op codes " << static_cast<int>(erfin::OpCode::COUNT) << std::endl;
+    std::cout << fps << std::endl;
     return 0;
 }

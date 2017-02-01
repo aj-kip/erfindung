@@ -89,7 +89,6 @@ UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num) {
 }
 
 UInt32 fp_compare(UInt32 a, UInt32 b) {
-    using namespace erfin::enum_types;
     auto is_neg = [] (UInt32 a) -> bool { return (a & 0xF0000000) != 0; };
     bool neg;
     if ((neg = is_neg(a)) == is_neg(b)) {

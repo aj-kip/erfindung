@@ -94,8 +94,9 @@ void TextProcessState::resolve_unfulfilled_labels() {
 #       endif
         assert((serialize(m_program_data[unfl_pair.program_location]) & 0xFFFF) == 0);
         m_program_data[unfl_pair.program_location] |=
-            erfin::encode_immd(int(lbl_pair.program_location));
+            erfin::encode_immd_int(lbl_pair.program_location);
         int i = erfin::decode_immd_as_int(m_program_data[unfl_pair.program_location]);
+        (void)i;
         assert(i == int(lbl_pair.program_location));
     }
     m_unfulfilled_labels.clear();
@@ -113,7 +114,7 @@ StringCIter TextProcessState::process_label(StringCIter beg, StringCIter end) {
                          "directive.");
     }
     handle_newlines(&beg, end);
-    if (string_to_register(*beg) != erfin::Reg::REG_COUNT) {
+    if (string_to_register(*beg) != erfin::Reg::COUNT) {
         throw make_error(": register cannot be used as a label.");
     }
     auto itr = m_labels.find(*beg);

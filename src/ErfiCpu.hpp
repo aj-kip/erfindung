@@ -38,37 +38,69 @@ public:
 
     void reset();
 
+    void do_nothing(MemorySpace &, ErfiGpu *){}
     void run_cycle(MemorySpace & memspace, ErfiGpu * gpu = nullptr);
-
-    void clear_flags() { m_wait_called = false; }
+    void run_cycle(Inst inst, MemorySpace & memspace, ErfiGpu * gpu = nullptr);
+    void clear_flags();
 
     void print_registers(std::ostream & out) const;
     void update_debugger(Debugger & dbgr) const;
-    bool wait_was_called() const { return m_wait_called; }
+    bool wait_was_called() const;
 
     static void run_tests();
 
 private:
 
+    static UInt32 decode_immd_selectively(Inst inst);
+
     UInt32 & reg0(Inst inst);
     UInt32 & reg1(Inst inst);
     UInt32 & reg2(Inst inst);
 
-    void do_rotate(Inst inst);
+    template <UInt32(*Func)(UInt32, UInt32)>
+    void do_basic_arth(Inst inst) {
+        using Pf = ParamForm;
+        UInt32 & r0 = reg0(inst), & r1 = reg1(inst);
+        switch (decode_param_form(inst)) {
+        case Pf::REG_REG_REG :
+            r0 = Func(r1, reg2(inst));
+            return;
+        case Pf::REG_REG_IMMD:
+            r0 = Func(r1, decode_immd_selectively(inst));
+            return;
+        default: emit_error(inst);
+        }
+    }
+
+    template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
+    void do_arth_branch_fp(Inst inst) {
+        if (decode_is_fixed_point_flag_set(inst))
+            do_basic_arth<FuncFp>(inst);
+        else
+            do_basic_arth<FuncInt>(inst);
+    }
 
     void do_syscall(Inst inst, ErfiGpu & gpu);
-    void do_basic_arth_inst(Inst inst, UInt32(*func)(UInt32, UInt32));
 
-    ErfiError emit_error(Inst i) const noexcept {
+    void do_set(Inst inst);
+
+    void do_skip(Inst inst);
+
+    void do_not(Inst inst);
+
+    std::size_t get_move_op_address(Inst inst);
+
+    void emit_error(Inst i) const {
         //               PC increment while the instruction is executing
         //               so it will be one too great if an illegal instruction
         //               is encountered
-        return ErfiError(m_registers[std::size_t(Reg::REG_PC)] - 1,
-                         std::move(disassemble_instruction(i)));
+        throw ErfiError(m_registers[std::size_t(Reg::PC)] - 1,
+                        std::move(disassemble_instruction(i)));
     }
 
     std::string disassemble_instruction(Inst i) const;
 
+    using NextFunction = void (ErfiCpu::*)(MemorySpace&, ErfiGpu*);
     RegisterPack m_registers;
     bool m_wait_called;
 };

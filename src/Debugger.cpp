@@ -39,8 +39,7 @@ bool Debugger::at_break_point() const noexcept
     { return m_at_break_point; }
 
 bool Debugger::is_outside_program() const noexcept {
-    using namespace erfin::enum_types;
-    return m_regs[std::size_t(Reg::REG_PC)] > m_inst_to_line_map.size();
+    return m_regs[std::size_t(Reg::PC)] > m_inst_to_line_map.size();
 }
 
 std::size_t Debugger::add_break_point(std::size_t line_number) {
@@ -63,10 +62,9 @@ bool Debugger::remove_break_point(std::size_t line_number) {
 }
 
 void Debugger::update_internals(const RegisterPack & cpu_regs) {
-    using namespace enum_types;
     if (is_outside_program())
         return;
-    constexpr auto pc_idx = std::size_t(Reg::REG_PC);
+    constexpr auto pc_idx = std::size_t(Reg::PC);
     auto itr = m_break_points.find(m_inst_to_line_map[m_regs[pc_idx]]);
     m_at_break_point = (itr != m_break_points.end());
     m_regs = cpu_regs;

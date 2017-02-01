@@ -72,11 +72,17 @@ ErfiGpu::~ErfiGpu() {
         m_gfx_thread.join();
 }
 
+//#define MACRO_MULTITHREAD_THAT_SHIT
+
 void ErfiGpu::wait(MemorySpace & memory) {
+#   ifdef MACRO_MULTITHREAD_THAT_SHIT
     if (m_gfx_thread.joinable()) {
         m_cold.swap(m_hot);
         m_gfx_thread.join();
     }
+#   else
+    m_cold.swap(m_hot);
+#   endif
 
     for (auto itr = m_sprite_map.begin(); itr != m_sprite_map.end(); ++itr) {
         if (itr->second.delete_flag) {
@@ -84,10 +90,12 @@ void ErfiGpu::wait(MemorySpace & memory) {
             continue;
         }
     }
-
+#   ifdef MACRO_MULTITHREAD_THAT_SHIT
     std::thread t1(do_gpu_tasks, std::ref(*m_hot), &memory[0]);
     m_gfx_thread.swap(t1);
+#   endif
 
+    do_gpu_tasks(*m_hot, &memory[0]);
 }
 
 UInt32 ErfiGpu::upload_sprite(UInt32 width, UInt32 height, UInt32 address) {

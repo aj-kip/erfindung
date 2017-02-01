@@ -35,10 +35,10 @@ namespace erfin {
 namespace gpu_enum_types {
 
 enum GpuOpCode_e {
-    UPLOAD = std::size_t(enum_types::SystemCallValue_e::UPLOAD_SPRITE),
-    UNLOAD = std::size_t(enum_types::SystemCallValue_e::UNLOAD_SPRITE),
-    DRAW   = std::size_t(enum_types::SystemCallValue_e::DRAW_SPRITE  ),
-    CLEAR  = std::size_t(enum_types::SystemCallValue_e::SCREEN_CLEAR )
+    UPLOAD = std::size_t(SystemCallValue::UPLOAD_SPRITE),
+    UNLOAD = std::size_t(SystemCallValue::UNLOAD_SPRITE),
+    DRAW   = std::size_t(SystemCallValue::DRAW_SPRITE  ),
+    CLEAR  = std::size_t(SystemCallValue::SCREEN_CLEAR )
 };
 
 } // end of gpu_enum_types namespace

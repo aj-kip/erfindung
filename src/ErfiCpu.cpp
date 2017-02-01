@@ -42,9 +42,11 @@ UInt32 decode_immd_selectively(erfin::Inst inst);
 UInt32 plus (UInt32 x, UInt32 y) { return x + y; }
 UInt32 minus(UInt32 x, UInt32 y) { return x - y; }
 UInt32 times(UInt32 x, UInt32 y) { return x * y; }
+
 UInt32 andi (UInt32 x, UInt32 y) { return x & y; }
 UInt32 ori  (UInt32 x, UInt32 y) { return x | y; }
 UInt32 xori (UInt32 x, UInt32 y) { return x ^ y; }
+UInt32 rotate(UInt32 x, UInt32 y);
 
 UInt32 div_fp  (UInt32 x, UInt32 y);
 UInt32 div_int (UInt32 x, UInt32 y);
@@ -70,108 +72,58 @@ void ErfiCpu::reset() {
 }
 
 void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
-    using namespace erfin;
-    using namespace erfin::enum_types;
-    using O = OpCode;
-    using Pf = ParamForm;
+    Inst inst = deserialize(memspace[m_registers[std::size_t(Reg::PC)]++]);
+    run_cycle(inst, memspace, gpu);
+}
 
-    Inst inst = deserialize(memspace[m_registers[std::size_t(Reg::REG_PC)]++]);
-    const auto giimd = decode_immd_as_int;
-    static constexpr const auto is_fp_inst = decode_is_fixed_point_flag_set;
-
+void ErfiCpu::run_cycle(Inst inst, MemorySpace & memspace, ErfiGpu * gpu) {
+    // 2+3+2 | r0 | r1 | r2
+    //       | r0 | r1 | immd
+    //       | r0 |    | immd
+    // R-type type indifferent split by pf (1-bit) (integer only)
+    // PLUS, MINUS, AND, XOR, OR, ROTATE
+    //
     // R-type split by is_fp (1-bit) and pf (1-bit)
-    // PLUS, MINUS, TIMES, DIVIDE, MODULUS, AND, XOR, OR, COMP
-    // "S"-type (2bits for pf, 0 bits for is_fp) (set types)
-    // SET,SAVE,LOAD
+    // TIMES, DIVIDE, MODULUS, COMP
+    //
+    // M-type (2bits for pf, 0 bits for is_fp) (set types)
+    // SET, SAVE, LOAD
+    //
     // J-type (reducable to 0-bits for "pf")
-    // SKIP
+    // SKIP (make default immd 0b1111 ^ NOT_EQUAL)
+    //
     // "O"-types (0 bits for "pf") (odd-out types)
     // CALL, NOT
-    //
-    // ROTATE (1 bit for pf)
+    using O  = OpCode;
     switch (decode_op_code(inst)) {
-    case O::PLUS : do_basic_arth_inst(inst, plus ); break;
-    case O::MINUS: do_basic_arth_inst(inst, minus); break;
-    case O::TIMES:
-        do_basic_arth_inst(inst, is_fp_inst(inst) ? fp_multiply : times);
-        break;
-    case O::DIVIDE:
-        do_basic_arth_inst(inst, is_fp_inst(inst) ? div_fp : div_int);
-        break;
-    case O::MODULUS:
-        do_basic_arth_inst(inst, is_fp_inst(inst) ? mod_fp : mod_int);
-        break;
-    case O::AND: do_basic_arth_inst(inst, andi); break;
-    case O::XOR: do_basic_arth_inst(inst, xori); break;
-    case O::OR : do_basic_arth_inst(inst, ori ); break;
-    case O::NOT:
-        if (decode_param_form(inst) != Pf::REG)
-            throw emit_error(inst);
-        (void)~reg0(inst);
-        break;
-    case O::ROTATE: do_rotate(inst); break;
-    case O::COMP:
-        do_basic_arth_inst(inst, is_fp_inst(inst) ? comp_fp : comp_int);
-        break;
-    case O::SKIP: switch (decode_param_form(inst)) {
-        case Pf::REG: if (reg0(inst))
-                ++m_registers[std::size_t(Reg::REG_PC)];
-            break;
-        case Pf::REG_IMMD: if (reg0(inst) & UInt32(giimd(inst)))
-                ++m_registers[std::size_t(Reg::REG_PC)];
-            break;
-        default: throw emit_error(inst);
-        }
-        break;
-    case O::LOAD: switch (decode_param_form(inst)) {
-        case Pf::REG_IMMD: reg0(inst) = memspace[std::size_t(giimd(inst))]; break;
-        case Pf::REG_REG : reg0(inst) = memspace[reg1(inst)]; break;
-        case Pf::REG_REG_IMMD: {
-            std::size_t address = std::size_t(int(reg1(inst)) + giimd(inst));
-            if (address > memspace.size()) {
-                throw Error("Cannot load from address outside of memory space.");
-            }
-            std::cout << "loaded from address: " << address << std::endl;
-            reg0(inst) = memspace[address];
-            break;
-        }
-        default: throw emit_error(inst);
-        }
-        break;
-    case O::SAVE: switch (decode_param_form(inst)) {
-        case Pf::REG_IMMD: memspace[std::size_t(giimd(inst))] = reg0(inst); break;
-        case Pf::REG_REG:
-            memspace[reg1(inst)] = reg0(inst);
-            break;
-        case Pf::REG_REG_IMMD:
-            memspace[std::size_t(int(reg1(inst)) + giimd(inst))] = reg0(inst);
-            std::cout << "saved to address: " << (std::size_t(int(reg1(inst)) + giimd(inst))) << std::endl;
-            break;
-        default: throw emit_error(inst);
-        }
-        break;
-    case O::SET: switch (decode_param_form(inst)) {
-        case Pf::REG_REG_IMMD:
-#           ifdef MACRO_DEBUG
-            if (decode_reg0(inst) == Reg::REG_PC && is_fp_inst(inst))
-                throw emit_error(inst);
-#           endif
-            reg0(inst) = reg1(inst) + decode_immd_selectively(inst);
-            break;
-        case Pf::REG_REG : reg0(inst) = reg1(inst); break;
-        case Pf::REG_IMMD: reg0(inst) = decode_immd_selectively(inst); break;
-        default: throw emit_error(inst);
-        }
-        break;
-    case O::SYSTEM_CALL: if (gpu) do_syscall(inst, *gpu); break;
-    default: throw emit_error(inst);
+    case O::PLUS   : do_basic_arth    <plus                 >(inst);   return;
+    case O::MINUS  : do_basic_arth    <minus                >(inst);   return;
+    case O::AND    : do_basic_arth    <andi                 >(inst);   return;
+    case O::XOR    : do_basic_arth    <xori                 >(inst);   return;
+    case O::OR     : do_basic_arth    <ori                  >(inst);   return;
+    case O::ROTATE : do_basic_arth    <rotate               >(inst);   return;
+    case O::TIMES  : do_arth_branch_fp<fp_multiply, times   >(inst);   return;
+    case O::DIVIDE : do_arth_branch_fp<div_fp     , div_int >(inst);   return;
+    case O::MODULUS: do_arth_branch_fp<mod_fp     , mod_int >(inst);   return;
+    case O::COMP   : do_arth_branch_fp<comp_fp    , comp_int>(inst);   return;
+    case O::SET    : do_set(inst);                                     return;
+    case O::SAVE   : memspace[get_move_op_address(inst)] = reg0(inst); return;
+    case O::LOAD   : reg0(inst) = memspace[get_move_op_address(inst)]; return;
+    case O::SKIP   : do_skip(inst);                                    return;
+    case O::NOT    : do_not (inst);                                    return;
+    case O::SYSTEM_CALL: if (gpu) do_syscall(inst, *gpu);              return;
+    default: emit_error(inst);
     };
+}
+
+void ErfiCpu::clear_flags() {
+    m_wait_called = false;
 }
 
 void ErfiCpu::print_registers(std::ostream & out) const {
     auto old_pre = out.precision();
     out.precision(3);
-    for (int i = 0; i != int(Reg::REG_COUNT); ++i) {
+    for (int i = 0; i != int(Reg::COUNT); ++i) {
         const char * reg_name = register_to_string(Reg(i));
         out << reg_name;
         if (reg_name[1] == 0)
@@ -188,10 +140,11 @@ void ErfiCpu::update_debugger(Debugger & dbgr) const {
     dbgr.update_internals(m_registers);
 }
 
+bool ErfiCpu::wait_was_called() const { return m_wait_called; }
+
 void try_program(const char * source_code, const int inst_limit_c);
 
 /* static */ void ErfiCpu::run_tests() {
-    //assert(decode_immd_as_int(encode_immd(-1)) == -1);
 #   if 0
     try_program(
         "     assume integer \n"
@@ -263,57 +216,98 @@ void try_program(const char * source_code, const int inst_limit_c) {
 /* private */ UInt32 & ErfiCpu::reg2(Inst inst)
     { return m_registers[std::size_t(decode_reg2(inst))]; }
 
-/* private */ void ErfiCpu::do_rotate(Inst inst) {
-    using namespace enum_types;
-    using Pf = ParamForm;
-    int rint;
-    UInt32 r0;
-    switch (decode_param_form(inst)) {
-    case Pf::REG_REG : rint = int(reg1(inst))         ; break;
-    case Pf::REG_IMMD: rint = decode_immd_as_int(inst); break;
-    default: throw emit_error(inst);
-    }
-    r0 = reg0(inst);
-    if (rint < 0) { // left
-        rint = (rint*-1) % 32;
-        reg0(inst) = (r0 << rint) | (r0 >> (32 - rint));
-    } else if (rint > 0) { // right
-        rint %= 32;
-        reg0(inst) = (r0 >> rint) | (r0 << (32 - rint));
-    }
-}
-
 /* private */ void ErfiCpu::do_syscall(Inst inst, ErfiGpu & gpu) {
-    using namespace erfin::enum_types;
-    using Sys = SystemCallValue_e;
+    using Sys = SystemCallValue;
     auto get_reg_ref = [this] (Reg r) -> UInt32 &
         { return std::ref(m_registers[std::size_t(r)]); };
-    auto & x = get_reg_ref(Reg::REG_X), & y = get_reg_ref(Reg::REG_Y),
-         & z = get_reg_ref(Reg::REG_Z);
-    auto & a = get_reg_ref(Reg::REG_A);
+    auto & x = get_reg_ref(Reg::X), & y = get_reg_ref(Reg::Y),
+         & z = get_reg_ref(Reg::Z);
+    auto & a = get_reg_ref(Reg::A);
     static_assert(std::is_same<decltype(x), decltype(y)>::value, "");
     switch (Sys(decode_immd_as_int(inst))) {
     case Sys::UPLOAD_SPRITE : a = gpu.upload_sprite(x, y, z); break;
     case Sys::UNLOAD_SPRITE : gpu.unload_sprite(x); break;
     case Sys::DRAW_SPRITE   : gpu.draw_sprite(x, y, z); break;
     case Sys::SCREEN_CLEAR  : gpu.screen_clear(); break;
-    case Sys::WAIT_FOR_FRAME: m_wait_called = true; break;
+    case Sys::WAIT_FOR_FRAME:
+        m_wait_called = true;
+        break;
     case Sys::READ_INPUT    : break;
-    default:
-        throw emit_error(inst);
+    default: emit_error(inst);
     }
 }
 
-/* private */ void ErfiCpu::do_basic_arth_inst
-    (Inst inst, UInt32(*func)(UInt32, UInt32))
-{
+/* private */ void ErfiCpu::do_set(Inst inst) {
     using Pf = ParamForm;
-    UInt32 & r0 = reg0(inst), & r1 = reg1(inst);
     switch (decode_param_form(inst)) {
-    case Pf::REG_REG_REG : r0 = func(r1, reg2(inst)); break;
-    case Pf::REG_REG_IMMD: r0 = func(r1, decode_immd_selectively(inst)); break;
-    default: throw emit_error(inst);
+    case Pf::REG_REG_IMMD:
+#       ifdef MACRO_DEBUG
+        if (decode_reg0(inst) == Reg::PC && decode_is_fixed_point_flag_set(inst))
+            emit_error(inst);
+#       endif
+        reg0(inst) = reg1(inst) + ::decode_immd_selectively(inst);
+        return;
+    case Pf::REG_REG : reg0(inst) = reg1(inst); return;
+    case Pf::REG_IMMD: reg0(inst) = ::decode_immd_selectively(inst); return;
+    default: emit_error(inst);
     }
+}
+
+/* private */ void ErfiCpu::do_skip(Inst inst) {
+    switch (decode_param_form(inst)) {
+    case ParamForm::REG: if (reg0(inst))
+            ++m_registers[std::size_t(Reg::PC)];
+        return;
+    case ParamForm::REG_IMMD: if (reg0(inst) & UInt32(decode_immd_as_int(inst)))
+            ++m_registers[std::size_t(Reg::PC)];
+        return;
+    default: emit_error(inst);
+    }
+}
+
+/* private */ void ErfiCpu::do_not(Inst inst) {
+    if (decode_param_form(inst) != ParamForm::REG)
+        emit_error(inst);
+    (void)~reg0(inst);
+}
+
+/* private static */ UInt32 ErfiCpu::decode_immd_selectively(Inst inst) {
+    return ::decode_immd_selectively(inst);
+}
+
+/* private */ std::size_t ErfiCpu::get_move_op_address(Inst inst) {
+    using Pf = ParamForm;
+    std::size_t address;
+    static constexpr const auto giimd = decode_immd_as_int;
+    switch (decode_param_form(inst)) {
+    case Pf::REG_IMMD    : address = std::size_t(giimd(inst)); break;
+    case Pf::REG_REG     : address = reg1(inst); break;
+    case Pf::REG_REG_IMMD:
+        address = std::size_t(int(reg1(inst)) + giimd(inst));
+        break;
+    default: emit_error(inst);
+    }
+#   if 0 //def MACRO_DEBUG
+    switch (decode_op_code(inst)) {
+    case OpCode::SAVE:
+        std::cout << "saved to address: " << address
+                  << " from "
+                  << register_to_string(decode_reg0(inst)) << " with value "
+                  << reg0(inst) << std::endl;
+        break;
+    case OpCode::LOAD:
+        std::cout << "loaded from address: " << address << " to "
+                  << register_to_string(decode_reg0(inst)) << std::endl;
+        break;
+    default: assert(false); break;
+    }
+#   if 0
+    if (address > memspace.size()) {
+        throw Error("Cannot save to address outside of memory space.");
+    }
+#   endif
+#   endif
+    return address;
 }
 
 /* private */ std::string ErfiCpu::disassemble_instruction(Inst i) const {
@@ -331,6 +325,18 @@ UInt32 decode_immd_selectively(erfin::Inst inst) {
         return erfin::decode_immd_as_fp(inst);
     else
         return UInt32(erfin::decode_immd_as_int(inst));
+}
+
+UInt32 rotate(UInt32 x, UInt32 y) {
+    int rint = int(y);
+    if (rint < 0) { // left
+        rint = (rint*-1) % 32;
+        return (x << rint) | (x >> (32 - rint));
+    } else if (rint > 0) { // right
+        rint %= 32;
+        return (x >> rint) | (x << (32 - rint));
+    }
+    return x;
 }
 
 UInt32 div_fp  (UInt32 x, UInt32 y) {
@@ -361,15 +367,15 @@ UInt32 comp_fp (UInt32 x, UInt32 y) {
     using namespace erfin;
     UInt32 temp = 0;
     int res = erfin::fp_compare(x, y);
-    if (res == 0) temp |= enum_types::COMP_EQUAL_MASK;
-    if (res <  0) temp |= enum_types::COMP_LESS_THAN_MASK;
-    if (res >  0) temp |= enum_types::COMP_GREATER_THAN_MASK;
-    if (res != 0) temp |= enum_types::COMP_NOT_EQUAL_MASK;
+    if (res == 0) temp |= COMP_EQUAL_MASK;
+    if (res <  0) temp |= COMP_LESS_THAN_MASK;
+    if (res >  0) temp |= COMP_GREATER_THAN_MASK;
+    if (res != 0) temp |= COMP_NOT_EQUAL_MASK;
     return temp;
 }
 
 UInt32 comp_int(UInt32 x, UInt32 y) {
-    using namespace erfin::enum_types;
+    using namespace erfin;
     UInt32 temp = 0;
     int x_ = int(x), y_ = int(y);
     if (x_ <  y_) temp |= COMP_LESS_THAN_MASK   ;

@@ -93,27 +93,26 @@ NumericParseInfo parse_number(const std::string & str) {
 
 erfin::Reg string_to_register(const std::string & str) {
     using namespace erfin;
-    using namespace erfin::enum_types;
 
-    if (str.empty()) return Reg::REG_COUNT;
+    if (str.empty()) return Reg::COUNT;
 
-    auto is1ch = [&str] (Reg r) { return (str.size() == 1) ? r : Reg::REG_COUNT; };
+    auto is1ch = [&str] (Reg r) { return (str.size() == 1) ? r : Reg::COUNT; };
     auto _2ndch = [&str] (Reg r, char c) {
         if (str.size() == 2)
-            return str[1] == c ? r : Reg::REG_COUNT;
-        return Reg::REG_COUNT;
+            return str[1] == c ? r : Reg::COUNT;
+        return Reg::COUNT;
     };
 
     switch (str[0]) {
-    case 'x': return is1ch(Reg::REG_X);
-    case 'y': return is1ch(Reg::REG_Y);
-    case 'z': return is1ch(Reg::REG_Z);
-    case 'a': return is1ch(Reg::REG_A);
-    case 'b': return is1ch(Reg::REG_B);
-    case 'c': return is1ch(Reg::REG_C);
-    case 's': return _2ndch(Reg::REG_SP, 'p');
-    case 'p': return _2ndch(Reg::REG_PC, 'c');
-    default: return Reg::REG_COUNT;
+    case 'x': return is1ch(Reg::X);
+    case 'y': return is1ch(Reg::Y);
+    case 'z': return is1ch(Reg::Z);
+    case 'a': return is1ch(Reg::A);
+    case 'b': return is1ch(Reg::B);
+    case 'c': return is1ch(Reg::C);
+    case 's': return _2ndch(Reg::SP, 'p');
+    case 'p': return _2ndch(Reg::PC, 'c');
+    default: return Reg::COUNT;
     }
 }
 
@@ -136,7 +135,6 @@ ExtendedParamForm get_lines_param_form
     (TokensConstIterator beg, TokensConstIterator end, NumericParseInfo * npi)
 {
     using namespace erfin;
-    using namespace erfin::enum_types;
 
     // this had better not be the begging of the line
     assert(!get_line_processing_function(erfin::Assembler::NO_ASSUMPTION, *beg));
@@ -148,14 +146,14 @@ ExtendedParamForm get_lines_param_form
     switch (arg_count) {
     case 4:
         for (int i = 0; i != 4; ++i)
-            if (string_to_register(*(beg + i)) == Reg::REG_COUNT)
+            if (string_to_register(*(beg + i)) == Reg::COUNT)
                 return XPF_INVALID;
         return XPF_4R;
     case 3: case 2:
         for (int i = 0; i != arg_count - 1; ++i)
-            if (string_to_register(*(beg + i)) == Reg::REG_COUNT)
+            if (string_to_register(*(beg + i)) == Reg::COUNT)
                 return XPF_INVALID;
-        if (string_to_register(*(beg + arg_count - 1)) != Reg::REG_COUNT) {
+        if (string_to_register(*(beg + arg_count - 1)) != Reg::COUNT) {
             return arg_count == 2 ? XPF_2R : XPF_3R;
         }
         *npi = parse_number(*(beg + arg_count - 1));
@@ -165,7 +163,7 @@ ExtendedParamForm get_lines_param_form
         default: return arg_count == 2 ? XPF_1R_LABEL : XPF_2R_LABEL ;
         }
     case 1: // reg only
-        if (string_to_register(*beg) != Reg::REG_COUNT) return XPF_1R;
+        if (string_to_register(*beg) != Reg::COUNT) return XPF_1R;
         *npi = parse_number(*beg);
         switch (npi->type) {
         case INTEGER: return XPF_INT;
