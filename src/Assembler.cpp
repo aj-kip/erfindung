@@ -32,16 +32,6 @@
 #include <sys/stat.h>
 #include <cassert>
 
-#ifdef MACRO_COMPILER_GCC
-#   define MACRO_FALLTHROUGH
-#elif defined(MACRO_COMPILER_MSVC)
-#   define MACRO_FALLTHROUGH
-#elif defined(MACRO_COMPILER_CLANG)
-#   define MACRO_FALLTHROUGH [[clang::fallthrough]]
-#else
-#   error "no compiler defined"
-#endif
-
 namespace {
 
 using StringCIter = std::vector<std::string>::const_iterator;

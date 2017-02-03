@@ -19,11 +19,6 @@
 
 *****************************************************************************/
 
-/** :TODO: I've made the assembler very type unsafe.
- *  I am not regretting this decision. So to refactor, I would like to add
- *  type-safety. I will does this in increments.
- */
-
 /** This document/source file defines Erfindung ISA/interpreter.
  *  Target features:
  *  - RISC + some bells and wistles
@@ -46,29 +41,6 @@
  *  - psuedo instruction: an instruction NOT defined by the ISA, but can be
  *    formed from a combination of one or more hardware instructions.
  *
- *  Basic syntax:
- *  NAME: MNEMONIC SUB-MNEMONIC ARGUEMENTS # comment
- *  break down of syntax structure
- *  "NAME" a named constant/label, if stated first it must end with ":"
- *  ":" special operator saying "this is a NAME not a MNEMONIC"
- *  "MNEMONIC" word specifing an operation,
- *  "SUB-MNEMONIC" 2nd word specifing an operation, if necessary
- *  note: a SUB-MNEMONIC must follow if the MNEMONIC has SUB-MNEMONICs however,
- *        if there are no SUB-MNEMONICs for it, then none must follow
- *  "ARGUEMENTS" a mixed set registers, names or immdiates which the
- *               instruction takes as arguements
- *  "# comment" ignored by the assembler
- *  note: blank lines are also ignore by the assemlber
- *
- *  sample code:
- *  set  a     2       # SET INT
- *  set  b     2.2     # SET FP96
- *  set  x     2i      # SET ABS
- *  load a     b     0 # LOAD
- *  save b     a     0 # SAVE
- *  add  a     b     x # ADD
- *  sub  a     b     y # MINUS
- *  cmp  x     y     a # COMPARE
  */
 #ifndef MACRO_HEADER_GUARD_ERFIDEFS_HPP
 #define MACRO_HEADER_GUARD_ERFIDEFS_HPP
@@ -119,10 +91,32 @@ enum class Reg {
     COUNT
 };
 
-// having a fp flag, can further eliminate unneeded op codes
-// reg, reg, reg, reg: fppp xooooo 111 222 3334 44-- ---- ----
-// reg, reg, reg     : fppp xooooo 111 222 333- ---- ---- ----
-// reg, reg, immd    : fppp xooooo 111 222 iiii-iiii iiii-iiii
+// instruction bit break down
+// OpCode
+// ooooo--- -------- -------- --------
+// OpCode determines instruction type
+// and further layouts depend on this type
+// R-type (both indifferent and split)
+// ooooo-fp 000-111- 222----- --------
+// ooooo-fp 000-111- iiiiiiii iiiiiiii
+//
+// M-type (2 bits for parameter form, 3 are valid, 4 for set)
+// ooooo-pp 000-111- iiiiiiii iiiiiiii; set: (1 for fixed point, 1 for integer)
+//                                      load/save: immds are integer offsets
+// ooooo-pp 000-111- -------- --------
+// ooooo-pp 000----- iiiiiiii iiiiiiii
+//
+// "Set" type (a seperate handler for set ops, 2 bits for pf)
+// ooooo-fp 000-111- -------- -------- // "2" here
+// ooooo-fp 000----- iiiiiiii iiiiiiii // 2 here
+//
+// J-type "skip"
+// ooooo--p 000----- -------- -------- // the fp bit doesn't change anything
+// ooooo--p 000----- iiiiiiii iiiiiiii
+//
+// O-types
+// ooooo--- 000----- iiiiiiii iiiiiiii (integer immd only)
+//
 
 /*
 # set aside 16bytes*80 for box comps
@@ -141,7 +135,7 @@ find_unused(BitBytes * bb, unsigned len);
  */
 
 // 5 bits (back to)
-enum class OpCode : UInt32 {
+enum class OpCode {
     // R-type type indifferent split by pf (1-bit) (integer only)
     // PLUS, MINUS, AND, XOR, OR, ROTATE
     PLUS      , // two args, one answer
@@ -305,9 +299,9 @@ using DebuggerInstToLineMap = std::vector<std::size_t>;
 
 template <typename Base, typename Other>
 struct OrCommutative {
-    friend Base operator | (const Base & lhs, Other rhs)
+    friend Base operator | (Base lhs, Other rhs)
         { auto rv(lhs); rv |= rhs; return rv; }
-    friend Base operator | (Other lhs, const Base & rhs)
+    friend Base operator | (Other lhs, Base rhs)
         { auto rv(rhs); rv |= lhs; return rv; }
 };
 
@@ -325,16 +319,20 @@ class FixedPointFlag;
 // this is NOT intended to be OOP
 // (as serielize/deserielize will reveal)
 
-class Inst : OrCommutative<Inst, OpCode>, OrCommutative<Inst, Immd>,
-             OrCommutative<Inst, RegParamPack>,
-             OrCommutative<Inst, FixedPointFlag>
+class Inst :
+    OrCommutative<Inst, OpCode>,
+    OrCommutative<Inst, Immd>,
+    OrCommutative<Inst, RegParamPack>,
+    OrCommutative<Inst, FixedPointFlag>
 {
 public:
+    friend class InstAttorney;
     friend Inst deserialize(UInt32);
     friend UInt32 serialize(Inst);
     friend bool decode_is_fixed_point_flag_set(Inst);
 
     Inst(): v(0) {}
+
     explicit Inst(OpCode);
     explicit Inst(Immd);
     explicit Inst(RegParamPack);
@@ -357,11 +355,13 @@ private:
     UInt32 v;
 };
 
-inline Inst operator | (Inst lhs, Inst rhs) { return lhs |= rhs; }
-
 class Immd {
 public:
     Immd(): v(0) {}
+    bool operator == (const Immd & rhs) const
+        { return v == rhs.v; }
+    bool operator != (const Immd & rhs) const
+        { return v != rhs.v; }
 private:
     friend class Inst;
     friend struct ImmdConst;
@@ -373,19 +373,31 @@ private:
 };
 
 class RegParamPack {
+public:
+    RegParamPack(): v(0) {}
+private:
+    constexpr static const int REG0_POS = 22;
+    constexpr static const int REG1_POS = 18;
+    constexpr static const int REG2_POS = 14;
+
     friend class Inst;
     explicit RegParamPack(UInt32 bits): v(bits) {}
 
-    RegParamPack(Reg r0): v(UInt32(r0) << 19) {}
-    RegParamPack(Reg r0, Reg r1): RegParamPack(r0) { v |= (UInt32(r1) << 16); }
+    RegParamPack(Reg r0): v(UInt32(r0) << REG0_POS) {}
+    RegParamPack(Reg r0, Reg r1): RegParamPack(r0)
+        { v |= (UInt32(r1) << REG1_POS); }
     RegParamPack(Reg r0, Reg r1, Reg r2):
-        RegParamPack(r0, r1) { v |= (UInt32(r2) << 13); }
+        RegParamPack(r0, r1) { v |= (UInt32(r2) << REG2_POS); }
 
     friend RegParamPack encode_reg(Reg r0);
 
     friend RegParamPack encode_reg_reg(Reg r0, Reg r1);
 
     friend RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2);
+
+    friend Reg decode_reg0(Inst inst);
+    friend Reg decode_reg1(Inst inst);
+    friend Reg decode_reg2(Inst inst);
 
     UInt32 v;
 };
@@ -396,6 +408,32 @@ class FixedPointFlag {
     FixedPointFlag(UInt32 v_): v(v_) {}
     UInt32 v;
 };
+
+enum class RTypeParamForm {
+    _3R_INT     ,
+    _2R_IMMD_INT,
+    _3R_FP      , // Note: Fixed point must be the msb!
+    _2R_IMMD_FP
+};
+
+enum class MTypeParamForm {
+    _2R_INT , // integers are offsets
+    _2R     ,
+    _1R_INT ,
+    _INVALID
+};
+
+enum class SetTypeParamForm {
+    _2R_INTVER,
+    _1R_INT   ,
+    _2R_FPVER , // Note: Fixed point must be the msb!
+    _1R_FP
+};
+
+enum class JTypeParamForm
+    { _1R, _1R_INT };
+
+inline Inst operator | (Inst lhs, Inst rhs) { return lhs |= rhs; }
 
 struct ImmdConst { // can only friend "class-likes" AFAIK
     constexpr static const Immd COMP_EQUAL_MASK =
@@ -424,13 +462,6 @@ Inst encode(OpCode op, Reg r0, Reg r1, Reg r2);
 Inst encode(OpCode op, Reg r0, Immd i);
 Inst encode(OpCode op, Reg r0, Reg r1, Immd i);
 
-//Immd operator | (const Immd & lhs, unsigned rhs);
-//Immd operator | (unsigned lhs, const Immd & rhs);
-/*
-Inst encode_op(OpCode op);
-
-Inst encode_param_form(ParamForm pf);
-*/
 Inst encode_op_with_pf(OpCode op, ParamForm pf);
 
 // for ParamForm: REG
@@ -455,7 +486,10 @@ Reg decode_reg2(Inst inst);
 
 OpCode decode_op_code(Inst inst);
 
-ParamForm decode_param_form(Inst inst);
+RTypeParamForm   decode_r_type_pf(Inst i);
+MTypeParamForm   decode_m_type_pf(Inst i);
+SetTypeParamForm decode_s_type_pf(Inst i);
+JTypeParamForm   decode_j_type_pf(Inst i);
 
 int decode_immd_as_int(Inst inst);
 

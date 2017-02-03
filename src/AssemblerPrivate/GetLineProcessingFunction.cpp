@@ -476,7 +476,7 @@ StringCIter make_set
     ++beg; // skip "set"
     // set instruction has exactly two arguments
     StringCIter line_end = get_eol(beg, end);
-    auto itr2reg = [](StringCIter itr) { return string_to_register(*itr); };
+    auto itr2reg = [](StringCIter itr) -> Reg { return string_to_register(*itr); };
     Inst inst;
     NumericParseInfo npi;
     const std::string * label = nullptr;
@@ -747,7 +747,7 @@ StringCIter make_generic_memory_access
         inst |= encode_op_with_pf(op_code, ParamForm::REG_REG);
         break;
     case XPF_2R_LABEL: case XPF_2R_INT: case XPF_1R_INT: case XPF_1R_LABEL:
-        inst |= encode_op_with_pf(op_code, ParamForm::REG_REG);
+        inst |= encode_op_with_pf(op_code, ParamForm::REG_REG_IMMD);
         break;
     default:
         throw state.make_error(std::string(": <op_code> does not support ") +
@@ -833,6 +833,24 @@ erfin::Immd deal_with_fp_immd
 namespace erfin {
 
 void run_get_line_processing_function_tests() {
+    {
+    auto a = encode_op_with_pf(OpCode::SET, ParamForm::REG_IMMD);
+    auto b = encode(OpCode::SET, Reg(0), encode_immd_int(0));
+    (void)a; (void)b;
+    assert(string_to_register("x") == Reg::X);
+
+    NumericParseInfo npi;
+    npi = parse_number("12.34");
+    Immd i = encode_immd_fp(12.34);
+    (void)npi;
+    (void)i;
+    assert(i == encode_immd_fp(npi.floating_point));
+
+    auto c = encode(OpCode::SET, Reg::X, encode_immd_fp(12.34));
+    auto d = encode(OpCode::SET, string_to_register("x"), encode_immd_fp(npi.floating_point));
+    (void)c; (void)d;
+    assert(c == d);
+    }
     TextProcessState state;
     // test basic instructions
     {
@@ -846,6 +864,7 @@ void run_get_line_processing_function_tests() {
     beg = make_set(state, beg, end);
     beg = make_set(state, ++beg, end);
     beg = make_set(state, ++beg, end);
+
     auto supposed_top = encode(OpCode::SET, Reg::X, encode_immd_fp(12.34));
     assert(state.m_program_data.back() == supposed_top);
     (void)supposed_top;

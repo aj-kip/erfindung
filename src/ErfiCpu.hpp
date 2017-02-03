@@ -51,34 +51,12 @@ public:
 
 private:
 
-    static UInt32 decode_immd_selectively(Inst inst);
-
     UInt32 & reg0(Inst inst);
     UInt32 & reg1(Inst inst);
     UInt32 & reg2(Inst inst);
 
-    template <UInt32(*Func)(UInt32, UInt32)>
-    void do_basic_arth(Inst inst) {
-        using Pf = ParamForm;
-        UInt32 & r0 = reg0(inst), & r1 = reg1(inst);
-        switch (decode_param_form(inst)) {
-        case Pf::REG_REG_REG :
-            r0 = Func(r1, reg2(inst));
-            return;
-        case Pf::REG_REG_IMMD:
-            r0 = Func(r1, decode_immd_selectively(inst));
-            return;
-        default: emit_error(inst);
-        }
-    }
-
     template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
-    void do_arth_branch_fp(Inst inst) {
-        if (decode_is_fixed_point_flag_set(inst))
-            do_basic_arth<FuncFp>(inst);
-        else
-            do_basic_arth<FuncInt>(inst);
-    }
+    void do_arth(Inst inst);
 
     void do_syscall(Inst inst, ErfiGpu & gpu);
 
@@ -90,21 +68,26 @@ private:
 
     std::size_t get_move_op_address(Inst inst);
 
-    void emit_error(Inst i) const {
-        //               PC increment while the instruction is executing
-        //               so it will be one too great if an illegal instruction
-        //               is encountered
-        throw ErfiError(m_registers[std::size_t(Reg::PC)] - 1,
-                        std::move(disassemble_instruction(i)));
-    }
+    void emit_error(Inst i) const;
 
     std::string disassemble_instruction(Inst i) const;
 
-    using NextFunction = void (ErfiCpu::*)(MemorySpace&, ErfiGpu*);
     RegisterPack m_registers;
     bool m_wait_called;
 };
 
+template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
+/* private */ void ErfiCpu::do_arth(Inst inst) {
+    using Pf = RTypeParamForm;
+    UInt32 & r0 = reg0(inst), & r1 = reg1(inst);
+    switch (decode_r_type_pf(inst)) {
+    case Pf::_3R_INT     : r0 = FuncInt(r1, reg2(inst)              ); return;
+    case Pf::_2R_IMMD_INT: r0 = FuncInt(r1, decode_immd_as_int(inst)); return;
+    case Pf::_3R_FP      : r0 = FuncFp (r1, reg2(inst)              ); return;
+    case Pf::_2R_IMMD_FP : r0 = FuncFp (r1, decode_immd_as_fp (inst)); return;
+    }
 }
+
+} // end of erfin namespace
 
 #endif

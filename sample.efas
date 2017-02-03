@@ -49,7 +49,7 @@ ____________ ]
        load z sp -4
        sub  sp 5
 
-       #call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
+       call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
 
        add  x b x # x = b + x
        add  y c y
@@ -59,7 +59,8 @@ ____________ ]
 
        # x = x_pos (already set)
        set  y b  # y = x velocity
-       set  z 301
+       set  z 320
+       sub  z  92
        # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds 
        set  a pc
        add  a 4
@@ -72,44 +73,8 @@ ____________ ]
        # load y_pos, y_vel
        load x sp 
        load y sp -2
-       set  z 148
-
-       assume integer
-       add a b c
-       add x y z
-       sub b c a
-       sub y x z
-       times c a b
-       times z x y
-       add x y z
-       sub b c a
-       sub y x z
-       times c a b
-       times z x y
-       add a b c
-       add x y z
-       sub b c a
-       sub y x z
-       times c a b
-       times z x y
-       add a b c
-       add x y z
-       sub b c a
-       sub y x z
-       times c a b
-       times z x y
-       add a b c
-       add x y z
-       sub b c a
-       sub y x z
-       times c a b
-       times z x y
-       add a b c
-       add x y z
-       sub b c a
-       sub y x z
-       times c a b
-       times z x y
+       set  z 240
+       sub  z  19
 
        set  a pc
        add  a 4

@@ -1,3 +1,4 @@
+message($$CONFIG)
 TEMPLATE = app
 
 CONFIG += console
@@ -44,14 +45,13 @@ CONFIG (debug, debug|release) {
 
 CONFIG (release, debug|release) {
     DEFINES += linux NDEBUG MACRO_RELEASE
-    QMAKE_CXXFLAGS += -Ofast
-    QMAKE_LFLAGS   += -Ofast
     CONFIG -= debug import_qpa_plugin import_plugins testcase_targets qt qpa gcc file_copies warn_on release link_prl incremental shared c++11 console
-    message($$CONFIG)
     QMAKE_CXXFLAGS_RELEASE -= -O2
     QMAKE_CXXFLAGS_RELEASE -= -pg
     QMAKE_LFLAGS_RELEASE   -= -O1
     QMAKE_LFLAGS_RELEASE   -= -pg
+    QMAKE_CXXFLAGS += -Ofast
+    QMAKE_LFLAGS   += -Ofast -flto
 }
 
 linux-g++ {
