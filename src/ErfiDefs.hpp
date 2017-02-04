@@ -41,35 +41,13 @@
  *  - psuedo instruction: an instruction NOT defined by the ISA, but can be
  *    formed from a combination of one or more hardware instructions.
  *
- *  Basic syntax:
- *  NAME: MNEMONIC SUB-MNEMONIC ARGUEMENTS # comment
- *  break down of syntax structure
- *  "NAME" a named constant/label, if stated first it must end with ":"
- *  ":" special operator saying "this is a NAME not a MNEMONIC"
- *  "MNEMONIC" word specifing an operation,
- *  "SUB-MNEMONIC" 2nd word specifing an operation, if necessary
- *  note: a SUB-MNEMONIC must follow if the MNEMONIC has SUB-MNEMONICs however,
- *        if there are no SUB-MNEMONICs for it, then none must follow
- *  "ARGUEMENTS" a mixed set registers, names or immdiates which the
- *               instruction takes as arguements
- *  "# comment" ignored by the assembler
- *  note: blank lines are also ignore by the assemlber
- *
- *  sample code:
- *  set  a     2       # SET INT
- *  set  b     2.2     # SET FP96
- *  set  x     2i      # SET ABS
- *  load a     b     0 # LOAD
- *  save b     a     0 # SAVE
- *  add  a     b     x # ADD
- *  sub  a     b     y # MINUS
- *  cmp  x     y     a # COMPARE
  */
 #ifndef MACRO_HEADER_GUARD_ERFIDEFS_HPP
 #define MACRO_HEADER_GUARD_ERFIDEFS_HPP
 
 #include <cstdint>
 #include <array>
+#include <vector>
 
 namespace erfin {
 
@@ -77,7 +55,6 @@ using UInt8  = uint8_t;
 using UInt16 = uint16_t;
 using UInt64 = uint64_t;
 using UInt32 = uint32_t;
-using Inst   = UInt32;
 
 // program memory layout
 // needs a stack
@@ -98,31 +75,48 @@ using Inst   = UInt32;
 // |  Program Code
 // |
 // +-----------------
-namespace enum_types {
 
 // 32bit fixed point numbers, shhh-hhhh hhhh-hhhh llll-llll llll-llll
 // 3 bits
-enum Reg_e {
+enum class Reg {
     // GP/'arguement' registers
-    REG_X ,
-    REG_Y ,
-    REG_Z ,
+    X, Y, Z,
     // GP/'answer' registers
-    REG_A ,
-    REG_B ,
-    REG_C ,
-    // stack (base) pointer
-    REG_BP,
+    A, B, C,
+    // stack (base) pointer [what's so special about it?]
+    SP,
     // [special] program counter
-    REG_PC,
+    PC,
     // sentinel value [not a valid register]
-    REG_COUNT
+    COUNT
 };
 
-// having a fp flag, can further eliminate unneeded op codes
-// reg, reg, reg, reg: fppp xooooo 111 222 3334 44-- ---- ----
-// reg, reg, reg     : fppp xooooo 111 222 333- ---- ---- ----
-// reg, reg, immd    : fppp xooooo 111 222 iiii-iiii iiii-iiii
+// instruction bit break down
+// OpCode
+// ooooo--- -------- -------- --------
+// OpCode determines instruction type
+// and further layouts depend on this type
+// R-type (both indifferent and split)
+// ooooo-fp 000-111- 222----- --------
+// ooooo-fp 000-111- iiiiiiii iiiiiiii
+//
+// M-type (2 bits for parameter form, 3 are valid, 4 for set)
+// ooooo-pp 000-111- iiiiiiii iiiiiiii; set: (1 for fixed point, 1 for integer)
+//                                      load/save: immds are integer offsets
+// ooooo-pp 000-111- -------- --------
+// ooooo-pp 000----- iiiiiiii iiiiiiii
+//
+// "Set" type (a seperate handler for set ops, 2 bits for pf)
+// ooooo-fp 000-111- -------- -------- // "2" here
+// ooooo-fp 000----- iiiiiiii iiiiiiii // 2 here
+//
+// J-types
+// ooooo--p 000----- -------- -------- // the fp bit doesn't change anything
+// ooooo--p 000----- iiiiiiii iiiiiiii
+//
+// F-types
+// ooooo--- 000----- iiiiiiii iiiiiiii (integer immd only)
+//
 
 /*
 # set aside 16bytes*80 for box comps
@@ -141,10 +135,9 @@ find_unused(BitBytes * bb, unsigned len);
  */
 
 // 5 bits (back to)
-enum OpCode_e : UInt32 {
-
-    // R-type arthemitic operations (4)
-    // I will need variations that can handle immediates
+enum class OpCode {
+    // R-type type indifferent split by pf (1-bit) (integer only)
+    // PLUS, MINUS, AND, XOR, OR, ROTATE
     PLUS      , // two args, one answer
                 // "plus x y a"
                 // "plus x immd"
@@ -152,75 +145,79 @@ enum OpCode_e : UInt32 {
                 // "minus x y a"
                 // "minus x y immd"
                 // "sub x y a"
+    AND       , // bitwise and
+                // This form applies to all logic operations
+                // "and x y a"
+                // "and x immd" only LSB
+    XOR        , // bitwise exclusive or
+    OR         , // bitwise or
+    ROTATE     , // negative -> left
+                 // positive -> right
+                 // "rotate x  4"
+                 // "rotate y -6"
+                 // "rotate x  a"
+    // R-type split by is_fp (1-bit) and pf (1-bit)
+    // TIMES, DIVIDE, MODULUS, COMP
     TIMES     , // two args, one answer
                 // "times x y a"
                 // "times x immd"
-    DIVIDE,     // two args, one answer (mod to flags)
+    DIVIDE    , // two args, one answer (mod to flags)
                 // if divide by zero, flags == denominator
                 // "divmod x y a b"
                 // "div x y a"
                 // "div x immd"
-    MODULUS,
-    // R-type LOGIC ops (4)
-    AND, // bitwise and
-         // This form applies to all logic operations
-         // "and x y a"
-         // "and x immd" only LSB
-    XOR, // bitwise exclusive or
-    OR , // bitwise or
-    NOT, // bitwise complement
-         // "not x a"
-    ROTATE , // negative -> left
-             // positive -> right
-             // "rotate x  4"
-             // "rotate y -6"
-             // "rotate x  a"
-
-    // J-type operations plus one R-type helper (COMP) (4)
-    // do all (>, <, ==, !=) (then use XOR + NON_ZERO)
-    COMP    , // two args, one answer
-              // "cmp x y a"
-    SKIP    , // one arg , conditional, if flags is zero
-              // "skip x"
-              // "skip x immd" immediate acts as a bit mask here
-    // jump is now a psuedo instruction
-    // "jump x   " -> "set pc x"
-    // "jump immd" -> "set pc immd"
-
+    MODULUS   ,
+    COMP      , // do all (>, <, ==, !=) (then use XOR + NON_ZERO)
+                // two args, one answer
+                // "cmp x y a"
+    // M-type (2bits for pf, 0 bits for is_fp) (set types)
+    // SET, SAVE, LOAD
     // loading/saving (2 ['heavy'])
-    LOAD, // two regs, one immd
-          // "load x a" loads x from address a
-          // "load x immd"
-          // "load x a immd
-          // "load x" load contents stored at address x, into register x
-    SAVE, // two regs, one immd
-          // "save x a" saves x to address a
-    SET,
+    SET       ,
+    SAVE      , // two regs, one immd
+                // "save x a" saves x to address a
+    LOAD      , // two regs, one immd
+                // "load x a" loads x from address a
+                // "load x immd"
+                // "load x a immd
+                // "load x" load contents stored at address x, into register x
+    // J-type (reducable to 0-bits for "pf")
+    // SKIP (make default immd 0b1111 ^ NOT_EQUAL)
+    SKIP      , // one arg , conditional, if flags is zero
+                // "skip x"
+                // "skip x immd" immediate acts as a bit mask here
+    CALL       , // special instruction using sp
+    // F-types (0 bits for "pf") (odd-out types)
+    // CALL, NOT
+    NOT        , // bitwise complement
+                 // "not x a"
+    //SINE       , // "too much" for software to have it
+    // for SYSTEM_CALL:
     // I can reduce the instruction set size even further by defining, as all
     // ISAs do, function call conventions
     // therefore:
     // answer    registers are: a, b, c
     // parameter registers are: x, y, z
+    // saving model: callee saves everything to stack
     // other parameters and answers that cannot fit into the three registers
     // go unto the program stack like so:
     //
     // +--------------------------+
     // | callee's stack frane     |
-    // +--------------------------+ <---+--- BP
-    // | callee parameter data    |     |
-    // +--------------------------+     +--- size is constant
-    // | callee answer data       |     |
-    // +--------------------------+ <---+
-    // | old base pointer value   |
     // +--------------------------+
-    // |                          |
+    // | old stack pointer value  | <---+--- SP
+    // +--------------------------+     |
+    // | callee parameter data    |     |
+    // +--------------------------+     +--- size is "constant"
+    // | callee answer data       |     |
+    // +--------------------------+     |
+    // |                          | <---+
     // | previous function's data |
     // |                          |
     // +--------------------------+
-    // registers BP and PC are neither (obviously)
-    SYSTEM_CALL,
-
-    OPCODE_COUNT // sentinal value [not a valid op code]
+    // registers SP and PC are neither (obviously)
+    SYSTEM_IO,
+    COUNT        // sentinal value [not a valid op code]
 };
 
 constexpr const int COMP_EQUAL_MASK        = (1 << 0);
@@ -228,7 +225,7 @@ constexpr const int COMP_LESS_THAN_MASK    = (1 << 1);
 constexpr const int COMP_GREATER_THAN_MASK = (1 << 2);
 constexpr const int COMP_NOT_EQUAL_MASK    = (1 << 3);
 
-enum SystemCallValue_e {
+enum class SystemCallValue {
     // system calls ignore paramform, and will only read the immediate
     // this will provide a space of ~32,000 possible functions
     // this enumeration defines constants that map to thier respective function
@@ -242,22 +239,23 @@ enum SystemCallValue_e {
     DRAW_SPRITE   , // arguments: x: x pos, y: y pox, z: index for sprite
     SCREEN_CLEAR  , // no arguments
     WAIT_FOR_FRAME, // wait until the end of the frame
+    // input
     READ_INPUT    ,
+    // misc
+    RAND_NUMBER   , // a = a random set of 32 bits for a fp or int
+    READ_TIMER    , // reads system timer from last wait as fp
     SYSTEM_CALL_COUNT // sentinal value
 };
 
-enum ParamForm_e {
-    REG_REG_REG_REG,
+enum class ParamForm {
     REG_REG_REG,
     REG_REG_IMMD,
     REG_REG,
     REG_IMMD,
     REG,
-    NO_PARAMS,
+    IMMD,
     INVALID_PARAMS
 };
-
-} // end of enum_types
 
 // psuedo instructions:
 // any non-hardware instruction that can be formed from a combination of one or
@@ -299,11 +297,218 @@ enum ParamForm_e {
 //
 // data fpnum [ # series of fixed point numbers
 //              ... ]
-using OpCode       = enum_types::OpCode_e   ;
-using Reg          = enum_types::Reg_e      ;
-using ParamForm    = enum_types::ParamForm_e;
 using RegisterPack = std::array<UInt32, 8>;
 using MemorySpace  = std::array<UInt32, 65536/sizeof(UInt32)>;
+
+// high level type alaises
+using DebuggerInstToLineMap = std::vector<std::size_t>;
+
+template <typename Base, typename Other>
+struct OrCommutative {
+    friend Base operator | (Base lhs, Other rhs)
+        { auto rv(lhs); rv |= rhs; return rv; }
+    friend Base operator | (Other lhs, Base rhs)
+        { auto rv(rhs); rv |= lhs; return rv; }
+};
+
+struct ImmdConst;
+class Immd;
+class RegParamPack;
+class FixedPointFlag;
+
+// building instructions has fairly strict semantics
+// if these semantics are not enforced, it could result in mysterious bugs that
+// take forever to find
+// so let's have the compiler help us out here
+//
+// classes happen to be the only way to enforce them
+// this is NOT intended to be OOP
+// (as serielize/deserielize will reveal)
+
+class Inst :
+    OrCommutative<Inst, OpCode>,
+    OrCommutative<Inst, Immd>,
+    OrCommutative<Inst, RegParamPack>,
+    OrCommutative<Inst, FixedPointFlag>
+{
+public:
+    friend class InstAttorney;
+    friend Inst deserialize(UInt32);
+    friend UInt32 serialize(Inst);
+    friend bool decode_is_fixed_point_flag_set(Inst);
+
+    Inst(): v(0) {}
+
+    explicit Inst(OpCode);
+    explicit Inst(Immd);
+    explicit Inst(RegParamPack);
+    explicit Inst(FixedPointFlag);
+
+    Inst & operator |= (OpCode);
+    Inst & operator |= (Immd);
+    Inst & operator |= (RegParamPack);
+    Inst & operator |= (FixedPointFlag);
+    Inst & operator |= (Inst);
+
+    bool operator == (const Inst & rhs) const
+        { return v == rhs.v; }
+
+    bool operator != (const Inst & rhs) const
+        { return v != rhs.v; }
+
+private:
+    explicit Inst(UInt32 v_): v(v_) {}
+    UInt32 v;
+};
+
+class Immd {
+public:
+    Immd(): v(0) {}
+    bool operator == (const Immd & rhs) const
+        { return v == rhs.v; }
+    bool operator != (const Immd & rhs) const
+        { return v != rhs.v; }
+private:
+    friend class Inst;
+    friend struct ImmdConst;
+    friend Immd encode_immd_int(int immd);
+    friend Immd encode_immd_fp(double d);
+
+    constexpr explicit Immd(UInt32 v): v(v) {}
+    UInt32 v;
+};
+
+class RegParamPack {
+public:
+    RegParamPack(): v(0) {}
+private:
+    constexpr static const int REG0_POS = 22;
+    constexpr static const int REG1_POS = 18;
+    constexpr static const int REG2_POS = 14;
+
+    friend class Inst;
+    explicit RegParamPack(UInt32 bits): v(bits) {}
+
+    explicit RegParamPack(Reg r0): v(UInt32(r0) << REG0_POS) {}
+    RegParamPack(Reg r0, Reg r1): RegParamPack(r0)
+        { v |= (UInt32(r1) << REG1_POS); }
+    RegParamPack(Reg r0, Reg r1, Reg r2):
+        RegParamPack(r0, r1) { v |= (UInt32(r2) << REG2_POS); }
+
+    friend RegParamPack encode_reg(Reg r0);
+
+    friend RegParamPack encode_reg_reg(Reg r0, Reg r1);
+
+    friend RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2);
+
+    friend Reg decode_reg0(Inst inst);
+    friend Reg decode_reg1(Inst inst);
+    friend Reg decode_reg2(Inst inst);
+
+    UInt32 v;
+};
+
+class FixedPointFlag {
+    friend class Inst;
+    friend FixedPointFlag encode_set_is_fixed_point_flag();
+    FixedPointFlag(UInt32 v_): v(v_) {}
+    UInt32 v;
+};
+
+enum class RTypeParamForm {
+    _3R_INT     ,
+    _2R_IMMD_INT,
+    _3R_FP      , // Note: Fixed point must be the msb!
+    _2R_IMMD_FP
+};
+
+enum class MTypeParamForm {
+    _2R_INT , // integers are offsets
+    _2R     ,
+    _1R_INT ,
+    _INVALID
+};
+
+enum class SetTypeParamForm {
+    _2R_INTVER,
+    _1R_INT   ,
+    _2R_FPVER , // Note: Fixed point must be the msb!
+    _1R_FP
+};
+
+// problem is, I can't have two constants with the same value using enums
+enum class JTypeParamForm {
+    // style: all or none?
+    _1R     = 0,
+    _1R_INT_FOR_JUMP = 1,
+    _IMMD_FOR_CALL   = _1R_INT_FOR_JUMP
+};
+
+inline Inst operator | (Inst lhs, Inst rhs) { return lhs |= rhs; }
+
+struct ImmdConst { // can only friend "class-likes" AFAIK
+    constexpr static const Immd COMP_EQUAL_MASK =
+        Immd(::erfin::COMP_EQUAL_MASK);
+    constexpr static const Immd COMP_NOT_EQUAL_MASK =
+        Immd(::erfin::COMP_NOT_EQUAL_MASK);
+    constexpr static const Immd COMP_LESS_THAN_MASK =
+        Immd(::erfin::COMP_LESS_THAN_MASK);
+    constexpr static const Immd COMP_GREATER_THAN_MASK =
+        Immd(::erfin::COMP_GREATER_THAN_MASK);
+    constexpr static const Immd COMP_LESS_THAN_OR_EQUAL_MASK =
+        Immd(::erfin::COMP_LESS_THAN_MASK | ::erfin::COMP_EQUAL_MASK);
+    constexpr static const Immd COMP_GREATER_THAN_OR_EQUAL_MASK =
+        Immd(::erfin::COMP_GREATER_THAN_MASK | ::erfin::COMP_EQUAL_MASK);
+};
+
+inline Inst deserialize(UInt32 v) { return Inst(v); }
+
+inline UInt32 serialize(Inst i) { return i.v; }
+
+// "wholesale" encoding functions
+
+Inst encode(OpCode op, Reg r0);
+Inst encode(OpCode op, Reg r0, Reg r1);
+Inst encode(OpCode op, Reg r0, Reg r1, Reg r2);
+Inst encode(OpCode op, Reg r0, Immd i);
+Inst encode(OpCode op, Reg r0, Reg r1, Immd i);
+
+Inst encode_op_with_pf(OpCode op, ParamForm pf);
+
+// for ParamForm: REG
+RegParamPack encode_reg(Reg r0);
+
+// for ParamForm: REG_REG
+RegParamPack encode_reg_reg(Reg r0, Reg r1);
+
+// for ParamForm: REG_REG_REG
+RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2);
+
+Immd encode_immd_int(int immd);
+
+Immd encode_immd_fp(double d);
+
+FixedPointFlag encode_set_is_fixed_point_flag();
+
+// helpers for vm/testing the assembler
+Reg decode_reg0(Inst inst);
+Reg decode_reg1(Inst inst);
+Reg decode_reg2(Inst inst);
+
+OpCode decode_op_code(Inst inst);
+
+RTypeParamForm   decode_r_type_pf(Inst i);
+MTypeParamForm   decode_m_type_pf(Inst i);
+SetTypeParamForm decode_s_type_pf(Inst i);
+JTypeParamForm   decode_j_type_pf(Inst i);
+
+int decode_immd_as_int(Inst inst);
+
+UInt32 decode_immd_as_fp(Inst inst);
+
+bool decode_is_fixed_point_flag_set(Inst i);
+
+const char * register_to_string(Reg r);
 
 } // end of erfin namespace
 

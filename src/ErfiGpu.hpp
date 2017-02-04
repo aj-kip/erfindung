@@ -29,16 +29,17 @@
 #include <vector>
 #include <thread>
 #include <memory>
+#include <condition_variable>
 
 namespace erfin {
 
 namespace gpu_enum_types {
 
 enum GpuOpCode_e {
-    UPLOAD = enum_types::UPLOAD_SPRITE,
-    UNLOAD = enum_types::UNLOAD_SPRITE,
-    DRAW   = enum_types::DRAW_SPRITE  ,
-    CLEAR  = enum_types::SCREEN_CLEAR
+    UPLOAD = std::size_t(SystemCallValue::UPLOAD_SPRITE),
+    UNLOAD = std::size_t(SystemCallValue::UNLOAD_SPRITE),
+    DRAW   = std::size_t(SystemCallValue::DRAW_SPRITE  ),
+    CLEAR  = std::size_t(SystemCallValue::SCREEN_CLEAR )
 };
 
 } // end of gpu_enum_types namespace
@@ -73,6 +74,7 @@ public:
 private:
 
     using VideoMemory = std::vector<bool>;
+    using CondVar = std::condition_variable;
     friend struct GpuContext;
 
     struct SpriteMeta {
@@ -85,15 +87,32 @@ private:
         bool delete_flag;
     };
 
+    struct ThreadControl {
+        ThreadControl():
+            finish(false), gpu_thread_ready(false), command_buffer_swaped(false)
+        {}
+        CondVar buffer_ready;
+        CondVar gpu_ready;
+        std::mutex mtx;
+        bool finish;
+        bool gpu_thread_ready;
+        bool command_buffer_swaped;
+    };
+
     void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
     std::size_t next_set_pixel(std::size_t i);
 
-    static void do_gpu_tasks(GpuContext & context, const UInt32 * memory);
+    static void do_gpu_tasks
+        (std::unique_ptr<GpuContext> & context, const UInt32 * memory,
+         ThreadControl & cv);
 
     std::map<UInt32, SpriteMeta> m_sprite_map;
-    //int m_screen_width;
+
     UInt32 m_index_pos;
+    ThreadControl m_thread_control;
     std::thread m_gfx_thread;
+
+    std::unique_lock<std::mutex> m_gpus_lock;
 
     std::unique_ptr<GpuContext> m_cold;
     std::unique_ptr<GpuContext> m_hot ; // hot as in "touch it and get burned"

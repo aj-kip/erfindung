@@ -68,15 +68,46 @@ ErfiGpu::ErfiGpu():
 }
 
 ErfiGpu::~ErfiGpu() {
+    {
+    std::unique_lock<std::mutex> lock(m_thread_control.mtx);
+    auto & hot = m_hot;
+    m_thread_control.gpu_ready.wait(lock, [&hot]()
+        { return hot->command_buffer.empty(); });
+    m_thread_control.finish = true;
+    m_thread_control.buffer_ready.notify_one();
+    }
     if (m_gfx_thread.joinable())
         m_gfx_thread.join();
 }
 
+#define MACRO_MULTITHREAD_THAT_SHIT
+
 void ErfiGpu::wait(MemorySpace & memory) {
+#   ifdef MACRO_MULTITHREAD_THAT_SHIT
     if (m_gfx_thread.joinable()) {
+        m_gpus_lock.lock();
+        m_thread_control.command_buffer_swaped = false;
+
+        bool & gpu_ready = m_thread_control.gpu_thread_ready;
+        m_thread_control.gpu_ready.wait(m_gpus_lock, [&gpu_ready]()
+            { return gpu_ready; });
+
         m_cold.swap(m_hot);
-        m_gfx_thread.join();
+        m_thread_control.command_buffer_swaped = true;
+
+        m_gpus_lock.unlock();
+        m_thread_control.buffer_ready.notify_one();
+    } else {
+        std::unique_lock<std::mutex> lock(m_thread_control.mtx);
+        m_gpus_lock.swap(lock);
+        m_gpus_lock.unlock();
+
+        std::thread t1(do_gpu_tasks, std::ref(m_hot), &memory[0], std::ref(m_thread_control));
+        m_gfx_thread.swap(t1);
     }
+#   else
+    m_cold.swap(m_hot);
+#   endif
 
     for (auto itr = m_sprite_map.begin(); itr != m_sprite_map.end(); ++itr) {
         if (itr->second.delete_flag) {
@@ -84,10 +115,9 @@ void ErfiGpu::wait(MemorySpace & memory) {
             continue;
         }
     }
-
-    std::thread t1(do_gpu_tasks, std::ref(*m_hot), &memory[0]);
-    m_gfx_thread.swap(t1);
-
+#   ifndef MACRO_MULTITHREAD_THAT_SHIT
+    do_gpu_tasks(*m_hot, &memory[0]);
+#   endif
 }
 
 UInt32 ErfiGpu::upload_sprite(UInt32 width, UInt32 height, UInt32 address) {
@@ -133,17 +163,27 @@ void ErfiGpu::screen_clear() {
 }
 
 /* private static */ void ErfiGpu::do_gpu_tasks
-    (GpuContext & context, const UInt32 * memory)
+    (std::unique_ptr<GpuContext> & context, const UInt32 * memory, ThreadControl & tc)
 {
     using namespace gpu_enum_types;
 
-    while (!context.command_buffer.empty()) {
-        switch (front_and_pop(context.command_buffer)) {
-        case UPLOAD: ::upload_sprite(context, memory); break;
-        case UNLOAD: ::unload_sprite(context); break;
-        case DRAW  : ::draw_sprite  (context); break;
-        case CLEAR : ::clear_screen (context); break;
+    while (true) {
+        std::unique_lock<std::mutex> lock(tc.mtx);
+        tc.gpu_thread_ready = true;
+        tc.gpu_ready.notify_one();
+        tc.buffer_ready.wait(lock, [&tc]()
+            { return tc.command_buffer_swaped || tc.finish; });
+        tc.gpu_thread_ready = false;
+        while (!context->command_buffer.empty()) {
+            switch (front_and_pop(context->command_buffer)) {
+            case UPLOAD: ::upload_sprite(*context, memory); break;
+            case UNLOAD: ::unload_sprite(*context); break;
+            case DRAW  : ::draw_sprite  (*context); break;
+            case CLEAR : ::clear_screen (*context); break;
+            }
         }
+
+        if (tc.finish) return;
     }
 }
 
@@ -209,12 +249,15 @@ void draw_sprite(erfin::GpuContext & ctx) {
 
     for (UInt32 y = y_; (y - y_) != sprite_height && y < SCREEN_HEIGHT; ++y) {
     for (UInt32 x = x_; (x - x_) != sprite_width  && x < SCREEN_WIDTH ; ++x) {
-        ctx.pixels[coord_to_index(x, y)] = sprite->pixels[(x - x_) + (y - y_)*sprite_width];
+        std::size_t from_index = std::size_t((x - x_) + (y - y_)*sprite_width);
+        ctx.pixels[coord_to_index(x, y)] = sprite->pixels[from_index];
     }}
 }
 
 void clear_screen(erfin::GpuContext & ctx) {
     using namespace erfin;
+    std::fill(ctx.pixels.begin(), ctx.pixels.end(), false);
+#   if 0
     for (UInt32 y = 0; y != UInt32(ErfiGpu::SCREEN_HEIGHT); ++y) {
     for (UInt32 x = 0; x != UInt32(ErfiGpu::SCREEN_WIDTH ); ++x) {
         if (ctx.pixels[coord_to_index(x, y)]) {
@@ -225,6 +268,7 @@ void clear_screen(erfin::GpuContext & ctx) {
 
         ctx.pixels[coord_to_index(x, y)] = false;
     }}
+#   endif
 }
 
 void push_bits_to(std::vector<bool> & v, erfin::UInt32 bits) {

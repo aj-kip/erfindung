@@ -1,5 +1,5 @@
-  set pc main
-: erfindung_text data [
+  jump main
+: erfindung-text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
 __X__________X______XX__XX__________________________________X_______________________________
 __X__________X_X_____X__XX_____________XX___________________X_______________________________
@@ -20,98 +20,92 @@ ________________________________________________________________________________
 ____________________________________________________________________________________X_______
 X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____XXXXXX_______
 ____________ ]
-: main set sp bp_start
+
+: main set sp stack-start
        set  x 92
        set  y 19
-       set  z erfindung_text
-       call upload # upload sprite
-       call clear  # screen flush
+       set  z erfindung-text
+       io   upload # upload sprite
        set  z a
-       set  x 0
-       set  y 0
+
+       io   rand
+       mod  a 228
+       set  x a
+
+       io   rand
+       mod  a 221
+       set  y a
+
        set  b 1 
        set  c 1
-: loop call clear
+       # stack pointer, points to an "initialized variable"
+       # +---+        push +---+        pop +---+ 
+       # | ? | [+3]        | c | <- sp      | ? | <- [ 0]  sp (was)
+       # | ? | [+2]        | b |            | ? |    [-1]
+       # | ? | [+1]        | a |            | ? |    [-2]
+       # +---+ <- sp       +---+            +---+ <- sp
+       # therefore push and pop offsets must be different
+       jump start-program
+: loop io   wait
+       io   clear
 
-       call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
-       call wait
+       # semantic issue
+       # am I popping a tuple or individual registers?
+       pop y x c b z
+
+       io   draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
+
        add  x b x # x = b + x
        add  y c y
+: start-program
+       #    4 3 2 1 0
+       push z b c x y
 
-       save z sp 0
-       save b sp 1
-       save c sp 2
-       save x sp 3
-       save y sp 4
-       add  sp 5
+       # x = x_pos (already set)
+       set  y b  # y = x velocity
+       set  z 228
+       # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds 
 
-       set  y b  # set velocity, x_pos already set
-       add  sp 1
-       save pc sp
-       set  pc check_x # x = x_pos, y = x_vel -> a = new_x_vel
-       sub  sp 1
+       # x = x_pos, y = x_vel -> a = new_x_vel       
+       call check-bounds
+
        save a sp -3 # I guess where x velocity is
        
        # load y_pos, y_vel
        load x sp 
        load y sp -2
-       add  sp 1
-       save pc sp
-       set  pc check_y
-       sub  sp 1
+       set  z 221
+
+       call check-bounds
+
+       # save to y velocity
        save a sp -2
-
-       load z sp -4
-       load b sp -3
-       load c sp -2
-       load x sp -1
-       load y sp 0
-       sub  sp 5
-
-       set pc loop
+       jump loop
        
 # this is a """function"""
-: check_x
+assume integer
+: check-bounds
     comp b x   0
     skip b   <
-        load pc check_x_next
+        jump check-next
+    comp b y    -1
+    skip b   ==
+        jump check-next
+    set a  1
+    pop pc # returns
+: check-next
+    comp b x   z
+    skip b   >
+        jump check-exit
     comp b y    1
     skip b   ==
-        load pc check_x_next
+        jump check-exit
     set a -1
-    load pc sp
-: check_x_next
-    comp b x   100
-    skip b   >
-        load pc check_x_next
-    comp b y     -1
-    skip b   ==
-        load pc check_x_exit
-    set a -1
-: check_x_exit load pc sp
+    pop pc # returns
+: check-exit
+    # do not change velocity
+    set a  y
+    pop pc
 
-# this is a """function"""
-: check_y
-    comp b x   0             # this code is redundent
-    skip b   <               # however I have no praticle way 
-        load pc check_y_next # of copy/pasting code in
-    comp b y    1
-    skip b   ==
-        load pc check_y_next
-    set a -1
-    load pc sp
-: check_y_next
-    comp b x   100
-    skip b   >
-        load pc check_y_next
-    comp b y     -1
-    skip b   ==
-        load pc check_y_exit
-    set a -1
-: check_y_exit load pc sp
 # setup stack somewhere, no convention
-: bp_start data [ ________ ________ ________ ________ ]
-         # have to be careful not to up the cognitive load too much!
-         #comp fp  x y a # explicit type needed!
-         #comp int x y a # explicit integer
-         #comp     x y a # defaults to integer
+: stack-start data [ ________ ________ ________ ________ ]

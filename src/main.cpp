@@ -35,6 +35,7 @@
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
 #include "DrawRectangle.hpp"
+#include "Debugger.hpp"
 
 #include <cstring>
 
@@ -112,6 +113,7 @@ void test_fp_multiply(double a, double b) {
 
 void test_string_processing() {
     const char * const input_text =
+        "assume integer\n"
         "jump b\n"
         "jump 0\n\r"
         "cmp  a b\n\n\n"
@@ -129,15 +131,15 @@ void test_string_processing() {
 
 int main() {
     using namespace erfin;
-#   if 0
-    std::cout << enum_types::OPCODE_COUNT << std::endl;
+#   ifdef MACRO_DEBUG
+    std::cout << int(OpCode::COUNT) << std::endl;
+    Assembler::run_tests();
     ErfiCpu::run_tests();
     test_string_processing();
 #   endif
     test_fp_multiply(-1.0, 1.0);
 
-    Assembler::run_tests();
-
+    Debugger dbgr;
     Assembler asmr;
     ErfiCpu cpu;
     ErfiGpu gpu;
@@ -150,20 +152,69 @@ int main() {
         return ~0;
     }
 
-    load_program_into_memory(memory, asmr.program_data());
+    asmr.setup_debugger(dbgr);
+    {
+    auto i = dbgr.add_break_point(98); (void)i;
+    assert(i != Debugger::NO_LINE);
+    }
 
+    load_program_into_memory(memory, asmr.program_data());
+#   if 0
+    const int test_size = 100000000;
+    sf::Clock clk1;
+    int total = 0;
+
+    while (total < test_size) {
+        cpu.clear_flags();
+        cpu.do_nothing(memory, &gpu);
+        ++total;
+        gpu.wait(memory);
+    }
+    auto base_loop = clk1.getElapsedTime().asSeconds();
+
+    total = 0;
+    while (total < test_size) {
+        cpu.clear_flags();
+        while (!cpu.wait_was_called()) {
+            cpu.run_cycle(memory, &gpu);
+            ++total;
+        }
+        gpu.wait(memory);
+    }
+    std::cout << total << std::endl;
+    std::cout << std::fixed << float(test_size)/(clk1.getElapsedTime().asSeconds() - base_loop) << std::endl;
+    return 0;
+#   endif
     sf::RenderWindow win;
     win.create(sf::VideoMode(unsigned(ErfiGpu::SCREEN_WIDTH*3),
                              unsigned(ErfiGpu::SCREEN_HEIGHT*3)), " ");
     {
     sf::View view = win.getView();
-    //view.zoom(0.999f);
     view.setCenter(float(ErfiGpu::SCREEN_WIDTH /2),
                    float(ErfiGpu::SCREEN_HEIGHT/2));
     view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
+    win.setVerticalSyncEnabled(true);
     win.setView(view);
     }
+
+    sf::Clock clk;
+    int fps = 0;
+    int frame_count = 0;
+
+    int pc_ticks = 0;
+    sf::Texture screen_pixels;
+    screen_pixels.create(ErfiGpu::SCREEN_WIDTH, ErfiGpu::SCREEN_HEIGHT);
+    std::vector<UInt32> pixel_array;
+    pixel_array.resize(ErfiGpu::SCREEN_HEIGHT*ErfiGpu::SCREEN_WIDTH, 0);
     while (win.isOpen()) {
+
+        if (clk.getElapsedTime().asSeconds() >= 1.0) {
+            fps = frame_count;
+            frame_count = 0;
+            clk.restart();
+        }
+        ++frame_count;
+
         {
         sf::Event e;
         while (win.pollEvent(e)) {
@@ -176,32 +227,50 @@ int main() {
             }
         }
         }
+        cpu.update_debugger(dbgr);
         win.clear();
 
         cpu.clear_flags();
 
         try {
-            while (!cpu.wait_was_called())
+            while (!cpu.wait_was_called()) {
                 cpu.run_cycle(memory, &gpu);
+                ++pc_ticks;
+            }
         } catch (ErfiError & exp) {
-            std::cerr << "A problem has occured on source line: "
-                      << asmr.translate_to_line_number(exp.program_location())
-                      << std::endl;
+            constexpr const char * const NO_LINE_NUM_MSG =
+                "<no source line associated with this program location>";
+            auto line_num = asmr.translate_to_line_number(exp.program_location());
+            std::cerr << "A problem has occured on source line: ";
+            if (line_num == Assembler::INVALID_LINE_NUMBER)
+                std::cerr << NO_LINE_NUM_MSG;
+            else
+                std::cerr << line_num;
+            std::cerr << "\n(At address " << exp.program_location() << ")";
+            std::cerr << std::endl;
             std::cerr << exp.what() << std::endl;
             return ~0;
         }
+#       if 1
 
-        DrawRectangle brush;
-        brush.set_size(1.f, 1.f);
-        gpu.draw_pixels([&win, &brush](int x, int y) {
-            brush.set_position(float(x), float(y));
-            win.draw(brush);
+        std::fill(pixel_array.begin(), pixel_array.end(), 0);
+        gpu.draw_pixels([&win, &pixel_array](int x, int y) {
+            pixel_array[x + erfin::ErfiGpu::SCREEN_WIDTH*y] = ~0;
         });
-        gpu.wait(memory);
+        screen_pixels.update(reinterpret_cast<UInt8 *>(&pixel_array.front()),
+                             ErfiGpu::SCREEN_WIDTH, ErfiGpu::SCREEN_HEIGHT,
+                             0, 0);
 
+        sf::Sprite spt;
+        spt.setTexture(screen_pixels);
+        spt.setPosition(0.f, 0.f);
+        win.draw(spt);
+
+#       endif
+        gpu.wait(memory);
         win.display();
     }
-
+#   if 0
     try {
         test_fixed_point(  2.0);
         test_fixed_point( -1.0);
@@ -236,7 +305,8 @@ int main() {
         std::cout << ex.what() << std::endl;
         return 1;
     }
-
-    std::cout << "# of op codes " << erfin::enum_types::OPCODE_COUNT << std::endl;
+#   endif
+    std::cout << "# of op codes " << static_cast<int>(erfin::OpCode::COUNT) << std::endl;
+    std::cout << "Last reported fps " << fps << std::endl;
     return 0;
 }

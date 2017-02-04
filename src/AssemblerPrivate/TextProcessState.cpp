@@ -57,7 +57,7 @@ void TextProcessState::add_instruction
     if (label) {
         // if you have a label, there must be space to insert the immd
         // this is marked by leaving the 16 lsb equal to 0.
-        assert((inst & 0xFFFF) == 0);
+        assert((serialize(inst) & 0xFFFF) == 0);
         m_unfulfilled_labels.emplace_back(m_program_data.size(), *label);
     }
     m_program_data.push_back(inst);
@@ -87,24 +87,24 @@ void TextProcessState::resolve_unfulfilled_labels() {
                         "\" not found anywhere in source code.");
         }
         const LabelPair & lbl_pair = itr->second;
+#       if 0
         std::cout << "resolving label \"" << unfl_pair.label << "\" on "
                   << lbl_pair.source_line << " to integer value: "
                   << lbl_pair.program_location << std::endl;
-
-        assert((m_program_data[unfl_pair.program_location] & 0xFFFF) == 0);
+#       endif
+        assert((serialize(m_program_data[unfl_pair.program_location]) & 0xFFFF) == 0);
         m_program_data[unfl_pair.program_location] |=
-            erfin::encode_immd(int(lbl_pair.program_location));
+            erfin::encode_immd_int(lbl_pair.program_location);
         int i = erfin::decode_immd_as_int(m_program_data[unfl_pair.program_location]);
+        (void)i;
         assert(i == int(lbl_pair.program_location));
-        int j = 0;
-        ++j;
     }
     m_unfulfilled_labels.clear();
 }
 
 StringCIter TextProcessState::process_label(StringCIter beg, StringCIter end) {
     // forgive me I did not have any kind of access control enforcement
-    // (encapsulation) on this function before, therefore the odd "this"
+    // (encapsulationerefore th) on this function before, the odd "this"
     assert(*beg == ":");
     using LabelPair = TextProcessState::LabelPair;
     ++beg;
@@ -114,7 +114,7 @@ StringCIter TextProcessState::process_label(StringCIter beg, StringCIter end) {
                          "directive.");
     }
     handle_newlines(&beg, end);
-    if (string_to_register(*beg) != erfin::enum_types::REG_COUNT) {
+    if (string_to_register(*beg) != erfin::Reg::COUNT) {
         throw make_error(": register cannot be used as a label.");
     }
     auto itr = m_labels.find(*beg);
@@ -284,7 +284,7 @@ StringCIter process_binary
                                std::to_string(32 - bit_pos) + " bits.");
     }
     for (UInt32 datum : data) {
-        state.add_instruction(erfin::Inst(datum));
+        state.add_instruction(erfin::deserialize(datum));
     }
 
     return ++beg;
@@ -309,7 +309,7 @@ namespace erfin {
     };
     std::vector<UInt32> data;
     (void)process_binary(state, data, sample_binary.begin(), sample_binary.end());
-    assert(state.m_program_data.back() == 252414410);
+    assert(serialize(state.m_program_data.back()) == 252414410);
     }
     {
     const std::vector<std::string> sample_data = {
@@ -319,7 +319,7 @@ namespace erfin {
         "]"
     };
     (void)process_data(state, sample_data.begin(), sample_data.end());
-    assert(state.m_program_data.back() == 264902409);
+    assert(serialize(state.m_program_data.back()) == 264902409);
     }
     {
     const std::vector<std::string> sample_label = {
