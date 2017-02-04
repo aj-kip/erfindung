@@ -26,6 +26,7 @@
 #include "ErfiError.hpp"
 
 #include <iosfwd>
+#include <random>
 
 namespace erfin {
 
@@ -63,6 +64,7 @@ private:
     void do_set(Inst inst);
 
     void do_skip(Inst inst);
+    void do_call(Inst inst, MemorySpace & memspace);
 
     void do_not(Inst inst);
 
@@ -74,6 +76,8 @@ private:
 
     RegisterPack m_registers;
     bool m_wait_called;
+
+    std::default_random_engine m_rand_generator;
 };
 
 template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>

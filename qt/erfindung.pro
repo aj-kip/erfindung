@@ -1,4 +1,4 @@
-message($$CONFIG)
+#message($$CONFIG)
 TEMPLATE = app
 
 CONFIG += console

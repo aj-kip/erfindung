@@ -82,7 +82,9 @@ StringCIter make_not(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_rotate(TextProcessState &, StringCIter, StringCIter);
 
-StringCIter make_syscall(TextProcessState &, StringCIter, StringCIter);
+StringCIter make_sysio(TextProcessState &, StringCIter, StringCIter);
+
+StringCIter make_call(TextProcessState &, StringCIter, StringCIter);
 
 // <--------------------- flow control operations ---------------------------->
 
@@ -145,7 +147,8 @@ LineToInstFunc get_line_processing_function
     fmap["set"] = fmap["="] = make_set;
     fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
 
-    fmap["call"] = fmap["()"] = make_syscall;
+    fmap["sys"] = fmap["io"] = fmap["$"] = make_sysio;
+    fmap["call"] = make_call;
 
     fmap["jump"] = make_jump;
 
@@ -214,7 +217,7 @@ StringCIter make_generic_memory_access
 
 StringCIter make_stack_op
     (TextProcessState & state, StringCIter beg, StringCIter end,
-     erfin::OpCode val_op, erfin::OpCode unto_stack);
+     erfin::OpCode val_op);
 
 StringCIter make_plus
     (TextProcessState & state, StringCIter beg, StringCIter end)
@@ -354,7 +357,7 @@ StringCIter make_rotate
 #   endif
 }
 
-StringCIter make_syscall
+StringCIter make_sysio
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     using namespace erfin;
@@ -371,14 +374,18 @@ StringCIter make_syscall
             npi.integer = int(Sys::UPLOAD_SPRITE);
         else if (*beg == "unload")
             npi.integer = int(Sys::UNLOAD_SPRITE);
+        else if (*beg == "draw")
+            npi.integer = int(Sys::DRAW_SPRITE);
         else if (*beg == "clear")
             npi.integer = int(Sys::SCREEN_CLEAR);
         else if (*beg == "wait")
             npi.integer = int(Sys::WAIT_FOR_FRAME);
         else if (*beg == "read")
             npi.integer = int(Sys::READ_INPUT);
-        else if (*beg == "draw")
-            npi.integer = int(Sys::DRAW_SPRITE);
+        else if (*beg == "rand")
+            npi.integer = int(Sys::RAND_NUMBER);
+        else if (*beg == "timer")
+            npi.integer = int(Sys::READ_TIMER);
         else
             throw state.make_error(": \"" + *beg + "\" is not a system call.");
         break;
@@ -387,8 +394,39 @@ StringCIter make_syscall
     }
 
     state.add_instruction(
-        encode_op_with_pf(OpCode::SYSTEM_CALL, ParamForm::NO_PARAMS) |
+        encode_op_with_pf(OpCode::SYSTEM_IO, ParamForm::IMMD) |
         encode_immd_int(npi.integer)                                  );
+    return eol;
+}
+
+StringCIter make_call
+    (TextProcessState & state, StringCIter beg, StringCIter end)
+{
+    using namespace erfin;
+
+    using Pf = ParamForm;
+    constexpr const auto CALL = OpCode::CALL;
+    auto eol = get_eol(++beg, end);
+    NumericParseInfo npi = parse_number(*beg);
+    Inst inst;
+    const std::remove_reference<decltype(*beg)>::type * label = nullptr;
+    switch (get_lines_param_form(beg, eol, &npi)) {
+    case XPF_1R   :
+        inst |= encode_op_with_pf(CALL, Pf::REG) |
+                encode_reg(string_to_register(*beg));
+        break;
+    case XPF_INT  :
+        inst |= encode_op_with_pf(CALL, Pf::IMMD) | encode_immd_int(npi.integer);
+        break;
+    case XPF_LABEL:
+        inst |= encode_op_with_pf(CALL, Pf::IMMD);
+        label = &*beg;
+        break;
+    default:
+        throw state.make_error(": requires exactly one argument, and "
+                               "immediate or register.");
+    }
+    state.add_instruction(inst, label);
     return eol;
 }
 
@@ -575,14 +613,14 @@ StringCIter make_push
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     using namespace erfin;
-    return make_stack_op(state, beg, end, OpCode::SAVE, OpCode::PLUS);
+    return make_stack_op(state, beg, end, OpCode::SAVE);
 }
 
 StringCIter make_pop
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     using namespace erfin;
-    return make_stack_op(state, beg, end, OpCode::LOAD, OpCode::MINUS);
+    return make_stack_op(state, beg, end, OpCode::LOAD);
 }
 
 // <-------------------------------------------------------------------------->
@@ -609,7 +647,7 @@ bool op_code_supports_integer_immd(erfin::OpCode op_code) {
     using O = erfin::OpCode;
     switch (op_code) {
     case O::PLUS: case O::MINUS: case O::TIMES: case O::AND: case O::XOR:
-    case O::OR: case O::DIVIDE: case O::COMP:
+    case O::OR: case O::DIVIDE: case O::COMP: case O::MODULUS:
         return true;
     default: assert(false); break;
     }
@@ -775,26 +813,45 @@ StringCIter make_generic_memory_access
 
 StringCIter make_stack_op
     (TextProcessState & state, StringCIter beg, StringCIter end,
-     erfin::OpCode val_op, erfin::OpCode unto_stack)
+     erfin::OpCode val_op)
 {
     using namespace erfin;
 
     assert(val_op == OpCode::SAVE || val_op == OpCode::LOAD);
-    int stack_offset = 1;
-    int dir          = val_op == OpCode::SAVE ? 1 : -1;
-    auto eol = get_eol(beg, end);
-    while (++beg != eol) {
+
+    // "compile time" cosntant
+    const constexpr auto SP = Reg::SP;
+    // runtime constant
+    const auto eol_c = get_eol(beg, end);
+    const int num_of_args_c = eol_c - (beg + 1);
+
+    if (num_of_args_c == 0) return eol_c;
+
+    Inst change_sp = encode(
+        val_op == OpCode::LOAD ? OpCode::MINUS : OpCode::PLUS,
+        SP, SP, encode_immd_int(num_of_args_c));
+
+    // I want pop to sub first
+    // Rationale, it will allow me to "pop pc" to do a return
+    if (val_op == OpCode::LOAD) state.add_instruction(change_sp);
+
+    // variable
+    int stack_offset = val_op == OpCode::LOAD ? num_of_args_c : 1;
+    while (++beg != eol_c) {
         auto reg = string_to_register(*beg);
         if (reg == Reg::COUNT) {
             throw state.make_error(": \"" + *beg + "\" is not a valid register.");
         }
-        state.add_instruction(encode(val_op, reg, Reg::SP, encode_immd_int(dir*stack_offset)));
-        ++stack_offset;
+        state.add_instruction
+            (encode(val_op, reg, SP, encode_immd_int(stack_offset)));
+        //++stack_offset;
+        stack_offset += val_op == OpCode::LOAD ? -1 : 1;
     }
-    if (stack_offset != 0) {
-        Immd immd_value = encode_immd_int(stack_offset - 1);
-        state.add_instruction(encode(unto_stack, Reg::SP, Reg::SP, immd_value));
-    }
+    //assert(stack_offset - 1 == num_of_args_c);
+
+    if (val_op == OpCode::SAVE) state.add_instruction(change_sp);
+
+    assert(beg == eol_c);
     return beg;
 }
 

@@ -110,11 +110,11 @@ enum class Reg {
 // ooooo-fp 000-111- -------- -------- // "2" here
 // ooooo-fp 000----- iiiiiiii iiiiiiii // 2 here
 //
-// J-type "skip"
+// J-types
 // ooooo--p 000----- -------- -------- // the fp bit doesn't change anything
 // ooooo--p 000----- iiiiiiii iiiiiiii
 //
-// O-types
+// F-types
 // ooooo--- 000----- iiiiiiii iiiiiiii (integer immd only)
 //
 
@@ -186,10 +186,12 @@ enum class OpCode {
     SKIP      , // one arg , conditional, if flags is zero
                 // "skip x"
                 // "skip x immd" immediate acts as a bit mask here
-    // "O"-types (0 bits for "pf") (odd-out types)
+    CALL       , // special instruction using sp
+    // F-types (0 bits for "pf") (odd-out types)
     // CALL, NOT
     NOT        , // bitwise complement
                  // "not x a"
+    //SINE       , // "too much" for software to have it
     // for SYSTEM_CALL:
     // I can reduce the instruction set size even further by defining, as all
     // ISAs do, function call conventions
@@ -202,19 +204,19 @@ enum class OpCode {
     //
     // +--------------------------+
     // | callee's stack frane     |
-    // +--------------------------+ <---+--- SP
-    // | callee parameter data    |     |
-    // +--------------------------+     +--- size is constant
-    // | callee answer data       |     |
-    // +--------------------------+ <---+
-    // | old stack pointer value  |
     // +--------------------------+
-    // |                          |
+    // | old stack pointer value  | <---+--- SP
+    // +--------------------------+     |
+    // | callee parameter data    |     |
+    // +--------------------------+     +--- size is "constant"
+    // | callee answer data       |     |
+    // +--------------------------+     |
+    // |                          | <---+
     // | previous function's data |
     // |                          |
     // +--------------------------+
     // registers SP and PC are neither (obviously)
-    SYSTEM_CALL,
+    SYSTEM_IO,
     COUNT        // sentinal value [not a valid op code]
 };
 
@@ -237,7 +239,11 @@ enum class SystemCallValue {
     DRAW_SPRITE   , // arguments: x: x pos, y: y pox, z: index for sprite
     SCREEN_CLEAR  , // no arguments
     WAIT_FOR_FRAME, // wait until the end of the frame
+    // input
     READ_INPUT    ,
+    // misc
+    RAND_NUMBER   , // a = a random set of 32 bits for a fp or int
+    READ_TIMER    , // reads system timer from last wait as fp
     SYSTEM_CALL_COUNT // sentinal value
 };
 
@@ -247,7 +253,7 @@ enum class ParamForm {
     REG_REG,
     REG_IMMD,
     REG,
-    NO_PARAMS,
+    IMMD,
     INVALID_PARAMS
 };
 
@@ -383,7 +389,7 @@ private:
     friend class Inst;
     explicit RegParamPack(UInt32 bits): v(bits) {}
 
-    RegParamPack(Reg r0): v(UInt32(r0) << REG0_POS) {}
+    explicit RegParamPack(Reg r0): v(UInt32(r0) << REG0_POS) {}
     RegParamPack(Reg r0, Reg r1): RegParamPack(r0)
         { v |= (UInt32(r1) << REG1_POS); }
     RegParamPack(Reg r0, Reg r1, Reg r2):
@@ -430,8 +436,13 @@ enum class SetTypeParamForm {
     _1R_FP
 };
 
-enum class JTypeParamForm
-    { _1R, _1R_INT };
+// problem is, I can't have two constants with the same value using enums
+enum class JTypeParamForm {
+    // style: all or none?
+    _1R     = 0,
+    _1R_INT_FOR_JUMP = 1,
+    _IMMD_FOR_CALL   = _1R_INT_FOR_JUMP
+};
 
 inline Inst operator | (Inst lhs, Inst rhs) { return lhs |= rhs; }
 

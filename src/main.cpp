@@ -131,7 +131,7 @@ void test_string_processing() {
 
 int main() {
     using namespace erfin;
-#   if 1
+#   ifdef MACRO_DEBUG
     std::cout << int(OpCode::COUNT) << std::endl;
     Assembler::run_tests();
     ErfiCpu::run_tests();

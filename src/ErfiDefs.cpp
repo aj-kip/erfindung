@@ -92,17 +92,22 @@ Inst encode_op_with_pf(OpCode op, ParamForm pf) {
         case Pf::REG_IMMD: return deserialize(rv | (1 << J_TYPE_PF_POS));
         default: throw Error("Parameter form invalid for Skip");
         }
+    case O::CALL:
+        switch (pf) {
+        case Pf::REG : return deserialize(rv);
+        case Pf::IMMD: return deserialize(rv | (1 << J_TYPE_PF_POS));
+        default: throw Error("Parameter form invalid for Call");
+        }
     case O::NOT:
         switch (pf) {
         case Pf::REG_REG: return deserialize(rv);
         default:
             throw Error("Parameter form invalid for Not");
         }
-    case O::SYSTEM_CALL:
+    case O::SYSTEM_IO:
         switch (pf) {
-        case Pf::NO_PARAMS: return deserialize(rv);
-        default:
-            throw Error("System calls only except \"NO_PARAM\"");
+        case Pf::IMMD: return deserialize(rv);
+        default      : throw Error("System calls only except \"IMMD\"");
         }
     default: break;
     }

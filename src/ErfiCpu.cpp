@@ -68,7 +68,8 @@ UInt32 comp_int(UInt32 x, UInt32 y);
 namespace erfin {
 
 ErfiCpu::ErfiCpu():
-    m_wait_called(false)
+    m_wait_called(false),
+    m_rand_generator(std::random_device()())
 {
     // std::array does not initialize values
     reset();
@@ -107,16 +108,17 @@ void ErfiCpu::run_cycle(Inst inst, MemorySpace & memspace, ErfiGpu * gpu) {
     case O::COMP   : do_arth<comp_fp    , comp_int>(inst); return;
     // M-type (2bits for pf, 0 bits for is_fp) (set types)
     // SET, SAVE, LOAD
-    case O::SET    : do_set(inst);                                     return;
-    case O::SAVE   : memspace[get_move_op_address(inst)] = reg0(inst); return;
-    case O::LOAD   : reg0(inst) = memspace[get_move_op_address(inst)]; return;
+    case O::SET : do_set(inst);                                     return;
+    case O::SAVE: memspace[get_move_op_address(inst)] = reg0(inst); return;
+    case O::LOAD: reg0(inst) = memspace[get_move_op_address(inst)]; return;
     // J-type (reducable to 0-bits for "pf")
     // SKIP (make default immd 0b1111 ^ NOT_EQUAL)
-    case O::SKIP   : do_skip(inst);                                    return;
+    case O::SKIP: do_skip(inst          ); return;
+    case O::CALL: do_call(inst, memspace); return;
     // "O"-types (0 bits for "pf") (odd-out types)
     // CALL, NOT
-    case O::NOT    : do_not (inst);                                    return;
-    case O::SYSTEM_CALL: if (gpu) do_syscall(inst, *gpu);              return;
+    case O::NOT      : do_not (inst);                                return;
+    case O::SYSTEM_IO: if (gpu) do_syscall(inst, *gpu);              return;
     default: emit_error(inst);
     };
 }
@@ -238,6 +240,15 @@ void try_program(const char * source_code, const int inst_limit_c) {
         m_wait_called = true;
         break;
     case Sys::READ_INPUT    : break;
+    case Sys::RAND_NUMBER   : {
+        // a = a random set of 32 bits for a fp or int
+        std::uniform_int_distribution<UInt32> distro;
+        a = distro(m_rand_generator);
+        }
+        break;
+    case Sys::READ_TIMER    : // reads system timer from last wait as fp
+        a = to_fixed_point(0.0167);
+        break;
     default: emit_error(inst);
     }
 }
@@ -255,13 +266,22 @@ void try_program(const char * source_code, const int inst_limit_c) {
 
 /* private */ void ErfiCpu::do_skip(Inst inst) {
     using Pf = JTypeParamForm;
+    UInt32 & pc = m_registers[std::size_t(Reg::PC)];
     switch (decode_j_type_pf(inst)) {
-    case Pf::_1R: if (reg0(inst))
-            ++m_registers[std::size_t(Reg::PC)];
+    case Pf::_1R             : if (reg0(inst)) ++pc; return;
+    case Pf::_1R_INT_FOR_JUMP:
+        if (reg0(inst) & UInt32(decode_immd_as_int(inst))) ++pc;
         return;
-    case Pf::_1R_INT: if (reg0(inst) & UInt32(decode_immd_as_int(inst)))
-            ++m_registers[std::size_t(Reg::PC)];
-        return;
+    }
+}
+
+/* private */ void ErfiCpu::do_call(Inst inst, MemorySpace & memspace) {
+    using Pf = JTypeParamForm;
+    UInt32 & pc = m_registers[std::size_t(Reg::PC)];
+    memspace[++m_registers[std::size_t(Reg::SP)]] = pc;
+    switch (decode_j_type_pf(inst)) {
+    case Pf::_1R           : pc = reg0              (inst); return;
+    case Pf::_IMMD_FOR_CALL: pc = decode_immd_as_int(inst); return;
     }
 }
 
@@ -397,7 +417,7 @@ const char * op_code_to_string(erfin::Inst i) {
     case O::LOAD       : return "load";
     case O::SAVE       : return "save";
     case O::SET        : return "set";
-    case O::SYSTEM_CALL: return "call";
+    case O::SYSTEM_IO: return "call";
     default: return "<NOT ANY OPTCODE>";
     }
 }

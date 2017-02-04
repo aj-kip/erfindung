@@ -20,14 +20,22 @@ ________________________________________________________________________________
 ____________________________________________________________________________________X_______
 X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____XXXXXX_______
 ____________ ]
+
 : main set sp stack-start
        set  x 92
        set  y 19
        set  z erfindung-text
-       call upload # upload sprite
+       io   upload # upload sprite
        set  z a
-       set  x 0
-       set  y 0
+
+       io   rand
+       mod  a 228
+       set  x a
+
+       io   rand
+       mod  a 221
+       set  y a
+
        set  b 1 
        set  c 1
        # stack pointer, points to an "initialized variable"
@@ -38,18 +46,14 @@ ____________ ]
        # +---+ <- sp       +---+            +---+ <- sp
        # therefore push and pop offsets must be different
        jump start-program
-: loop call wait
-       #call clear
+: loop io   wait
+       io   clear
 
-       #pop y x c b z
-       load y sp  0
-       load x sp -1
-       load c sp -2
-       load b sp -3 
-       load z sp -4
-       sub  sp 5
+       # semantic issue
+       # am I popping a tuple or individual registers?
+       pop y x c b z
 
-       call draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
+       io   draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
 
        add  x b x # x = b + x
        add  y c y
@@ -59,28 +63,20 @@ ____________ ]
 
        # x = x_pos (already set)
        set  y b  # y = x velocity
-       set  z 320
-       sub  z  92
+       set  z 228
        # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds 
-       set  a pc
-       add  a 4
-       push a
-       jump check-bounds # x = x_pos, y = x_vel -> a = new_x_vel       
-       sub  sp 1
+
+       # x = x_pos, y = x_vel -> a = new_x_vel       
+       call check-bounds
 
        save a sp -3 # I guess where x velocity is
        
        # load y_pos, y_vel
        load x sp 
        load y sp -2
-       set  z 240
-       sub  z  19
+       set  z 221
 
-       set  a pc
-       add  a 4
-       push a
-       jump check-bounds
-       sub  sp 1
+       call check-bounds
 
        # save to y velocity
        save a sp -2
@@ -96,7 +92,7 @@ assume integer
     skip b   ==
         jump check-next
     set a  1
-    load pc sp # returns
+    pop pc # returns
 : check-next
     comp b x   z
     skip b   >
@@ -105,11 +101,11 @@ assume integer
     skip b   ==
         jump check-exit
     set a -1
-    load pc sp # returns
+    pop pc # returns
 : check-exit
     # do not change velocity
     set a  y
-    load pc sp
+    pop pc
 
 # setup stack somewhere, no convention
 : stack-start data [ ________ ________ ________ ________ ]
