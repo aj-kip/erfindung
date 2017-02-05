@@ -45,8 +45,6 @@ public:
         USING_INT = 1 << 2
     };
 
-    using ProgramData = std::vector<Inst>;
-
     static constexpr const std::size_t INVALID_LINE_NUMBER = std::size_t(-1);
 
     Assembler() {}
@@ -78,17 +76,6 @@ private:
     // debugging erfi program info
     DebuggerInstToLineMap m_inst_to_line_map;
 };
-
-inline void load_program_into_memory
-    (MemorySpace & memspace, const Assembler::ProgramData & pdata)
-{
-    if (memspace.size() < pdata.size()) {
-        throw std::runtime_error("Program is too large for RAM!");
-    }
-    UInt32 * beg = &memspace.front();
-    for (Inst inst : pdata)
-        *beg++ = serialize(inst);
-}
 
 } // end of erfin namespace
 

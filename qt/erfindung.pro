@@ -16,7 +16,8 @@ SOURCES += \
     ../src/AssemblerPrivate/TextProcessState.cpp \
     ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \
     ../src/AssemblerPrivate/LineParsingHelpers.cpp \
-    ../src/Debugger.cpp
+    ../src/Debugger.cpp \
+    ../src/ErfiConsole.cpp
     
 HEADERS += \
     ../src/DrawRectangle.hpp \
@@ -31,7 +32,9 @@ HEADERS += \
     ../src/AssemblerPrivate/GetLineProcessingFunction.hpp \
     ../src/AssemblerPrivate/LineParsingHelpers.hpp \
     ../src/AssemblerPrivate/CommonDefinitions.hpp \
-    ../src/Debugger.hpp
+    ../src/Debugger.hpp \
+    ../src/ErfiGamePad.hpp \
+    ../src/ErfiConsole.hpp
 
 TARGET = erfindung
 

@@ -325,36 +325,6 @@ StringCIter make_rotate
 {
     using namespace erfin;
     return make_generic_logic(OpCode::ROTATE, state, beg, end);
-#   if 0
-    using namespace erfin;
-
-    static constexpr const char * const NON_INT_IMMD_MSG =
-        ": Rotate may only take an integer for bit rotation.";
-    static constexpr const char * const INVALID_PARAMS_MSG =
-        ": Rotate may only take a register target and another register or "
-        "integer for number of places to rotate the data.";
-    auto eol = get_eol(++beg, end);
-    constexpr const auto str_to_reg = string_to_register;
-
-    NumericParseInfo npi;
-    switch (get_lines_param_form(beg, eol, &npi)) {
-    case XPF_1R_INT:
-        switch (npi.type) {
-        case INTEGER: break;
-        default:
-            throw state.make_error(NON_INT_IMMD_MSG);
-        }
-        state.add_instruction(encode(
-            OpCode::ROTATE, str_to_reg(*beg), encode_immd_int(npi.integer)) );
-        break;
-    case XPF_2R:
-        state.add_instruction(encode(OpCode::ROTATE, string_to_register(*beg),
-                                     string_to_register(*(beg + 1))   ));
-        break;
-    default: throw state.make_error(INVALID_PARAMS_MSG);
-    }
-    return eol;
-#   endif
 }
 
 StringCIter make_sysio
@@ -384,6 +354,8 @@ StringCIter make_sysio
             npi.integer = int(Sys::READ_INPUT);
         else if (*beg == "rand")
             npi.integer = int(Sys::RAND_NUMBER);
+        else if (*beg == "halt")
+            npi.integer = int(Sys::HALT);
         else if (*beg == "timer")
             npi.integer = int(Sys::READ_TIMER);
         else
@@ -844,10 +816,8 @@ StringCIter make_stack_op
         }
         state.add_instruction
             (encode(val_op, reg, SP, encode_immd_int(stack_offset)));
-        //++stack_offset;
         stack_offset += val_op == OpCode::LOAD ? -1 : 1;
     }
-    //assert(stack_offset - 1 == num_of_args_c);
 
     if (val_op == OpCode::SAVE) state.add_instruction(change_sp);
 

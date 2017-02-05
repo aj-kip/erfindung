@@ -22,6 +22,7 @@
 #include "TextProcessState.hpp"
 #include "GetLineProcessingFunction.hpp"
 #include "LineParsingHelpers.hpp"
+#include "../FixedPointUtil.hpp"
 
 #include <iostream>
 
@@ -191,6 +192,10 @@ StringCIter process_binary
     (TextProcessState & state, std::vector<UInt32> & data,
      StringCIter beg, StringCIter end);
 
+StringCIter process_numbers
+    (TextProcessState & state, std::vector<UInt32> & data,
+     StringCIter beg, StringCIter end);
+
 StringCIter process_data
     (TextProcessState & state, StringCIter beg, StringCIter end,
      std::vector<UInt32> * cached_cont)
@@ -207,6 +212,8 @@ StringCIter process_data
     if (*beg != "[") {
         if (*beg == "binary") {
             // default
+        } else if (*beg == "numbers") {
+            process_func = process_numbers;
         } else {
             throw state.make_error(": encoding scheme \"" + *beg + "\" not "
                                    "recognized.");
@@ -220,6 +227,7 @@ StringCIter process_data
     }
     ++beg;
     assert(data);
+    data->clear();
     beg = process_func(state, *data, beg, end);
     state.handle_newlines(&beg, end);
     return beg;
@@ -239,7 +247,7 @@ StringCIter process_binary
         "be closed with a \"]\"";
 
     int bit_pos = 0;
-    data.clear();
+    assert(data.empty());
     while (*beg != "]") {
         for (char c : *beg) {
             switch (c) {
@@ -287,6 +295,37 @@ StringCIter process_binary
         state.add_instruction(erfin::deserialize(datum));
     }
 
+    return ++beg;
+}
+
+
+StringCIter process_numbers
+    (TextProcessState & state, std::vector<UInt32> & data,
+     StringCIter beg, StringCIter end)
+{
+    assert(data.empty());
+    using namespace erfin;
+    for (; *beg != "]"; ++beg) {
+        if (*beg == "\n") {
+            state.handle_newlines(&beg, end);
+            --beg;
+            continue;
+        }
+        NumericParseInfo npi;
+        npi = parse_number(*beg);
+        switch (npi.type) {
+        case INTEGER: data.push_back(npi.integer); break;
+        case DECIMAL: data.push_back(to_fixed_point(npi.floating_point)); break;
+        case NOT_NUMERIC:
+            throw state.make_error(": all entries in the data sequence must be"
+                                   "  numeric");
+            break;
+        default: assert(false); break;
+        }
+    }
+    for (UInt32 datum : data) {
+        state.add_instruction(erfin::deserialize(datum));
+    }
     return ++beg;
 }
 

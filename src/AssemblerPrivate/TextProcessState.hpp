@@ -41,7 +41,6 @@ public:
     friend class StrWrapTextStateAttorney;
     friend void run_get_line_processing_function_tests();
 
-    using ProgramData = erfin::Assembler::ProgramData;
     TextProcessState(): assumptions(erfin::Assembler::NO_ASSUMPTION),
                         m_current_source_line(1) {}
     struct LabelPair { std::size_t program_location, source_line; };

@@ -238,7 +238,9 @@ enum class SystemCallValue {
     UNLOAD_SPRITE , // parameters: x: index for sprite
     DRAW_SPRITE   , // arguments: x: x pos, y: y pox, z: index for sprite
     SCREEN_CLEAR  , // no arguments
+    //
     WAIT_FOR_FRAME, // wait until the end of the frame
+    HALT          ,
     // input
     READ_INPUT    ,
     // misc
@@ -287,16 +289,17 @@ enum class ParamForm {
 // containing the data (whitespace seperated, each "pack" must be divisible by
 // 32bits)
 //
-// data base64 [ ... ]
-//
 // data binary [ # binary is quite special
 //               # there are many ways to accomplish the encoding
 //               # zero characters : 0, O, _
 //               # one  characters : 1, X,
 //               ... ]
 //
-// data fpnum [ # series of fixed point numbers
-//              ... ]
+//
+// data numbers [ # series of numbers either integer or fixed point
+//                # bases 10 or 16
+//                # numbers seperated by whitespace
+//                ... ]
 using RegisterPack = std::array<UInt32, 8>;
 using MemorySpace  = std::array<UInt32, 65536/sizeof(UInt32)>;
 
@@ -360,6 +363,8 @@ private:
     explicit Inst(UInt32 v_): v(v_) {}
     UInt32 v;
 };
+
+using ProgramData = std::vector<Inst>;
 
 class Immd {
 public:
@@ -509,6 +514,8 @@ UInt32 decode_immd_as_fp(Inst inst);
 bool decode_is_fixed_point_flag_set(Inst i);
 
 const char * register_to_string(Reg r);
+
+struct ConsolePack;
 
 } // end of erfin namespace
 

@@ -66,7 +66,7 @@ public:
     void   screen_clear ();
 
     template <typename Func>
-    bool draw_pixels(Func f);
+    void draw_pixels(Func f);
 
     static const int SCREEN_WIDTH;
     static const int SCREEN_HEIGHT;
@@ -119,18 +119,13 @@ private:
 };
 
 template <typename Func>
-bool ErfiGpu::draw_pixels(Func f) {
-    //static int cnt = 1;
-
-    //if ((cnt = ((cnt + 1) % 2)) == 0) return false;
-
+void ErfiGpu::draw_pixels(Func f) {
     const std::size_t END = std::size_t(-1);
     for (std::size_t i = next_set_pixel(0); i != END; i = next_set_pixel(i)) {
         int x = int(i) % SCREEN_WIDTH;
         int y = int(i) / SCREEN_WIDTH;
         f(x, y);
     }
-    return true;
 }
 
 } // end of erfin namespace

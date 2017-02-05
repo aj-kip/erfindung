@@ -89,7 +89,7 @@ void Assembler::assemble_from_string(const std::string & source) {
     tpstate.move_program(m_program, m_inst_to_line_map);
 }
 
-const Assembler::ProgramData & Assembler::program_data() const
+const ProgramData & Assembler::program_data() const
     { return m_program; }
 
 void Assembler::setup_debugger(Debugger & dbgr) {
