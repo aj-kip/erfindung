@@ -47,14 +47,7 @@ UInt32 fp_compare(UInt32 a, UInt32 b);
 UInt32 to_fixed_point(double fp);
 
 double fixed_point_to_double(UInt32 fp);
-#if 0
-class FixedPoint : public boost::dividable<FixedPoint> {
-public:
 
-private:
-    UInt32 m_rep;
-};
-#endif
 } // end of erfin namespace
 
 #endif

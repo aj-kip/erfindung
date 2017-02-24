@@ -186,12 +186,11 @@ enum class OpCode {
     SKIP      , // one arg , conditional, if flags is zero
                 // "skip x"
                 // "skip x immd" immediate acts as a bit mask here
-    CALL       , // special instruction using sp
+    CALL      , // special instruction using sp
     // F-types (0 bits for "pf") (odd-out types)
     // CALL, NOT
     NOT        , // bitwise complement
                  // "not x a"
-    //SINE       , // "too much" for software to have it
     // for SYSTEM_CALL:
     // I can reduce the instruction set size even further by defining, as all
     // ISAs do, function call conventions

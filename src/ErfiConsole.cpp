@@ -47,7 +47,6 @@ void Console::load_program(const ProgramData & program) {
 }
 
 void Console::process_event(const sf::Event & event) {
-
     switch (event.type) {
     case sf::Event::KeyPressed :
         pack.pad.update(to_button(event.key.code), GamePad::PRESSED);

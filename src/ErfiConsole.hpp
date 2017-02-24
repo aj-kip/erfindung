@@ -74,7 +74,7 @@ template <typename Func>
 void Console::run_until_wait(Func && f) {
     pack.gpu.wait(pack.ram);
     pack.cpu.clear_flags();
-    while (!pack.cpu.wait_was_called()) {
+    while (!pack.cpu.wait_was_called() && !pack.cpu.requesting_halt()) {
         pack.cpu.run_cycle(&pack);
         f();
     }

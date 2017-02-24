@@ -137,6 +137,8 @@ Immd encode_immd_fp(double d) {
     if ((fullwidth >> 16u) & ~0x1FFu)
         throw Error("Value too large to be encoded in a 9/6 fixed point number.");
     auto rv = sign_part | partial;
+    if ((0x7FFFu & rv) == 0)
+        throw Error("Value too small to be encoded in a 9/6 fixed point number.");
     auto  o = serialize(Inst(encode_set_is_fixed_point_flag()));
     return Immd(rv | o);
 }

@@ -30,6 +30,7 @@
 
 #include <type_traits>
 #include <stdexcept>
+#include <iostream>
 
 // <------------------------- Implementation Detail -------------------------->
 
@@ -64,6 +65,23 @@ typename EnableStrToNum<IterType, RealType>::type
 /* bool */ string_to_number
     (IterType start, IterType end, RealType & out,
      const RealType base_c = 10);
+
+class OstreamFormatSaver {
+public:
+    OstreamFormatSaver(std::ostream & out):
+        old_precision(out.precision()), old_flags(out.flags()), strm(&out)
+    {}
+
+    ~OstreamFormatSaver() {
+        strm->precision(old_precision);
+        strm->flags(old_flags);
+    }
+
+private:
+    decltype(std::cout.precision()) old_precision;
+    std::ios::fmtflags old_flags;
+    std::ostream * strm;
+};
 
 // <------------------------- Implementation Detail -------------------------->
 

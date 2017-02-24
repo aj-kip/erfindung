@@ -606,9 +606,9 @@ erfin::Immd deal_with_fp_immd
 bool op_code_supports_fpoint_immd(erfin::OpCode op_code) {
     using O = erfin::OpCode;
     switch (op_code) {
-    case O::PLUS: case O::MINUS: return true;
-    case O::TIMES: case O::AND: case O::XOR: case O::OR: case O::DIVIDE:
-    case O::COMP:
+    case O::COMP: case O::DIVIDE: case O::TIMES: case O::PLUS: case O::MINUS:
+        return true;
+    case O::AND: case O::XOR: case O::OR:
         return false;
     default: assert(false); break;
     }
@@ -704,9 +704,6 @@ StringCIter make_generic_arithemetic
         else if (state.assumptions == Assembler::USING_INT)
             type_indentity = IS_INT;
     }
-    if (type_indentity == IS_FP) {
-        inst |= encode_set_is_fixed_point_flag();
-    }
 
     switch (pf) {
     case XPF_2R: // psuedo instruction
@@ -726,6 +723,9 @@ StringCIter make_generic_arithemetic
         inst = encode(op_code, a1, a1, handle_immd(eol, op_code, state));
         break;
     default: assert(false); break;
+    }
+    if (type_indentity == IS_FP) {
+        inst |= encode_set_is_fixed_point_flag();
     }
 
     state.add_instruction(inst, label);

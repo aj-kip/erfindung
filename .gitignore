@@ -4,3 +4,4 @@
 *.VC.db
 *.filters
 *.opendb
+*.pro.user*

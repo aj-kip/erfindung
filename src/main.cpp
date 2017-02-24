@@ -29,13 +29,17 @@
 #include <sstream>
 #include <queue>
 #include <algorithm>
+#include <mutex>
+#include <condition_variable>
 
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
 #include "DrawRectangle.hpp"
 #include "Debugger.hpp"
+#include "StringUtil.hpp"
 
 #include <cstring>
 
@@ -56,22 +60,144 @@ void process_events(erfin::Console & console, sf::Window & window);
 
 void run_console_loop(erfin::Console & console, sf::RenderWindow & window);
 
+class Apu : private sf::SoundStream {
+public:
+
+    static constexpr const int SAMPLE_RATE = 11025;
+
+    // PSG-like
+    // follows same principles involving a command buffer
+    // involuntarily multi-threaded (by API designer)
+    Apu() {
+        initialize(1, unsigned(SAMPLE_RATE));
+        play();
+    }
+
+    void set_notes_per_second(int nps) {
+        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
+        m_samples_per_note = SAMPLE_RATE / nps;
+    }
+
+    void push_note(int pitch) {
+        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
+        m_notes.push_back(pitch);
+    }
+
+    enum Pwmi { // Pulse width modulation interpolation
+        SINE,
+        RISE,
+        FALL,
+        MIRROR_STEP // (5, 1), (4, 2), (3, 3), (2, 4), ...
+    };
+
+    // PWMI Parameters
+
+private:
+    struct ThreadControl {
+        std::mutex mtx;
+        std::condition_variable apu_side;
+        std::condition_variable main_thread;
+    };
+
+    using Int16 = std::int16_t;
+
+    static constexpr const Int16 MIN_AMP = std::numeric_limits<Int16>::min();
+    static constexpr const Int16 MAX_AMP = std::numeric_limits<Int16>::max();
+
+    template <typename T>
+    static T mag(T t) { return t < T(0) ? -t : t; }
+
+    static Int16 triangle_wave(Int16 t)
+        { return (MAX_AMP - mag(t)) - mag(t); }
+
+    static bool silence(Chunk & data) {
+        static std::vector<Int16> flat_line(SAMPLE_RATE, 0);
+        data.sampleCount = flat_line.size();
+        data.samples = &flat_line.front();
+        return true;
+    }
+
+    template <typename Func>
+    static void do_n_times(int n, Func && f) {
+        // HA, use case for do while!
+        do { f(); } while(--n);
+    }
+
+    bool onGetData(Chunk & data) override final {
+        using UInt16 = std::uint16_t;
+        constexpr const Int16 max = std::numeric_limits<Int16>::max();
+
+        std::vector<int> notes;
+        {
+        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
+        if (m_notes.empty()) {
+            return silence(data);
+        }
+        m_notes.swap(notes);
+        }
+        m_samples.clear();
+        m_samples.reserve(notes.size()*std::size_t(m_samples_per_note));
+        for (int note : notes) {
+            if (note == 0) {
+                do_n_times(m_samples_per_note, [this]() {
+                    m_samples.push_back(0);
+                });
+            } else {
+                int i = 0;
+                do_n_times(m_samples_per_note, [this, &i, note]() {
+                    int m = 0;
+                    if (m_samples.size() % 10 > 7)
+                        m = 1;
+                    m_samples.push_back(triangle_wave(UInt16(i*m)));
+                    i = (i + note) % max;
+                });
+            }
+        }
+        data.sampleCount = m_samples.size();
+        data.samples     = &m_samples[0];
+        return true;
+    }
+
+    void onSeek(sf::Time) override final {}
+
+    std::vector<Int16> m_samples;
+    std::vector<int> m_notes;
+
+    std::mutex m_note_mutex;
+    int m_samples_per_note;
+    ThreadControl m_thread_control;
+};
+
 } // end of <anonymous> namespace
 
 int main(int argc, char ** argv) {
     using namespace erfin;
+    Apu apu;
+    apu.set_notes_per_second(2);
+    apu.push_note(150);
+    apu.push_note(275);
+    apu.push_note(400);
+    apu.push_note(275);
+    apu.push_note(560);
+    apu.push_note(000);
+    apu.push_note(150);
+    apu.push_note(275);
+
 #   ifdef MACRO_DEBUG
     try {
-
         run_numeric_encoding_tests();
         Assembler::run_tests();
         ErfiCpu::run_tests();
         test_string_processing();
-
     } catch (std::exception & exp) {
         std::cout << exp.what() << std::endl;
         return ~0;
     }
+#   else
+    (void)run_numeric_encoding_tests;
+    (void)Assembler::run_tests;
+    (void)ErfiCpu::run_tests;
+    (void)test_string_processing;
 #   endif
 
     Assembler asmr;
@@ -116,6 +242,8 @@ namespace {
 
 void test_fp_multiply(double a, double b);
 
+void test_fp_divide(double a, double b);
+
 void test_fixed_point(double value);
 
 void test_string_processing() {
@@ -158,6 +286,11 @@ void run_numeric_encoding_tests() {
     test_fixed_point( 32767.9999923706);
     test_fixed_point(-32767.9999923706);
 
+    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.5))) << std::endl;
+    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.25))) << std::endl;
+    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.3333333))) << std::endl;
+    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.1))) << std::endl;
+
     test_fp_multiply(2.0, 2.0);
     test_fp_multiply(-1.0, 1.0);
     test_fp_multiply(10.0, 10.0);
@@ -165,6 +298,14 @@ void run_numeric_encoding_tests() {
     test_fp_multiply(0.5, 0.5);
     test_fp_multiply(1.1, 1.1);
     test_fp_multiply(200.0, 0.015625);
+
+    test_fp_divide( 2.0, 1.0);
+    test_fp_divide( 2.0, 4.0);
+    test_fp_divide(10.0, 3.0);
+    test_fp_divide( 2.0, 0.5);
+    test_fp_divide( 0.5, 2.0);
+    test_fp_divide( 1.1, 1.1);
+    //test_fp_divide(-9.0, 1.1);
 }
 
 void adjust_window_view(sf::RenderWindow & window) {
@@ -198,7 +339,7 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window) {
     sf::Clock clk;
     int fps = 0;
     int frame_count = 0;
-    int pc_ticks = 0;
+    //int pc_ticks = 0;
     sf::Texture screen_pixels;
     std::vector<UInt32> pixel_array;
     screen_pixels.create(ErfiGpu::SCREEN_WIDTH, ErfiGpu::SCREEN_HEIGHT);
@@ -217,7 +358,11 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window) {
 
         window.clear();
 
-        console.run_until_wait([&pc_ticks](){ ++pc_ticks; });
+        console.run_until_wait([](){
+            //++pc_ticks;
+            //std::cout << "tick " << pc_ticks << ":\n";
+            //console.print_cpu_registers(std::cout);
+        });
         if (console.trying_to_shutdown())
             break;
 
@@ -236,38 +381,50 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window) {
 
         window.display();
     }
-    std::cout << std::dec;
     std::cout << "Last reported fps " << fps << std::endl;
 }
-
-void test_fp_multiply(double a, double b) {
+using UInt32 = erfin::UInt32;
+template <UInt32(*FixedPtFunc)(UInt32, UInt32), double(*DoubleFunc)(double, double)>
+void test_fp_operation(double a, double b, char op_char) {
     using namespace erfin;
+    OstreamFormatSaver cfs(std::cout); (void)cfs;
     UInt32 fp_a = to_fixed_point(a);
     UInt32 fp_b = to_fixed_point(b);
-    UInt32 res = fp_multiply(fp_a, fp_b);
+    UInt32 res = FixedPtFunc(fp_a, fp_b);
     double d = fixed_point_to_double(res);
 
     const double MAX_ERROR = 0.00002;
-    std::cout << "For: " << a << "x" << b << " = " << (a*b) << std::endl;
+    std::cout << "For: " << a << op_char << b << " = " << DoubleFunc(a, b) << std::endl;
     std::cout <<
         "a   value: " << std::hex << std::uppercase << fp_a << "\n"
         "b   value: " << std::hex << std::uppercase << fp_b << "\n"
         "res value: " << std::hex << std::uppercase << res  << std::endl;
-    if (mag(d - (a*b)) > MAX_ERROR) {
+    if (mag(d - DoubleFunc(a, b)) > MAX_ERROR) {
         throw std::runtime_error(
             "Stopping test (failed), " + std::to_string(d) + " != " +
-            std::to_string(a*b));
+            std::to_string(DoubleFunc(a, b)));
     }
+}
+
+double mul(double a, double b) { return a*b; }
+double div(double a, double b) { return a/b; }
+
+void test_fp_multiply(double a, double b) {
+    test_fp_operation<erfin::fp_multiply, mul>(a, b, 'x');
+}
+
+void test_fp_divide(double a, double b) {
+    test_fp_operation<erfin::fp_divide, div>(a, b, '/');
 }
 
 void test_fixed_point(double value) {
     using namespace erfin;
+    OstreamFormatSaver cfs(std::cout); (void)cfs;
     UInt32 fp = to_fixed_point(value);
     double val_out = fixed_point_to_double(fp);
     double diff = val_out - value;
     // use an error about 1/(2^16), but "fatten" it up for error
     if (mag(diff) < 0.00002) {
-
         std::cout <<
             "For: " << value << "\n"
             "Fixed Point value: " << std::hex << std::uppercase << fp << "\n"
@@ -276,14 +433,12 @@ void test_fixed_point(double value) {
         return;
     }
     // not equal!
-    std::stringstream ss;
-    ss <<
+    std::cout <<
         "Fixed point test failed!\n"
         "Starting         : " << value << "\n"
         "Fixed Point value: " << std::hex << std::uppercase << fp << "\n"
-        "End value        : " << std::dec << std::nouppercase << val_out << "\n";
-    std::cout << ss.str() << std::endl;
-    //throw std::runtime_error(ss.str());
+        "End value        : " << std::dec << std::nouppercase << val_out <<
+         std::endl;
 }
 
 } // end of <anonymous> namespace

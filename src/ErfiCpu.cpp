@@ -25,6 +25,7 @@
 #include "FixedPointUtil.hpp"
 #include "ErfiConsole.hpp"
 #include "Debugger.hpp"
+#include "StringUtil.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -133,7 +134,8 @@ void ErfiCpu::clear_flags() {
 }
 
 void ErfiCpu::print_registers(std::ostream & out) const {
-    auto old_pre = out.precision();
+    OstreamFormatSaver cfs(out); (void)cfs;
+
     out.precision(5);
     out << std::dec << std::fixed;
     for (int i = 0; i != int(Reg::COUNT); ++i) {
@@ -145,7 +147,7 @@ void ErfiCpu::print_registers(std::ostream & out) const {
         out << " | " << std::setw(12) << fixed_point_to_double(m_registers[std::size_t(i)]);
         out << "\n";
     }
-    out.precision(old_pre);
+
     out << std::flush;
 }
 
@@ -261,9 +263,9 @@ void try_program(const char * source_code, const int inst_limit_c) {
     using Pf = SetTypeParamForm;
     UInt32 & r0 = reg0(inst);
     switch (decode_s_type_pf(inst)) {
-    case Pf::_2R_INTVER: r0 = reg1(inst)              ; return;
+    case Pf::_2R_INTVER: r0 = reg1              (inst); return;
     case Pf::_1R_INT   : r0 = decode_immd_as_int(inst); return;
-    case Pf::_2R_FPVER : r0 = reg1(inst)              ; return;
+    case Pf::_2R_FPVER : r0 = reg1              (inst); return;
     case Pf::_1R_FP    : r0 = decode_immd_as_fp (inst); return;
     }
 }

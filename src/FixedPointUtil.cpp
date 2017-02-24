@@ -26,6 +26,12 @@
 #include <cassert>
 #include <cmath>
 
+namespace {
+
+const constexpr erfin::UInt32 SIGN_BIT_MASK = 0x80000000;
+
+} // end of <anonymous> namespace
+
 namespace erfin {
 
 UInt32 reverse_bits(UInt32 num) {
@@ -61,25 +67,32 @@ UInt32 reverse_bits(UInt32 num) {
 UInt32 fp_multiply(UInt32 a, UInt32 b) {
     // Yes! finally found an article that's fully details my problem:
     // http://www.eetimes.com/author.asp?doc_id=1287491
-    UInt32 sign = (0x80000000 & a) ^ (0x80000000 & b);
-    UInt64 a_bg = UInt64(0x7FFFFFFF & a);
-    UInt64 b_bg = UInt64(0x7FFFFFFF & b);
-    UInt64 large = (a_bg*b_bg + 0x8000) >> 16;
-    return sign | (large & 0xFFFFFFFF);
+    UInt32 sign = (SIGN_BIT_MASK & a) ^ (SIGN_BIT_MASK & b);
+    UInt64 a_bg = UInt64(~SIGN_BIT_MASK & a);
+    UInt64 b_bg = UInt64(~SIGN_BIT_MASK & b);
+    UInt64 large = (a_bg*b_bg + 0x8000) >> 16; // mul, bias, shift
+    return sign | (large & ~SIGN_BIT_MASK);
 }
 
 UInt32 fp_inverse(UInt32 a) {
     // could reverse bits and multiply given
-    // fp = -1( SUM( b_1^{15} + b_2^{14} + ... + b_{15}^{0} )
-    UInt32 sign = 0x80000000 & a;
-    a = reverse_bits(a) >> 1;
-    return sign | a;
+    // fp = -1( \Sigma( b_1^{15} + b_2^{14} + ... + b_{31}^{-16} ) )
+    // the pivot of this reversal is the ones position
+    // that is (in binary) 0.1 -> 10.0
+    // reverse_bits(0.1) = 1.0
+    // shift_up(reverse_bits(0.1)) = 10.0
+    //UInt32 sign = 0x80000000 & a;
+    //a =           0x7FFFFFFF & reverse_bits(a);
+    //return sign | a;
+    return fp_divide(0x00010000, a);
 }
 
 UInt32 fp_divide(UInt32 a, UInt32 b) {
-    // many thanks to Shawn Stevenson!
-    // https://sestevenson.wordpress.com/fixed-point-division-of-two-q15-numbers/
-    return fp_multiply(a, fp_inverse(b));
+    UInt32 sign = (SIGN_BIT_MASK & a) ^ (SIGN_BIT_MASK & b);
+    UInt64 a_bg = UInt64(~SIGN_BIT_MASK & a);
+    UInt64 b_bg = UInt64(~SIGN_BIT_MASK & b);
+    UInt64 temp = ((a_bg << 16) - 0x8000) / b_bg; // shift, bias, div
+    return sign | (UInt32(temp) & ~SIGN_BIT_MASK);
 }
 
 UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num) {
@@ -89,10 +102,10 @@ UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num) {
 }
 
 UInt32 fp_compare(UInt32 a, UInt32 b) {
-    auto is_neg = [] (UInt32 a) -> bool { return (a & 0xF0000000) != 0; };
+    auto is_neg = [] (UInt32 a) -> bool { return (a & SIGN_BIT_MASK) != 0; };
     bool neg;
     if ((neg = is_neg(a)) == is_neg(b)) {
-        if ((a & 0xFFFFFF00) == (b & 0xFFFFFF00))
+        if ((a & 0x7FFFFF00) == (b & 0x7FFFFF00))
             return COMP_EQUAL_MASK;
         UInt32 rv;
         if (a > b) {
@@ -118,13 +131,13 @@ UInt32 to_fixed_point(double fp) {
     UInt32 low  = static_cast<UInt32>(std::round((fp - std::floor(fp))*65535.0));
     assert(low <= 65535);
     UInt32 rv = ((high & 0x7FFF) << 16) | (low);
-    return is_neg ? 0x80000000 | rv : rv;
+    return is_neg ? SIGN_BIT_MASK | rv : rv;
 }
 
 double fixed_point_to_double(UInt32 fp) {
-    bool is_neg = (fp & 0x80000000) != 0;
+    bool is_neg = (fp & SIGN_BIT_MASK) != 0;
     double sign = is_neg ? -1.0 : 1.0;
-    UInt32 magi = is_neg ? (fp ^ 0x80000000) : fp;
+    UInt32 magi = is_neg ? (fp ^ SIGN_BIT_MASK) : fp;
     return sign*double(magi) / 65536.0;
 }
 
