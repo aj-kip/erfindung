@@ -29,11 +29,8 @@
 #include <sstream>
 #include <queue>
 #include <algorithm>
-#include <mutex>
-#include <condition_variable>
 
 #include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
 
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
@@ -45,6 +42,7 @@
 
 #include "Assembler.hpp"
 #include "ErfiConsole.hpp"
+#include "ErfiApu.hpp"
 
 namespace {
 
@@ -60,129 +58,38 @@ void process_events(erfin::Console & console, sf::Window & window);
 
 void run_console_loop(erfin::Console & console, sf::RenderWindow & window);
 
-class Apu : private sf::SoundStream {
-public:
-
-    static constexpr const int SAMPLE_RATE = 11025;
-
-    // PSG-like
-    // follows same principles involving a command buffer
-    // involuntarily multi-threaded (by API designer)
-    Apu() {
-        initialize(1, unsigned(SAMPLE_RATE));
-        play();
-    }
-
-    void set_notes_per_second(int nps) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        m_samples_per_note = SAMPLE_RATE / nps;
-    }
-
-    void push_note(int pitch) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        m_notes.push_back(pitch);
-    }
-
-    enum Pwmi { // Pulse width modulation interpolation
-        SINE,
-        RISE,
-        FALL,
-        MIRROR_STEP // (5, 1), (4, 2), (3, 3), (2, 4), ...
-    };
-
-    // PWMI Parameters
-
-private:
-    struct ThreadControl {
-        std::mutex mtx;
-        std::condition_variable apu_side;
-        std::condition_variable main_thread;
-    };
-
-    using Int16 = std::int16_t;
-
-    static constexpr const Int16 MIN_AMP = std::numeric_limits<Int16>::min();
-    static constexpr const Int16 MAX_AMP = std::numeric_limits<Int16>::max();
-
-    template <typename T>
-    static T mag(T t) { return t < T(0) ? -t : t; }
-
-    static Int16 triangle_wave(Int16 t)
-        { return (MAX_AMP - mag(t)) - mag(t); }
-
-    static bool silence(Chunk & data) {
-        static std::vector<Int16> flat_line(SAMPLE_RATE, 0);
-        data.sampleCount = flat_line.size();
-        data.samples = &flat_line.front();
-        return true;
-    }
-
-    template <typename Func>
-    static void do_n_times(int n, Func && f) {
-        // HA, use case for do while!
-        do { f(); } while(--n);
-    }
-
-    bool onGetData(Chunk & data) override final {
-        using UInt16 = std::uint16_t;
-        constexpr const Int16 max = std::numeric_limits<Int16>::max();
-
-        std::vector<int> notes;
-        {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        if (m_notes.empty()) {
-            return silence(data);
-        }
-        m_notes.swap(notes);
-        }
-        m_samples.clear();
-        m_samples.reserve(notes.size()*std::size_t(m_samples_per_note));
-        for (int note : notes) {
-            if (note == 0) {
-                do_n_times(m_samples_per_note, [this]() {
-                    m_samples.push_back(0);
-                });
-            } else {
-                int i = 0;
-                do_n_times(m_samples_per_note, [this, &i, note]() {
-                    int m = 0;
-                    if (m_samples.size() % 10 > 7)
-                        m = 1;
-                    m_samples.push_back(triangle_wave(UInt16(i*m)));
-                    i = (i + note) % max;
-                });
-            }
-        }
-        data.sampleCount = m_samples.size();
-        data.samples     = &m_samples[0];
-        return true;
-    }
-
-    void onSeek(sf::Time) override final {}
-
-    std::vector<Int16> m_samples;
-    std::vector<int> m_notes;
-
-    std::mutex m_note_mutex;
-    int m_samples_per_note;
-    ThreadControl m_thread_control;
-};
-
 } // end of <anonymous> namespace
 
 int main(int argc, char ** argv) {
     using namespace erfin;
     Apu apu;
-    apu.set_notes_per_second(2);
-    apu.push_note(150);
-    apu.push_note(275);
-    apu.push_note(400);
-    apu.push_note(275);
-    apu.push_note(560);
-    apu.push_note(000);
-    apu.push_note(150);
-    apu.push_note(275);
+    apu.access([](Apu::Interface & face){
+        // needs to be clearer that it's notes per second
+        static constexpr const auto TRI = Channel::TRIANGLE;
+        face.enqueue(TRI, ApuRateType::TEMPO, 3);
+        auto push_note =
+            [&](int note) { face.enqueue(TRI, ApuRateType::NOTE, note); };
+        push_note(150);
+        push_note(275);
+        push_note(400);
+        push_note(275);
+        push_note(560);
+        push_note(000);
+        push_note(150);
+        push_note(275);
+    });
+#   if 0
 
+    apu.set_notes_per_second(3);
+    apu.push_note(0, 150);
+    apu.push_note(0, 275);
+    apu.push_note(0, 400);
+    apu.push_note(0, 275);
+    apu.push_note(0, 560);
+    apu.push_note(0, 000);
+    apu.push_note(0, 150);
+    apu.push_note(0, 275);
+#   endif
 #   ifdef MACRO_DEBUG
     try {
         run_numeric_encoding_tests();
@@ -328,6 +235,9 @@ void process_events(erfin::Console & console, sf::Window & window) {
                 window.close();
             if (event.key.code == sf::Keyboard::F5)
                 console.press_restart();
+            break;
+        case sf::Event::Closed:
+            window.close();
             break;
         default: break;
         }
