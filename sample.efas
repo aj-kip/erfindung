@@ -1,3 +1,15 @@
+assume fixed-point
+    set  x test-data
+    load x
+    set  y test-data
+    add  y 1
+    load y
+    div  z x y
+    #io   halt
+    set b x
+    set sp stack-start
+    call expo
+    #io   halt
   jump main
 : erfindung-text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
@@ -20,8 +32,8 @@ ________________________________________________________________________________
 ____________________________________________________________________________________X_______
 X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____XXXXXX_______
 ____________ ]
-
-: main set sp stack-start
+: main 
+       set sp stack-start
        set  x 92
        set  y 19
        set  z erfindung-text
@@ -29,12 +41,10 @@ ____________ ]
        set  z a
 
        io   rand
-       mod  a 228
-       set  x a
+       mod  x a 228
 
        io   rand
-       mod  a 221
-       set  y a
+       mod  y a 221
 
        set  b 1 
        set  c 1
@@ -50,11 +60,36 @@ ____________ ]
        io   clear
 
        # semantic issue
-       # am I popping a tuple or individual registers?
        pop y x c b z
 
        io   draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
 
+       io   read 
+       comp a    1
+       skip a ==  # up is pressed
+           set pc skip-press-up
+       set c -1
+       jump skip-press-down
+: skip-press-up
+       io read
+       comp a    2
+       skip a ==  # down is pressed
+           set pc skip-press-down
+       set c 1
+: skip-press-down
+       io read
+       comp a    4 # left is pressed
+       skip a ==
+           set pc skip-press-left
+       set b -1
+       jump do-update
+: skip-press-left
+       io read
+       comp a    8 # right is pressed
+       skip a ==
+           set pc do-update
+       set b 1
+: do-update
        add  x b x # x = b + x
        add  y c y
 : start-program
@@ -107,5 +142,42 @@ assume integer
     set a  y
     pop pc
 
+assume fp
+: expo # e as base
+    set a 1.0 # 1 + ...
+    add a x # 1 + x + ...
+
+    set y x
+    mul y y # y = x^2
+    mul b y 0.5
+    add a b # ... + x^2/2 + ...
+
+    set c 0
+    jump expo-for-begin
+: expo-for
+    comp-int z c   6
+    skip     z   <
+        jump expo-for-exit
+: expo-for-begin
+    mul  y x # y := x^k
+    set  b expo-table
+    add  b c
+    load b b
+    mul  b y b
+    add  a b # ... + x^k/k! + ...
+    add  c 1
+    jump expo-for
+: expo-for-exit
+    pop pc # returns
+: expo-table data numbers [
+    0.166666666   # 1/3! 0
+    0.041666666   # 1/4! 1
+    0.008333333   # 1/5! 2
+    0.001388888   # 1/6! 3
+    0.000198413   # 1/7! 4
+    0.000024802 ] # 1/8! 5
+: test-data data numbers [
+    2.987654321
+    1.123456789 ]
 # setup stack somewhere, no convention
 : stack-start data [ ________ ________ ________ ________ ]

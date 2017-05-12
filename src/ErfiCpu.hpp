@@ -30,7 +30,6 @@
 
 namespace erfin {
 
-class ErfiGpu;
 class Debugger;
 
 class ErfiCpu {
@@ -39,14 +38,15 @@ public:
 
     void reset();
 
-    void do_nothing(MemorySpace &, ErfiGpu *){}
-    void run_cycle(MemorySpace & memspace, ErfiGpu * gpu = nullptr);
-    void run_cycle(Inst inst, MemorySpace & memspace, ErfiGpu * gpu = nullptr);
+    void do_nothing(MemorySpace &, ConsolePack *){}
+    void run_cycle(ConsolePack * console = nullptr);
+    void run_cycle(Inst inst, ConsolePack * console = nullptr);
     void clear_flags();
 
     void print_registers(std::ostream & out) const;
     void update_debugger(Debugger & dbgr) const;
     bool wait_was_called() const;
+    bool requesting_halt() const;
 
     static void run_tests();
 
@@ -59,7 +59,7 @@ private:
     template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
     void do_arth(Inst inst);
 
-    void do_syscall(Inst inst, ErfiGpu & gpu);
+    void do_syscall(Inst inst, ConsolePack & gpu);
 
     void do_set(Inst inst);
 
@@ -76,6 +76,7 @@ private:
 
     RegisterPack m_registers;
     bool m_wait_called;
+    bool m_halt_requested;
 
     std::default_random_engine m_rand_generator;
 };

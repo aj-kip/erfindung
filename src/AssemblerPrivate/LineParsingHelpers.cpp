@@ -55,7 +55,7 @@ NumericParseInfo parse_number(const std::string & str) {
     NumericParseInfo rv;
     // first try to find a prefex
     auto str_has_at = [&str] (char c, std::size_t idx) -> bool {
-        if (str.size() >= idx) return false;
+        if (idx >= str.size()) return false;
         return tolower(str[idx]) == c;
     };
     bool neg = str_has_at('-', 0);
@@ -78,11 +78,13 @@ NumericParseInfo parse_number(const std::string & str) {
     for (char c : str) has_dot = (c == '.') ? true : has_dot; // n.-
     if (has_dot) {
         if (string_to_number(beg, str.end(), rv.floating_point, double(base))) {
+            if (neg) rv.floating_point *= -1.0;
             rv.type = DECIMAL;
             return rv;
         }
     } else {
         if (string_to_number(beg, str.end(), rv.integer, base)) {
+            if (neg) rv.integer *= -1;
             rv.type = INTEGER;
             return rv;
         }

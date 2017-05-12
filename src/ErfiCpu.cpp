@@ -20,12 +20,15 @@
 *****************************************************************************/
 
 #include "ErfiCpu.hpp"
+
 #include "Assembler.hpp"
 #include "FixedPointUtil.hpp"
-#include "ErfiGpu.hpp"
+#include "ErfiConsole.hpp"
 #include "Debugger.hpp"
+#include "StringUtil.hpp"
 
 #include <iostream>
+#include <iomanip>
 
 #include <cassert>
 
@@ -69,6 +72,7 @@ namespace erfin {
 
 ErfiCpu::ErfiCpu():
     m_wait_called(false),
+    m_halt_requested(false),
     m_rand_generator(std::random_device()())
 {
     // std::array does not initialize values
@@ -80,17 +84,19 @@ void ErfiCpu::reset() {
         reg = 0;
 }
 
-void ErfiCpu::run_cycle(MemorySpace & memspace, ErfiGpu * gpu) {
+void ErfiCpu::run_cycle(ConsolePack * console) {
+    auto memspace = console->ram;
     run_cycle(deserialize(memspace[m_registers[std::size_t(Reg::PC)]++]),
-              memspace, gpu                                             );
+              console                                                   );
 }
 
-void ErfiCpu::run_cycle(Inst inst, MemorySpace & memspace, ErfiGpu * gpu) {
+void ErfiCpu::run_cycle(Inst inst, ConsolePack * console) {
     // 2+3+2 | r0 | r1 | r2
     //       | r0 | r1 | immd
     //       | r0 |    | immd
 
     using O = OpCode;
+    auto & memspace = console->ram;
     switch (decode_op_code(inst)) {
     // R-type type indifferent split by pf (1-bit) (integer only)
     // PLUS, MINUS, AND, XOR, OR, ROTATE
@@ -117,8 +123,8 @@ void ErfiCpu::run_cycle(Inst inst, MemorySpace & memspace, ErfiGpu * gpu) {
     case O::CALL: do_call(inst, memspace); return;
     // "O"-types (0 bits for "pf") (odd-out types)
     // CALL, NOT
-    case O::NOT      : do_not (inst);                                return;
-    case O::SYSTEM_IO: if (gpu) do_syscall(inst, *gpu);              return;
+    case O::NOT      : do_not(inst);                            return;
+    case O::SYSTEM_IO: if (console) do_syscall(inst, *console); return;
     default: emit_error(inst);
     };
 }
@@ -128,18 +134,20 @@ void ErfiCpu::clear_flags() {
 }
 
 void ErfiCpu::print_registers(std::ostream & out) const {
-    auto old_pre = out.precision();
-    out.precision(3);
+    OstreamFormatSaver cfs(out); (void)cfs;
+
+    out.precision(5);
+    out << std::dec << std::fixed;
     for (int i = 0; i != int(Reg::COUNT); ++i) {
         const char * reg_name = register_to_string(Reg(i));
         out << reg_name;
         if (reg_name[1] == 0)
             out << " ";
-        out << " | " << int(m_registers[std::size_t(i)]);
-        out << " | " << fixed_point_to_double(m_registers[std::size_t(i)]);
+        out << " | " << std::setw(9) << int(m_registers[std::size_t(i)]);
+        out << " | " << std::setw(12) << fixed_point_to_double(m_registers[std::size_t(i)]);
         out << "\n";
     }
-    out.precision(old_pre);
+
     out << std::flush;
 }
 
@@ -148,6 +156,8 @@ void ErfiCpu::update_debugger(Debugger & dbgr) const {
 }
 
 bool ErfiCpu::wait_was_called() const { return m_wait_called; }
+
+bool ErfiCpu::requesting_halt() const { return m_halt_requested; }
 
 void try_program(const char * source_code, const int inst_limit_c);
 
@@ -197,15 +207,14 @@ void try_program(const char * source_code, const int inst_limit_c);
 
 void try_program(const char * source_code, const int inst_limit_c) {
     Assembler asmr;
-    ErfiCpu cpu;
-    MemorySpace mem;
+    ConsolePack con;
 
     try {
         asmr.assemble_from_string(source_code);
-        for (UInt32 & i : mem) i = 0;
-        load_program_into_memory(mem, asmr.program_data());
+        for (UInt32 & i : con.ram) i = 0;
+        Console::load_program_to_memory(asmr.program_data(), con.ram);
         for (int i = 0; i != inst_limit_c; ++i)
-            cpu.run_cycle(mem);
+            con.cpu.run_cycle(&con);
     } catch (ErfiError & err) {
         auto sline = asmr.translate_to_line_number(err.program_location());
         std::cerr << "Illegal instruction occured!\n";
@@ -223,7 +232,7 @@ void try_program(const char * source_code, const int inst_limit_c) {
 /* private */ UInt32 & ErfiCpu::reg2(Inst inst)
     { return m_registers[std::size_t(decode_reg2(inst))]; }
 
-/* private */ void ErfiCpu::do_syscall(Inst inst, ErfiGpu & gpu) {
+/* private */ void ErfiCpu::do_syscall(Inst inst, ConsolePack & console) {
     using Sys = SystemCallValue;
     auto get_reg_ref = [this] (Reg r) -> UInt32 &
         { return std::ref(m_registers[std::size_t(r)]); };
@@ -232,23 +241,20 @@ void try_program(const char * source_code, const int inst_limit_c) {
     auto & a = get_reg_ref(Reg::A);
     static_assert(std::is_same<decltype(x), decltype(y)>::value, "");
     switch (Sys(decode_immd_as_int(inst))) {
-    case Sys::UPLOAD_SPRITE : a = gpu.upload_sprite(x, y, z); break;
-    case Sys::UNLOAD_SPRITE : gpu.unload_sprite(x); break;
-    case Sys::DRAW_SPRITE   : gpu.draw_sprite(x, y, z); break;
-    case Sys::SCREEN_CLEAR  : gpu.screen_clear(); break;
-    case Sys::WAIT_FOR_FRAME:
-        m_wait_called = true;
-        break;
-    case Sys::READ_INPUT    : break;
+    case Sys::UPLOAD_SPRITE : a = console.gpu.upload_sprite(x, y, z); break;
+    case Sys::UNLOAD_SPRITE : console.gpu.unload_sprite(x);           break;
+    case Sys::DRAW_SPRITE   : console.gpu.draw_sprite(x, y, z);       break;
+    case Sys::SCREEN_CLEAR  : console.gpu.screen_clear();             break;
+    case Sys::WAIT_FOR_FRAME: m_wait_called = true;                   break;
+    case Sys::HALT          : m_halt_requested = true;                break;
+    case Sys::READ_INPUT    : a = console.pad.decode();               break;
     case Sys::RAND_NUMBER   : {
         // a = a random set of 32 bits for a fp or int
         std::uniform_int_distribution<UInt32> distro;
         a = distro(m_rand_generator);
         }
         break;
-    case Sys::READ_TIMER    : // reads system timer from last wait as fp
-        a = to_fixed_point(0.0167);
-        break;
+    case Sys::READ_TIMER    : a = to_fixed_point(0.0167); break;
     default: emit_error(inst);
     }
 }
@@ -257,9 +263,9 @@ void try_program(const char * source_code, const int inst_limit_c) {
     using Pf = SetTypeParamForm;
     UInt32 & r0 = reg0(inst);
     switch (decode_s_type_pf(inst)) {
-    case Pf::_2R_INTVER: r0 = reg1(inst)              ; return;
+    case Pf::_2R_INTVER: r0 = reg1              (inst); return;
     case Pf::_1R_INT   : r0 = decode_immd_as_int(inst); return;
-    case Pf::_2R_FPVER : r0 = reg1(inst)              ; return;
+    case Pf::_2R_FPVER : r0 = reg1              (inst); return;
     case Pf::_1R_FP    : r0 = decode_immd_as_fp (inst); return;
     }
 }

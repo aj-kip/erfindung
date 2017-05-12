@@ -1,6 +1,6 @@
 /****************************************************************************
 
-    File: FixedPointUtil.hpp
+    File: ErfiGamePad.hpp
     Author: Andrew Janke
     License: GPLv3
 
@@ -19,34 +19,45 @@
 
 *****************************************************************************/
 
-#ifndef MACRO_HEADER_GUARD_FIXED_POINT_UTIL_HPP
-#define MACRO_HEADER_GUARD_FIXED_POINT_UTIL_HPP
+#ifndef MACRO_HEADER_GUARD_ERFINDUNG_GAME_PAD_HPP
+#define MACRO_HEADER_GUARD_ERFINDUNG_GAME_PAD_HPP
+
+#include <bitset>
 
 #include "ErfiDefs.hpp"
 
-#include <type_traits>
-
 namespace erfin {
 
-template <typename T>
-typename std::enable_if<std::is_signed<T>::value, T>::type
-    mag(T t) { return t < T(0) ? -t : t; }
+class GamePad {
+public:
+    enum Event {
+        PRESSED,
+        RELEASE
+    };
 
-UInt32 reverse_bits(UInt32 num);
+    enum Button {
+        UP,
+        DOWN,
+        LEFT,
+        RIGHT,
+        A,
+        B,
+        START,
+        BUTTON_COUNT
+    };
 
-UInt32 fp_multiply(UInt32 a, UInt32 b);
+    void update(Button b, Event e) {
+        if (b == BUTTON_COUNT) return;
+        m_state.set(b, e == PRESSED ? 1 : 0);
+    }
 
-UInt32 fp_inverse(UInt32 a);
+    UInt32 decode() const { return UInt32(m_state.to_ulong()); }
 
-UInt32 fp_divide(UInt32 a, UInt32 b);
+private:
 
-UInt32 fp_remainder(UInt32 quot, UInt32 denom, UInt32 num);
-
-UInt32 fp_compare(UInt32 a, UInt32 b);
-
-UInt32 to_fixed_point(double fp);
-
-double fixed_point_to_double(UInt32 fp);
+    static_assert(BUTTON_COUNT <= 32, "Controller can have at most 32 buttons.");
+    std::bitset<BUTTON_COUNT> m_state;
+};
 
 } // end of erfin namespace
 

@@ -6,7 +6,7 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 SOURCES += \
-	../src/main.cpp \
+    ../src/main.cpp \
     ../src/DrawRectangle.cpp \
     ../src/ErfiGpu.cpp \
     ../src/Assembler.cpp \
@@ -17,7 +17,8 @@ SOURCES += \
     ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \
     ../src/AssemblerPrivate/LineParsingHelpers.cpp \
     ../src/Debugger.cpp \
-    ../src/ErfiConsole.cpp
+    ../src/ErfiConsole.cpp \
+    ../src/ErfiApu.cpp
     
 HEADERS += \
     ../src/DrawRectangle.hpp \
@@ -34,7 +35,8 @@ HEADERS += \
     ../src/AssemblerPrivate/CommonDefinitions.hpp \
     ../src/Debugger.hpp \
     ../src/ErfiGamePad.hpp \
-    ../src/ErfiConsole.hpp
+    ../src/ErfiConsole.hpp \
+    ../src/ErfiApu.hpp
 
 TARGET = erfindung
 
