@@ -63,34 +63,50 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window);
 int main(int argc, char ** argv) {
     using namespace erfin;
     Apu apu;
-    apu.access([](Apu::Interface & face){
+    //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    apu.update(0.1);
+    //std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    {
         // needs to be clearer that it's notes per second
         static constexpr const auto TRI = Channel::TRIANGLE;
-        face.enqueue(TRI, ApuRateType::TEMPO, 3);
+        apu.enqueue(TRI, ApuRateType::TEMPO, 3);
         auto push_note =
-            [&](int note) { face.enqueue(TRI, ApuRateType::NOTE, note); };
+            [&](int note) { apu.enqueue(TRI, ApuRateType::NOTE, note); };
         push_note(150);
         push_note(275);
-        push_note(400);
+        push_note(400); // one second passes
+
         push_note(275);
         push_note(560);
-        push_note(000);
+        push_note(000); // two seconds
+
         push_note(150);
         push_note(275);
-    });
-#   if 0
+        // implicit silence -- three seconds
+        /*push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);
+        push_note(000);*/
+    }
 
-    apu.set_notes_per_second(3);
-    apu.push_note(0, 150);
-    apu.push_note(0, 275);
-    apu.push_note(0, 400);
-    apu.push_note(0, 275);
-    apu.push_note(0, 560);
-    apu.push_note(0, 000);
-    apu.push_note(0, 150);
-    apu.push_note(0, 275);
-#   endif
-#   ifdef MACRO_DEBUG
+
+    apu.update(3.0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    apu.update(0.1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    apu.update(0.1);
+    //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+   // apu.wait_for_play_thread_then_update();
+#   if 0//def MACRO_DEBUG
     try {
         run_numeric_encoding_tests();
         Assembler::run_tests();

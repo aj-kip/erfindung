@@ -30,6 +30,8 @@
 #include <array>
 #include <functional>
 #include <bitset>
+#include <iostream> // thread_safe_print
+#include <atomic>
 
 #include <cstdint>
 
@@ -56,21 +58,20 @@ enum class DutyCycleOption {
     ONE_FIFTH
 };
 
-class Apu : private sf::SoundStream {
-private:
-    struct ChannelInfo {
-        int tempo;
-        std::bitset<sizeof(int32_t)*8> dc_window;
-    };
-    using ChannelNoteInfo = std::vector<ChannelInfo>;
-    using ChannelSamples = std::vector<std::vector<std::int16_t>>;
+template <typename T>
+void thread_safe_print(const T & obj) {
+    static std::mutex mtx;
+    std::unique_lock<std::mutex> ul(mtx); (void)ul;
+    std::cout << obj;
+}
 
+class Apu : private sf::SoundStream {
 public:
     // "Hardware" fixed sample rate
     static constexpr const int SAMPLE_RATE = 11025;
 
     // arbitary
-    static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 8;
+    static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 16;
 
     struct ApuInst {
         ApuInst(){}
@@ -82,25 +83,6 @@ public:
     };
     using InstructionQueue = std::queue<ApuInst>;
 
-    class Interface {
-    public:
-        Interface(InstructionQueue * inst_queue);
-        Interface() = delete;
-        ~Interface();
-
-        Interface(const Interface &) = delete;
-        Interface(Interface &&) = delete;
-
-        Interface & operator = (const Interface &) = delete;
-        Interface & operator = (Interface &&) = delete;
-
-        void enqueue(Channel, ApuRateType, int);
-        void enqueue(ApuInst);
-
-    private:
-        InstructionQueue * m_inst_queue;
-    };
-
     // I'm going to follow the NES somewhat (this will be a simplification
     // four channels of mono sound:
     // 2-pulse square waves
@@ -111,36 +93,41 @@ public:
     // involuntarily multi-threaded (by API designer)
     Apu();
 
-    // apu.access([](Apu::Interface & ai) {
-    //    ;
-    //    ai.push_note(C::TRIANGLE_WAVE, ...)
-    // });
-    template <typename Func>
-    void access(Func && f) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        Interface ai(&m_insts);
-        f(std::ref(ai));
-    }
+    void enqueue(Channel, ApuRateType, int);
 
-#   if 0
-    void set_notes_per_second(int nps) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        m_samples_per_note = SAMPLE_RATE / nps;
-    }
+    void enqueue(ApuInst);
 
-    void push_note(int, int pitch) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        m_notes.push_back(pitch);
-    }
-#   endif
+    void update(double et);
+
+    /** @brief Blocks the current the thread until the audio thread is up,
+     *         running and ready for instructions, then finally calls update.
+     *  The purpose of this function is for programs (whether C++ or Erfindung)
+     *  that wish to play music/sound and nothing else. It is present for
+     *  debugging and tinkering purposes. \n
+     *  Update is called with elapsed time set to zero.
+     */
+    void wait_for_play_thread_then_update();
 
 private:
+
+    static const constexpr int ALL_POSSIBLE_SAMPLE_FRAMES = -1;
+
     using Int16 = std::int16_t;
+    struct ChannelInfo {
+        int tempo;
+        std::bitset<sizeof(int32_t)*8> dc_window;
+    };
+    using ChannelNoteInfo = std::vector<ChannelInfo>;
+    using ChannelSamples = std::vector<std::vector<std::int16_t>>;
 
     struct ThreadControl {
-        std::mutex mtx;
-        std::condition_variable apu_side;
-        std::condition_variable main_thread;
+        // usual instruction queue resource access control
+        std::mutex queue_mutex;
+        std::condition_variable queue_ready;
+        // for wait_for_play_thread_then_update method
+        std::mutex wait_for_play;
+        std::condition_variable play_ready;
+        bool play_has_been_reached;
     };
 
     bool onGetData(Chunk & data) override final;
@@ -156,14 +143,17 @@ private:
     std::bitset<32> * select_duty_cycle_window(Channel c)
         { return &m_channel_info[static_cast<std::size_t>(c)].dc_window; }
 
+    static void merge_samples(ChannelSamples &, std::vector<Int16> &,
+                              int sample_count);
+
     std::vector<Int16> m_samples;
     InstructionQueue m_insts;
-
-    std::mutex m_note_mutex;
+    InstructionQueue m_insts_cold;
 
     ChannelNoteInfo m_channel_info;
     ThreadControl m_thread_control;
     ChannelSamples m_samples_per_channel;
+    int m_sample_frames;
 };
 
 #endif

@@ -22,7 +22,9 @@
 #include "ErfiApu.hpp"
 
 #include <bitset>
+#include <iostream>
 
+#include <cmath>
 #include <cassert>
 
 namespace {
@@ -38,10 +40,18 @@ static constexpr const int SAMPLE_RATE = Apu::SAMPLE_RATE;
 template <typename T>
 T mag(T t) { return t < T(0) ? -t : t; }
 
+enum class DoNTimes { CONTINUE, BREAK };
+
+// probably should use SFINAE u.u
 template <typename Func>
-void do_n_times(int n, Func && f) {
+void do_n_times(int n, Func && f) { do { f(); } while(--n); }
+
+template <typename Func>
+void do_n_times_until(int n, Func && f) {
     // HA, use case for do while!
-    do { f(); } while(--n);
+    static_assert(std::is_same<decltype(f()), DoNTimes>::value,
+                  "Your function must return a DoNTimes enum value.");
+    do { if (f() == DoNTimes::BREAK) break; } while(--n);
 }
 
 template <typename IntType>
@@ -50,50 +60,111 @@ void set_bitset(IntType, std::bitset<sizeof(IntType)*8> &);
 using BaseWaveFunction = Int16(*)(Int16);
 BaseWaveFunction select_base_wave_function(Channel);
 
+template <typename Container>
+void remove_first(Container & c, std::size_t num);
+
 void generate_note(std::vector<Int16> & samples,
                    BaseWaveFunction base_function, int pitch, int tempo,
                    const std::bitset<32> duty_cycles);
 
+
+
 } // end of anonymous namespace
-
-Apu::Interface::Interface(InstructionQueue * inst_queue):
-    m_inst_queue(inst_queue)
-{}
-
-Apu::Interface::~Interface() {
-#   ifdef MACRO_DEBUG
-    m_inst_queue = nullptr; // safety
-#   endif
-}
-
-void Apu::Interface::enqueue(Channel c, ApuRateType t, int val)
-    { m_inst_queue->emplace(c, t, val); }
-
-void Apu::Interface::enqueue(ApuInst i) { m_inst_queue->push(i); }
 
 Apu::Apu():
     m_channel_info(static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
-    m_samples_per_channel(static_cast<std::size_t>(Channel::CHANNEL_COUNT))
+    m_samples_per_channel(static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
+    m_sample_frames(0)
 {
     initialize(1, unsigned(SAMPLE_RATE));
     play();
 }
 
+void Apu::enqueue(Channel c, ApuRateType t, int val)
+    { m_insts_cold.emplace(c, t, val); }
+
+void Apu::enqueue(ApuInst i) { m_insts_cold.push(i); }
+
+void Apu::update(double et) {
+
+    std::unique_lock<std::mutex> locker(m_thread_control.queue_mutex);
+    (void)locker;
+    while (!m_insts_cold.empty()) {
+        m_insts.push(m_insts_cold.front());
+        m_insts_cold.pop();
+    }
+    m_sample_frames += int(std::round(et*double(SAMPLE_RATE)));
+    std::cout << "update called " << et << std::endl;
+
+    m_thread_control.queue_ready.notify_one();
+}
+
+void Apu::wait_for_play_thread_then_update() {
+    //std::unique_lock<std::mutex> locker_(m_thread_control.queue_mutex);
+    //(void)locker_;
+
+    std::unique_lock<std::mutex> locker(m_thread_control.wait_for_play);
+    m_thread_control.play_ready.wait(locker, [this](){ return m_thread_control.play_has_been_reached; });
+
+    while (!m_insts_cold.empty()) {
+        m_insts.push(m_insts_cold.front());
+        m_insts_cold.pop();
+    }
+
+    m_sample_frames = ALL_POSSIBLE_SAMPLE_FRAMES;
+    m_thread_control.queue_ready.notify_one();
+
+}
+
 /* private override final */ bool Apu::onGetData(Chunk & data) {
-    (void)data;
-    std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-    do_n_times(INSTRUCTIONS_PER_THREAD_SYNC, [&, this]() {
-        if (m_insts.empty()) return;
+
+    int insts = 0;
+    int absolute_sample_count = 0;
+
+
+
+    // lock apu instruction queue only
+    // spurious wake ups are OK! as an empty queue will result in no additional
+    // samples being pushed to the audio device
+    {
+
+    std::unique_lock<std::mutex> locker(m_thread_control.queue_mutex);
+    std::cout << "APU now waiting..." << std::endl;
+    {
+    // for waiting to play method, otherwise meaningless
+    std::unique_lock<std::mutex> ul(m_thread_control.wait_for_play); (void)ul;
+    m_thread_control.play_has_been_reached = true;
+    m_thread_control.play_ready.notify_one();
+    //m_thread_control.queue_ready.wait(locker);
+    }
+    m_thread_control.queue_ready.wait(locker);
+    std::swap(absolute_sample_count, m_sample_frames);
+
+    // edge case: we reach here with update call without any instructions
+    // being enqueued
+    if (absolute_sample_count == 0) {
+        std::cout << "No time passage!..." << std::endl;
+        const static Int16 i = 0;
+        data.sampleCount = 1;
+        data.samples     = &i;
+        return true;
+    }
+
+
+
+    insts = m_insts.size();
+    do_n_times_until(INSTRUCTIONS_PER_THREAD_SYNC, [&, this]() {
+        if (m_insts.empty()) return DoNTimes::BREAK;
+
         const auto & inst = m_insts.front();
 
         switch (inst.type) {
-        case ApuRateType::NOTE : {
+        case ApuRateType::NOTE :
             generate_note(select_channel(inst.channel),
                           select_base_wave_function(inst.channel),
                           inst.value, *select_channel_tempo(inst.channel),
                           *select_duty_cycle_window(inst.channel));
             break;
-        }
         case ApuRateType::TEMPO:
             *select_channel_tempo(inst.channel) = SAMPLE_RATE / inst.value;
             break;
@@ -107,71 +178,47 @@ Apu::Apu():
             break;
         }
         m_insts.pop();
+        return DoNTimes::CONTINUE;
     });
-#   if 0
-    auto the_min = std::numeric_limits<std::size_t>::max();
-    for (const auto & samples_cont : m_samples_per_channel)
-        the_min = std::min(the_min, samples_cont.size());
-    m_samples.reserve(the_min);
-
-    for (decltype(the_min) i = 0; i != the_min; ++i) {
-        Int16 sum = 0;
-        for (const auto & samples_cont : m_samples_per_channel)
-            sum += samples_cont[i];
-        m_samples.push_back(sum);
     }
 
-    auto erase_first_min = [the_min](std::vector<Int16> & cont)
-        { cont.erase(cont.begin(), cont.begin() + the_min); };
+    merge_samples(m_samples_per_channel, m_samples, absolute_sample_count);
 
-    for (std::vector<Int16> & samples_cont : m_samples_per_channel)
-        erase_first_min(samples_cont);
-#   endif
-    m_samples.clear();
-    for (const auto & samples_cont : m_samples_per_channel) {
-        for (std::size_t i = 0; i != samples_cont.size(); ++i) {
-            if (i >= m_samples.size())
-                m_samples.push_back(samples_cont[i]);
-            else
-                m_samples[i] += samples_cont[i];
-        }
-    }
+    // prevents the API from closing the stream
+    if (m_samples.empty()) m_samples.push_back(0);
+
     data.sampleCount = m_samples.size();
     data.samples     = &m_samples[0];
-#   if 0
-    using UInt16 = std::uint16_t;
-    constexpr const Int16 max = std::numeric_limits<Int16>::max();
 
-    std::vector<int> notes;
-    {
-    std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-    if (m_notes.empty()) {
-        return silence(data);
-    }
-    m_notes.swap(notes);
-    }
-    m_samples.clear();
-    m_samples.reserve(notes.size()*std::size_t(m_samples_per_note));
-    for (int note : notes) {
-        if (note == 0) {
-            do_n_times(m_samples_per_note, [this]() {
-                m_samples.push_back(0);
-            });
-        } else {
-            int x = 0;
-            for (int i = 0; i != m_samples_per_note; ++i) {
-                if (i < (m_samples_per_note*7)/10)
-                    m_samples.push_back(triangle_wave(UInt16(x)));
-                else
-                    m_samples.push_back(0);
-                x = (x + note) % max;
-            }
-        }
-    }
-    data.sampleCount = m_samples.size();
-    data.samples     = &m_samples[0];
-#   endif
+    std::cout << "From " << insts << " instructions, " << data.sampleCount << " samples pushed out." << std::endl;
+
     return true;
+}
+
+/* private static */ void Apu::merge_samples
+    (ChannelSamples & channel_samples, std::vector<Int16> & output_samples,
+     int sample_count)
+{
+    // no harm possible, but should be clearer on which member variables
+    // "belong" to which thread
+    output_samples.clear();
+    for (const auto & samples_cont : channel_samples) {
+        // for sample count sentinel value: ALL_POSSIBLE_SAMPLE_FRAMES
+        // loop behavior will be okay, so long as that comparator is "!="
+        for (std::size_t i = 0; i != samples_cont.size() && int(i) != sample_count; ++i) {
+            if (i >= output_samples.size())
+                output_samples.push_back(samples_cont[i]);
+            else
+                output_samples[i] += samples_cont[i];
+        }
+    }
+    if (sample_count == ALL_POSSIBLE_SAMPLE_FRAMES) {
+        for (const auto & samples_cont : channel_samples)
+            sample_count = std::max(sample_count, int(samples_cont.size()));
+    }
+    for (auto & samples_cont : channel_samples)
+        remove_first(samples_cont, sample_count);
+    output_samples.resize(sample_count);
 }
 
 namespace {
@@ -240,6 +287,14 @@ void generate_note(std::vector<Int16> & samples,
             wave_position %= MAX_AMP;
         }
     }
+}
+
+template <typename Container>
+void remove_first(Container & c, std::size_t num) {
+    if (num < c.size())
+        c.erase(c.begin(), c.begin() + num);
+    else
+        c.clear();
 }
 
 // ----------------------------------------------------------------------------
