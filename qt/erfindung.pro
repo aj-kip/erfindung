@@ -17,7 +17,8 @@ SOURCES += \
     ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \
     ../src/AssemblerPrivate/LineParsingHelpers.cpp \
     ../src/Debugger.cpp \
-    ../src/ErfiConsole.cpp
+    ../src/ErfiConsole.cpp \
+    ../src/ErfiApu.cpp
     
 HEADERS += \
     ../src/DrawRectangle.hpp \
@@ -34,7 +35,8 @@ HEADERS += \
     ../src/AssemblerPrivate/CommonDefinitions.hpp \
     ../src/Debugger.hpp \
     ../src/ErfiGamePad.hpp \
-    ../src/ErfiConsole.hpp
+    ../src/ErfiConsole.hpp \
+    ../src/ErfiApu.hpp
 
 TARGET = erfindung
 
@@ -71,8 +73,8 @@ INCLUDEPATH += \
 QMAKE_CXXFLAGS += -std=c++11 -Wall -pedantic -Werror
 
 LIBS += -L/media/data/dev/c++/lib/g++/GnuLinux64/ \
-	-L/usr/lib/ \
-    -lsfml-system \
+    -L/usr/lib/     \
+    -lsfml-system   \
 	-lsfml-graphics \
-	-lsfml-window \
+    -lsfml-window   \
     -lsfml-audio

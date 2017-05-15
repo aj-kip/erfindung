@@ -57,6 +57,7 @@ UInt32 times(UInt32 x, UInt32 y) { return x * y; }
 UInt32 andi (UInt32 x, UInt32 y) { return x & y; }
 UInt32 ori  (UInt32 x, UInt32 y) { return x | y; }
 UInt32 xori (UInt32 x, UInt32 y) { return x ^ y; }
+
 UInt32 rotate(UInt32 x, UInt32 y);
 
 UInt32 div_fp  (UInt32 x, UInt32 y);

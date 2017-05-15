@@ -30,12 +30,13 @@
 namespace {
 
 using Int16 = std::int16_t;
-
-using ChannelSamples = std::vector<std::vector<std::int16_t>>;
-
 constexpr const Int16 MIN_AMP = std::numeric_limits<Int16>::min();
 constexpr const Int16 MAX_AMP = std::numeric_limits<Int16>::max();
-static constexpr const int SAMPLE_RATE = Apu::SAMPLE_RATE;
+
+constexpr const std::size_t DUTY_CYCLE_WINDOW_SIZE = sizeof(int32_t)*8;
+using DutyCycleWindow = std::bitset<DUTY_CYCLE_WINDOW_SIZE>;
+
+using ChannelSamples  = std::vector<std::vector<std::int16_t>>;
 
 template <typename T>
 T mag(T t) { return t < T(0) ? -t : t; }
@@ -65,17 +66,18 @@ void remove_first(Container & c, std::size_t num);
 
 void generate_note(std::vector<Int16> & samples,
                    BaseWaveFunction base_function, int pitch, int tempo,
-                   const std::bitset<32> duty_cycles);
-
-
+                   const DutyCycleWindow duty_cycles);
 
 } // end of anonymous namespace
 
 Apu::Apu():
-    m_channel_info(static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
+    m_channel_info       (static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
     m_samples_per_channel(static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
     m_sample_frames(0)
 {
+    static_assert(std::is_same<DutyCycleWindow, ::DutyCycleWindow>::value,
+                  "Implementation detail DutyCycleWindow definition needs to "
+                  "be updated.");
     initialize(1, unsigned(SAMPLE_RATE));
     play();
 }
@@ -100,8 +102,6 @@ void Apu::update(double et) {
 }
 
 void Apu::wait_for_play_thread_then_update() {
-    //std::unique_lock<std::mutex> locker_(m_thread_control.queue_mutex);
-    //(void)locker_;
 
     std::unique_lock<std::mutex> locker(m_thread_control.wait_for_play);
     m_thread_control.play_ready.wait(locker, [this](){ return m_thread_control.play_has_been_reached; });
@@ -114,14 +114,14 @@ void Apu::wait_for_play_thread_then_update() {
     m_sample_frames = ALL_POSSIBLE_SAMPLE_FRAMES;
     m_thread_control.queue_ready.notify_one();
 
+    std::unique_lock<std::mutex> locker_(m_thread_control.queue_mutex);
+    (void)locker_;
+
 }
 
 /* private override final */ bool Apu::onGetData(Chunk & data) {
-
     int insts = 0;
     int absolute_sample_count = 0;
-
-
 
     // lock apu instruction queue only
     // spurious wake ups are OK! as an empty queue will result in no additional
@@ -150,9 +150,7 @@ void Apu::wait_for_play_thread_then_update() {
         return true;
     }
 
-
-
-    insts = m_insts.size();
+    insts = int(m_insts.size());
     do_n_times_until(INSTRUCTIONS_PER_THREAD_SYNC, [&, this]() {
         if (m_insts.empty()) return DoNTimes::BREAK;
 
@@ -168,14 +166,11 @@ void Apu::wait_for_play_thread_then_update() {
         case ApuRateType::TEMPO:
             *select_channel_tempo(inst.channel) = SAMPLE_RATE / inst.value;
             break;
-        case ApuRateType::DUTY_CYCLE_WINDOW: {
-            std::bitset<32> & dc_window = *select_duty_cycle_window(inst.channel);
-            set_bitset(inst.value, dc_window);
+        case ApuRateType::DUTY_CYCLE_WINDOW:
+            set_bitset(inst.value, *select_duty_cycle_window(inst.channel));
             break;
-        }
         default:
             throw std::runtime_error("Illegal type.");
-            break;
         }
         m_insts.pop();
         return DoNTimes::CONTINUE;
@@ -217,20 +212,22 @@ void Apu::wait_for_play_thread_then_update() {
             sample_count = std::max(sample_count, int(samples_cont.size()));
     }
     for (auto & samples_cont : channel_samples)
-        remove_first(samples_cont, sample_count);
-    output_samples.resize(sample_count);
+        remove_first(samples_cont, std::size_t(sample_count));
+    output_samples.resize(std::size_t(sample_count));
 }
 
 namespace {
 
 class DutyCycleIterator {
 public:
-    DutyCycleIterator(const std::bitset<32> &);
+    static constexpr const int BITS_PER_DUTY_CYCLE_FUNCTION = 2;
+
+    DutyCycleIterator(const DutyCycleWindow &);
     void operator ++ ();
     BaseWaveFunction duty_cycle_function() const;
 private:
     int m_position;
-    const std::bitset<32> * m_duty_cycle_window;
+    const DutyCycleWindow * m_duty_cycle_window;
 };
 
 BaseWaveFunction select_base_wave_function(Channel c) {
@@ -257,7 +254,7 @@ void set_bitset(IntType x, std::bitset<sizeof(IntType)*8> & bset) {
 
 void generate_note(std::vector<Int16> & samples,
                    BaseWaveFunction base_function, int pitch, int tempo,
-                   const std::bitset<32> duty_cycles)
+                   const DutyCycleWindow duty_cycles)
 {
     // The duty cycle period is equal to the pitch's period (as if it were
     // a Sine wave
@@ -292,30 +289,39 @@ void generate_note(std::vector<Int16> & samples,
 template <typename Container>
 void remove_first(Container & c, std::size_t num) {
     if (num < c.size())
-        c.erase(c.begin(), c.begin() + num);
+        c.erase(c.begin(), c.begin() + unsigned(num));
     else
         c.clear();
 }
 
 // ----------------------------------------------------------------------------
 
-DutyCycleIterator::DutyCycleIterator(const std::bitset<32> & win_):
-    m_position(32 - 2),
+DutyCycleIterator::DutyCycleIterator(const DutyCycleWindow & win_):
+    m_position(DUTY_CYCLE_WINDOW_SIZE - BITS_PER_DUTY_CYCLE_FUNCTION),
     m_duty_cycle_window(&win_)
 {}
 
 void DutyCycleIterator::operator ++ () {
-    m_position = (m_position + 2) % 32;
+    m_position = (m_position + BITS_PER_DUTY_CYCLE_FUNCTION) %
+                 int(DUTY_CYCLE_WINDOW_SIZE);
 }
 
 BaseWaveFunction DutyCycleIterator::duty_cycle_function() const {
+    static_assert(BITS_PER_DUTY_CYCLE_FUNCTION == 2,
+                  "This function needs to be fixed to take into account "
+                  "for the new 'sub-window' size.");
+
     using DO = DutyCycleOption;
-    int value = int(m_duty_cycle_window->test(m_position)) |
-                int(m_duty_cycle_window->test(m_position + 1)) << 1;
+
+    const auto pos = std::size_t(m_position);
+    int value = int(m_duty_cycle_window->test(pos)) |
+                int(m_duty_cycle_window->test(pos + 1)) << 1;
+
     // careful not to overflow!
     static constexpr const Int16 THIRD_THERSHOLD = -2*(MAX_AMP / 3);
     static constexpr const Int16 QUART_THERSHOLD = -  (MAX_AMP / 2);
     static constexpr const Int16 FIFTH_THERSHOLD = -2*(MAX_AMP / 3);
+
     switch (static_cast<DutyCycleOption>(value)) {
     case DO::ONE_HALF:
         return [](Int16 x) -> Int16 { return (x > 0) ? 0 : x; };
@@ -328,9 +334,7 @@ BaseWaveFunction DutyCycleIterator::duty_cycle_function() const {
     default:
         assert(false);
         throw std::runtime_error("Impossible branch?!");
-        break;
     }
-    return nullptr;
 }
 
 } // end of <anonymous> namespace

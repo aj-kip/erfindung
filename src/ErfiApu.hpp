@@ -67,11 +67,6 @@ void thread_safe_print(const T & obj) {
 
 class Apu : private sf::SoundStream {
 public:
-    // "Hardware" fixed sample rate
-    static constexpr const int SAMPLE_RATE = 11025;
-
-    // arbitary
-    static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 16;
 
     struct ApuInst {
         ApuInst(){}
@@ -81,7 +76,7 @@ public:
         ApuRateType type   ;
         int32_t     value  ;
     };
-    using InstructionQueue = std::queue<ApuInst>;
+
 
     // I'm going to follow the NES somewhat (this will be a simplification
     // four channels of mono sound:
@@ -110,16 +105,27 @@ public:
 
 private:
 
+    // ------------------------------------------------------------------------
+
+    // "Hardware" fixed sample rate
+    static constexpr const int SAMPLE_RATE = 11025;
+
+    using DutyCycleWindow = std::bitset<sizeof(int32_t)*8>;
+
     static const constexpr int ALL_POSSIBLE_SAMPLE_FRAMES = -1;
 
+    using InstructionQueue = std::queue<ApuInst>;
+
+    // channel stuff
     using Int16 = std::int16_t;
     struct ChannelInfo {
         int tempo;
-        std::bitset<sizeof(int32_t)*8> dc_window;
+        DutyCycleWindow dc_window;
     };
     using ChannelNoteInfo = std::vector<ChannelInfo>;
     using ChannelSamples = std::vector<std::vector<std::int16_t>>;
 
+    static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 16;
     struct ThreadControl {
         // usual instruction queue resource access control
         std::mutex queue_mutex;
@@ -140,7 +146,7 @@ private:
     int * select_channel_tempo(Channel c)
         { return &m_channel_info[static_cast<std::size_t>(c)].tempo; }
 
-    std::bitset<32> * select_duty_cycle_window(Channel c)
+    DutyCycleWindow * select_duty_cycle_window(Channel c)
         { return &m_channel_info[static_cast<std::size_t>(c)].dc_window; }
 
     static void merge_samples(ChannelSamples &, std::vector<Int16> &,

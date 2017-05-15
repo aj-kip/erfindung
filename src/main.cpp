@@ -97,15 +97,15 @@ int main(int argc, char ** argv) {
         push_note(000);
         push_note(000);*/
     }
+    apu.wait_for_play_thread_then_update();
 
+    for (int i = 0; i != 60; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        apu.update(0.1);
+    }
 
-    apu.update(3.0);
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    apu.update(0.1);
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    apu.update(0.1);
     //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-   // apu.wait_for_play_thread_then_update();
+    //apu.wait_for_play_thread_then_update();
 #   if 0//def MACRO_DEBUG
     try {
         run_numeric_encoding_tests();
@@ -123,7 +123,7 @@ int main(int argc, char ** argv) {
     (void)test_string_processing;
 #   endif
 
-    Assembler asmr;
+    Assembler assembler;
     Console console;
     sf::RenderWindow win;
 
@@ -132,8 +132,8 @@ int main(int argc, char ** argv) {
         filename = argv[1];
 
     try {
-        asmr.assemble_from_file(filename);
-        console.load_program(asmr.program_data());
+        assembler.assemble_from_file(filename);
+        console.load_program(assembler.program_data());
         win.create(sf::VideoMode(unsigned(ErfiGpu::SCREEN_WIDTH *3),
                                  unsigned(ErfiGpu::SCREEN_HEIGHT*3)), " ");
         adjust_window_view(win);
@@ -141,7 +141,7 @@ int main(int argc, char ** argv) {
     } catch (ErfiError & exp) {
         constexpr const char * const NO_LINE_NUM_MSG =
             "<no source line associated with this program location>";
-        auto line_num = asmr.translate_to_line_number(exp.program_location());
+        auto line_num = assembler.translate_to_line_number(exp.program_location());
         std::cerr << "A problem has occured on source line: ";
         if (line_num == Assembler::INVALID_LINE_NUMBER)
             std::cerr << NO_LINE_NUM_MSG;
