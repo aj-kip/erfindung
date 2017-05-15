@@ -75,6 +75,6 @@ QMAKE_CXXFLAGS += -std=c++11 -Wall -pedantic -Werror
 LIBS += -L/media/data/dev/c++/lib/g++/GnuLinux64/ \
     -L/usr/lib/     \
     -lsfml-system   \
-	-lsfml-graphics \
+    -lsfml-graphics \
     -lsfml-window   \
     -lsfml-audio

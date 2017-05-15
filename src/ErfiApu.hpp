@@ -65,8 +65,11 @@ void thread_safe_print(const T & obj) {
     std::cout << obj;
 }
 
-class Apu : private sf::SoundStream {
+class SfmlAudioDevice;
+
+class Apu /* : private sf::SoundStream */ {
 public:
+    friend class ApuAttorney;
 
     struct ApuInst {
         ApuInst(){}
@@ -88,20 +91,13 @@ public:
     // involuntarily multi-threaded (by API designer)
     Apu();
 
+    ~Apu();
+
     void enqueue(Channel, ApuRateType, int);
 
     void enqueue(ApuInst);
 
     void update(double et);
-
-    /** @brief Blocks the current the thread until the audio thread is up,
-     *         running and ready for instructions, then finally calls update.
-     *  The purpose of this function is for programs (whether C++ or Erfindung)
-     *  that wish to play music/sound and nothing else. It is present for
-     *  debugging and tinkering purposes. \n
-     *  Update is called with elapsed time set to zero.
-     */
-    void wait_for_play_thread_then_update();
 
 private:
 
@@ -126,19 +122,6 @@ private:
     using ChannelSamples = std::vector<std::vector<std::int16_t>>;
 
     static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 16;
-    struct ThreadControl {
-        // usual instruction queue resource access control
-        std::mutex queue_mutex;
-        std::condition_variable queue_ready;
-        // for wait_for_play_thread_then_update method
-        std::mutex wait_for_play;
-        std::condition_variable play_ready;
-        bool play_has_been_reached;
-    };
-
-    bool onGetData(Chunk & data) override final;
-
-    void onSeek(sf::Time) override final {}
 
     std::vector<Int16> & select_channel(Channel c)
         { return m_samples_per_channel[static_cast<std::size_t>(c)]; }
@@ -149,17 +132,24 @@ private:
     DutyCycleWindow * select_duty_cycle_window(Channel c)
         { return &m_channel_info[static_cast<std::size_t>(c)].dc_window; }
 
+    void process_instructions();
+
     static void merge_samples(ChannelSamples &, std::vector<Int16> &,
                               int sample_count);
 
     std::vector<Int16> m_samples;
     InstructionQueue m_insts;
-    InstructionQueue m_insts_cold;
 
     ChannelNoteInfo m_channel_info;
-    ThreadControl m_thread_control;
     ChannelSamples m_samples_per_channel;
     int m_sample_frames;
+
+    SfmlAudioDevice * m_audio_device;
+};
+
+class ApuAttorney {
+    friend class SfmlAudioDevice;
+    static constexpr const int SAMPLE_RATE = Apu::SAMPLE_RATE;
 };
 
 #endif

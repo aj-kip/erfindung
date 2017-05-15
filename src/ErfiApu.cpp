@@ -70,90 +70,52 @@ void generate_note(std::vector<Int16> & samples,
 
 } // end of anonymous namespace
 
+class SfmlAudioDevice : private sf::SoundStream {
+public:
+    SfmlAudioDevice();
+    void upload_samples(const std::vector<Int16> &);
+    ~SfmlAudioDevice() { }
+private:
+    bool onGetData(Chunk & data) override final;
+
+    void onSeek(sf::Time) override final {}
+
+    std::vector<Int16> m_samples;
+    std::vector<Int16> m_samples_hot;
+    std::mutex m_samples_mutex;
+};
+
 Apu::Apu():
     m_channel_info       (static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
     m_samples_per_channel(static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
-    m_sample_frames(0)
+    m_sample_frames      (0),
+    m_audio_device       (new SfmlAudioDevice())
 {
     static_assert(std::is_same<DutyCycleWindow, ::DutyCycleWindow>::value,
                   "Implementation detail DutyCycleWindow definition needs to "
                   "be updated.");
-    initialize(1, unsigned(SAMPLE_RATE));
-    play();
 }
 
-void Apu::enqueue(Channel c, ApuRateType t, int val)
-    { m_insts_cold.emplace(c, t, val); }
+Apu::~Apu() { delete m_audio_device; }
 
-void Apu::enqueue(ApuInst i) { m_insts_cold.push(i); }
-
-void Apu::update(double et) {
-
-    std::unique_lock<std::mutex> locker(m_thread_control.queue_mutex);
-    (void)locker;
-    while (!m_insts_cold.empty()) {
-        m_insts.push(m_insts_cold.front());
-        m_insts_cold.pop();
-    }
-    m_sample_frames += int(std::round(et*double(SAMPLE_RATE)));
-    std::cout << "update called " << et << std::endl;
-
-    m_thread_control.queue_ready.notify_one();
+void Apu::enqueue(Channel c, ApuRateType t, int val) {
+    //if (*select_channel_tempo(c) == 0 && t == ApuRateType::NOTE)
+        //throw std::runtime_error("Cannot enqueue note for channel with zero tempo.");
+    m_insts.emplace(c, t, val);
 }
 
-void Apu::wait_for_play_thread_then_update() {
+void Apu::enqueue(ApuInst i) { m_insts.push(i); }
 
-    std::unique_lock<std::mutex> locker(m_thread_control.wait_for_play);
-    m_thread_control.play_ready.wait(locker, [this](){ return m_thread_control.play_has_been_reached; });
+void Apu::update(double) {
 
-    while (!m_insts_cold.empty()) {
-        m_insts.push(m_insts_cold.front());
-        m_insts_cold.pop();
-    }
-
-    m_sample_frames = ALL_POSSIBLE_SAMPLE_FRAMES;
-    m_thread_control.queue_ready.notify_one();
-
-    std::unique_lock<std::mutex> locker_(m_thread_control.queue_mutex);
-    (void)locker_;
-
+    process_instructions();
+    merge_samples(m_samples_per_channel, m_samples, ALL_POSSIBLE_SAMPLE_FRAMES);
+    m_audio_device->upload_samples(m_samples);
+    m_samples.clear();
 }
 
-/* private override final */ bool Apu::onGetData(Chunk & data) {
-    int insts = 0;
-    int absolute_sample_count = 0;
-
-    // lock apu instruction queue only
-    // spurious wake ups are OK! as an empty queue will result in no additional
-    // samples being pushed to the audio device
-    {
-
-    std::unique_lock<std::mutex> locker(m_thread_control.queue_mutex);
-    std::cout << "APU now waiting..." << std::endl;
-    {
-    // for waiting to play method, otherwise meaningless
-    std::unique_lock<std::mutex> ul(m_thread_control.wait_for_play); (void)ul;
-    m_thread_control.play_has_been_reached = true;
-    m_thread_control.play_ready.notify_one();
-    //m_thread_control.queue_ready.wait(locker);
-    }
-    m_thread_control.queue_ready.wait(locker);
-    std::swap(absolute_sample_count, m_sample_frames);
-
-    // edge case: we reach here with update call without any instructions
-    // being enqueued
-    if (absolute_sample_count == 0) {
-        std::cout << "No time passage!..." << std::endl;
-        const static Int16 i = 0;
-        data.sampleCount = 1;
-        data.samples     = &i;
-        return true;
-    }
-
-    insts = int(m_insts.size());
-    do_n_times_until(INSTRUCTIONS_PER_THREAD_SYNC, [&, this]() {
-        if (m_insts.empty()) return DoNTimes::BREAK;
-
+/* private */ void Apu::process_instructions() {
+    for (; !m_insts.empty(); m_insts.pop()) {
         const auto & inst = m_insts.front();
 
         switch (inst.type) {
@@ -172,22 +134,7 @@ void Apu::wait_for_play_thread_then_update() {
         default:
             throw std::runtime_error("Illegal type.");
         }
-        m_insts.pop();
-        return DoNTimes::CONTINUE;
-    });
     }
-
-    merge_samples(m_samples_per_channel, m_samples, absolute_sample_count);
-
-    // prevents the API from closing the stream
-    if (m_samples.empty()) m_samples.push_back(0);
-
-    data.sampleCount = m_samples.size();
-    data.samples     = &m_samples[0];
-
-    std::cout << "From " << insts << " instructions, " << data.sampleCount << " samples pushed out." << std::endl;
-
-    return true;
 }
 
 /* private static */ void Apu::merge_samples
@@ -204,7 +151,7 @@ void Apu::wait_for_play_thread_then_update() {
             if (i >= output_samples.size())
                 output_samples.push_back(samples_cont[i]);
             else
-                output_samples[i] += samples_cont[i];
+                output_samples[i] = samples_cont[i];
         }
     }
     if (sample_count == ALL_POSSIBLE_SAMPLE_FRAMES) {
@@ -232,10 +179,18 @@ private:
 
 BaseWaveFunction select_base_wave_function(Channel c) {
     using Ch = Channel;
+    static constexpr const Int16 MAX = std::numeric_limits<Int16>::max();
     switch (c) {
+    //      | .
+    //      |. .
+    // -.---.---.--
+    //   . .|
+    //    . |
     case Ch::TRIANGLE : return [](Int16 t) -> Int16 {
-        Int16 rv = (mag(t) > MAX_AMP / 2) ? MAX_AMP - t : t;
-        return (rv - (MAX_AMP / 4))*2;
+        if (mag(t) < MAX / 2) return t;
+        if (t < 0) return Int16(-int(t) - int(MAX)*2);
+        if (t > 0) return Int16(-int(t) + int(MAX)*2);
+        assert(false);
     };
     case Ch::PULSE_ONE:
     case Ch::PULSE_TWO:
@@ -263,6 +218,7 @@ void generate_note(std::vector<Int16> & samples,
     //int tempo; // in samples per note
     //std::bitset<32> duty_cycles;
     DutyCycleIterator dci(duty_cycles);
+    assert(tempo != 0);
 
     // zero hertz is taken as silence
     // (If it's not moving, it doesn't make a sound)
@@ -274,8 +230,8 @@ void generate_note(std::vector<Int16> & samples,
     int wave_position = MIN_AMP; // <- we can apply phase shift here
     for (int sample_position = 0; sample_position != tempo; ++sample_position) {
         samples.push_back(
-            dci.duty_cycle_function() // through duty cycle window function
-            (base_function(Int16(wave_position))) // compute sample amplitude
+            //dci.duty_cycle_function()(Int16(wave_position))* // duty cycle function
+            base_function(Int16(wave_position))       // compute sample amplitude
         );
         wave_position += pitch;
         if (wave_position > MAX_AMP) {
@@ -294,7 +250,45 @@ void remove_first(Container & c, std::size_t num) {
         c.clear();
 }
 
+} // end of <anonymous> namespace
+
+SfmlAudioDevice::SfmlAudioDevice() {
+    initialize(1, ApuAttorney::SAMPLE_RATE);
+}
+
+void SfmlAudioDevice::upload_samples(const std::vector<Int16> & samples_) {
+    std::unique_lock<std::mutex> lock(m_samples_mutex);
+    (void)lock;
+    m_samples.insert(m_samples.end(), samples_.begin(), samples_.end());
+    if (!m_samples.empty() && getStatus() == Stopped)
+        play();
+    std::cout << "Uploaded " << samples_.size() << " samples." << std::endl;
+}
+
+/* private override final */ bool SfmlAudioDevice::onGetData(Chunk & data) {
+    {
+    std::unique_lock<std::mutex> lock(m_samples_mutex);
+    (void)lock;
+    std::cout << "Swapping in " << m_samples.size() << " samples." << std::endl;
+    m_samples_hot.swap(m_samples);
+    m_samples.clear();
+    }
+    if (m_samples_hot.empty()) {
+        m_samples_hot.resize(1000, 0);
+    }
+    if (m_samples_hot.empty()) {
+        return false;
+    } else {
+        data.sampleCount =  m_samples_hot.size();
+        data.samples     = &m_samples_hot.front();
+    }
+
+    return true;
+}
+
 // ----------------------------------------------------------------------------
+
+namespace {
 
 DutyCycleIterator::DutyCycleIterator(const DutyCycleWindow & win_):
     m_position(DUTY_CYCLE_WINDOW_SIZE - BITS_PER_DUTY_CYCLE_FUNCTION),
@@ -324,13 +318,13 @@ BaseWaveFunction DutyCycleIterator::duty_cycle_function() const {
 
     switch (static_cast<DutyCycleOption>(value)) {
     case DO::ONE_HALF:
-        return [](Int16 x) -> Int16 { return (x > 0) ? 0 : x; };
+        return [](Int16 x) -> Int16 { return (x > 0) ? 0 : 1; };
     case DO::ONE_THIRD:
-        return [](Int16 x) -> Int16 { return (x > THIRD_THERSHOLD) ? 0 : x; };
+        return [](Int16 x) -> Int16 { return (x > THIRD_THERSHOLD) ? 0 : 1; };
     case DO::ONE_QUARTER:
-        return [](Int16 x) -> Int16 { return (x > QUART_THERSHOLD) ? 0 : x; };
+        return [](Int16 x) -> Int16 { return (x > QUART_THERSHOLD) ? 0 : 1; };
     case DO::ONE_FIFTH:
-        return [](Int16 x) -> Int16 { return (x > FIFTH_THERSHOLD) ? 0 : x; };
+        return [](Int16 x) -> Int16 { return (x > FIFTH_THERSHOLD) ? 0 : 1; };
     default:
         assert(false);
         throw std::runtime_error("Impossible branch?!");

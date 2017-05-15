@@ -69,41 +69,48 @@ int main(int argc, char ** argv) {
     {
         // needs to be clearer that it's notes per second
         static constexpr const auto TRI = Channel::TRIANGLE;
-        apu.enqueue(TRI, ApuRateType::TEMPO, 3);
+        auto chan = Channel::TRIANGLE;
+
+        apu.enqueue(Channel::PULSE_ONE, ApuRateType::TEMPO, 4);
         auto push_note =
-            [&](int note) { apu.enqueue(TRI, ApuRateType::NOTE, note); };
-        push_note(150);
-        push_note(275);
-        push_note(400); // one second passes
+            [&](int note) { apu.enqueue(chan, ApuRateType::NOTE, note); };
 
-        push_note(275);
-        push_note(560);
-        push_note(000); // two seconds
+        //chan = Channel::PULSE_ONE;
+        //for (int i = 0; i != 3*6; ++i) push_note(000);
 
-        push_note(150);
-        push_note(275);
+        for (auto c : { Channel::TRIANGLE, Channel::PULSE_ONE, Channel::TRIANGLE }) {
+            chan = Channel::TRIANGLE; (void)c;
+            for (int i : { -50, 50, 0 }) {
+                apu.enqueue(TRI, ApuRateType::TEMPO, 4);
+                push_note(500 + i);
+                push_note(375 + i);
+
+                push_note(500 + i); // one second passes
+                push_note(325 + i);
+
+                push_note(500 + i); // one second passes
+                push_note(275 + i);
+
+                apu.enqueue(TRI, ApuRateType::TEMPO, 8);
+                push_note( 75 + i);
+                push_note(125 + i);
+                push_note( 75 + i);
+                push_note(125 + i);
+            }
+        }
+
         // implicit silence -- three seconds
-        /*push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);
-        push_note(000);*/
     }
-    apu.wait_for_play_thread_then_update();
+    apu.update(0.);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 
+#   if 0
     for (int i = 0; i != 60; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(15));
         apu.update(0.1);
     }
-
+#   endif
+    return 0;
     //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     //apu.wait_for_play_thread_then_update();
 #   if 0//def MACRO_DEBUG
