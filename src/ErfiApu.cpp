@@ -188,13 +188,16 @@ BaseWaveFunction select_base_wave_function(Channel c) {
     //    . |
     case Ch::TRIANGLE : return [](Int16 t) -> Int16 {
         if (mag(t) < MAX / 2) return t;
-        if (t < 0) return Int16(-int(t) - int(MAX)*2);
-        if (t > 0) return Int16(-int(t) + int(MAX)*2);
+        // I also like it when the intercepts for the following function
+        // segments are doubled (we'll have to control for overflow then
+        if (t < 0) return Int16(-int(t) - int(MAX));
+        if (t > 0) return Int16(-int(t) + int(MAX));
         assert(false);
     };
     case Ch::PULSE_ONE:
     case Ch::PULSE_TWO:
-    case Ch::NOISE    : return [] (Int16) { return MAX_AMP; };
+    case Ch::NOISE    :
+        return [] (Int16 x) -> Int16 { return (x < 0) ? -MAX : MAX; };
     case Ch::CHANNEL_COUNT: default: break;
     }
     throw std::runtime_error("Invalid wave function specified.");
@@ -227,7 +230,7 @@ void generate_note(std::vector<Int16> & samples,
         return;
     }
 
-    int wave_position = MIN_AMP; // <- we can apply phase shift here
+    int wave_position = -MAX_AMP; // <- we can apply phase shift here
     for (int sample_position = 0; sample_position != tempo; ++sample_position) {
         samples.push_back(
             //dci.duty_cycle_function()(Int16(wave_position))* // duty cycle function
@@ -237,7 +240,7 @@ void generate_note(std::vector<Int16> & samples,
         if (wave_position > MAX_AMP) {
             // next period
             ++dci;
-            wave_position %= MAX_AMP;
+            wave_position = -MAX_AMP;
         }
     }
 }

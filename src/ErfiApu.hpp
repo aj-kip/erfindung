@@ -67,7 +67,7 @@ void thread_safe_print(const T & obj) {
 
 class SfmlAudioDevice;
 
-class Apu /* : private sf::SoundStream */ {
+class Apu {
 public:
     friend class ApuAttorney;
 
