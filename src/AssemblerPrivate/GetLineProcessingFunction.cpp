@@ -23,6 +23,8 @@
 #include "GetLineProcessingFunction.hpp"
 #include "TextProcessState.hpp"
 #include "LineParsingHelpers.hpp"
+#include "ProcessIoLine.hpp"
+
 #include "../StringUtil.hpp"
 #include "../Assembler.hpp" // for tests
 
@@ -82,10 +84,6 @@ StringCIter make_not(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_rotate(TextProcessState &, StringCIter, StringCIter);
 
-StringCIter make_sysio(TextProcessState &, StringCIter, StringCIter);
-
-StringCIter make_call(TextProcessState &, StringCIter, StringCIter);
-
 // <--------------------- flow control operations ---------------------------->
 
 StringCIter make_cmp(TextProcessState &, StringCIter, StringCIter); // "no hint"
@@ -95,6 +93,8 @@ StringCIter make_cmp_fp (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_cmp_int(TextProcessState &, StringCIter, StringCIter);
 
 StringCIter make_skip(TextProcessState &, StringCIter, StringCIter);
+// v moved v
+StringCIter make_call(TextProcessState &, StringCIter, StringCIter);
 
 // <------------------------- move operations -------------------------------->
 
@@ -147,7 +147,8 @@ LineToInstFunc get_line_processing_function
     fmap["set"] = fmap["="] = make_set;
     fmap["rotate"] = fmap["rot"] = fmap["@"] = make_rotate;
 
-    fmap["sys"] = fmap["io"] = fmap["$"] = make_sysio;
+    fmap["io"] = make_sysio;
+
     fmap["call"] = make_call;
 
     fmap["jump"] = make_jump;
@@ -201,7 +202,6 @@ bool equal_to_any(T, Types...) { return false; }
 template <typename T, typename Head, typename ... Types>
 bool equal_to_any(T primary, Head head, Types ... args)
     { return primary == head || equal_to_any(primary, args...); }
-
 
 StringCIter make_generic_logic
     (erfin::OpCode op_code, TextProcessState & state,
@@ -325,50 +325,6 @@ StringCIter make_rotate
 {
     using namespace erfin;
     return make_generic_logic(OpCode::ROTATE, state, beg, end);
-}
-
-StringCIter make_sysio
-    (TextProcessState & state, StringCIter beg, StringCIter end)
-{
-    using namespace erfin;
-
-    using Sys = SystemCallValue;
-
-    auto eol = get_eol(++beg, end);
-    NumericParseInfo npi = parse_number(*beg);
-
-    switch (npi.type) {
-    case INTEGER: break;
-    case NOT_NUMERIC:
-        if (*beg == "upload")
-            npi.integer = int(Sys::UPLOAD_SPRITE);
-        else if (*beg == "unload")
-            npi.integer = int(Sys::UNLOAD_SPRITE);
-        else if (*beg == "draw")
-            npi.integer = int(Sys::DRAW_SPRITE);
-        else if (*beg == "clear")
-            npi.integer = int(Sys::SCREEN_CLEAR);
-        else if (*beg == "wait")
-            npi.integer = int(Sys::WAIT_FOR_FRAME);
-        else if (*beg == "read")
-            npi.integer = int(Sys::READ_INPUT);
-        else if (*beg == "rand")
-            npi.integer = int(Sys::RAND_NUMBER);
-        else if (*beg == "halt")
-            npi.integer = int(Sys::HALT);
-        else if (*beg == "timer")
-            npi.integer = int(Sys::READ_TIMER);
-        else
-            throw state.make_error(": \"" + *beg + "\" is not a system call.");
-        break;
-    default:
-        throw state.make_error(": fixed points are not system call names.");
-    }
-
-    state.add_instruction(
-        encode_op_with_pf(OpCode::SYSTEM_IO, ParamForm::IMMD) |
-        encode_immd_int(npi.integer)                                  );
-    return eol;
 }
 
 StringCIter make_call
@@ -603,6 +559,11 @@ erfin::Immd deal_with_int_immd
 erfin::Immd deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
 
+template <int ARGUMENT_COUNT, int COMMAND_IDENTITY>
+StringCIter make_gpu_io_instruction
+    (TextProcessState &, StringCIter beg, StringCIter end,
+     const char * argument_count_mismatch_error           );
+
 bool op_code_supports_fpoint_immd(erfin::OpCode op_code) {
     using O = erfin::OpCode;
     switch (op_code) {
@@ -744,20 +705,29 @@ StringCIter make_generic_memory_access
     assert(!get_line_processing_function(Assembler::NO_ASSUMPTION, *beg));
 
     const std::string * label = nullptr;
-    Inst inst;// = encode_op(op_code);
+    Inst inst;
 
     NumericParseInfo npi;
     const auto pf = get_lines_param_form(beg, eol, &npi);
 
-    if (equal_to_any(pf, XPF_1R, XPF_1R_INT, XPF_1R_LABEL) && op_code == OpCode::SAVE)
-        throw state.make_error(": deference psuedo instruction only available for loading.");
+    if (pf == XPF_1R && op_code == OpCode::SAVE) {
+        throw state.make_error(": deference psuedo instruction only available "
+                               "for loading.");
+    }
+    // save one reg and immd argument -> write to address directly
 
     switch (pf) {
     case XPF_1R: case XPF_2R:
         inst |= encode_op_with_pf(op_code, ParamForm::REG_REG);
         break;
-    case XPF_2R_LABEL: case XPF_2R_INT: case XPF_1R_INT: case XPF_1R_LABEL:
+    case XPF_2R_LABEL: case XPF_2R_INT:
         inst |= encode_op_with_pf(op_code, ParamForm::REG_REG_IMMD);
+        break;
+    case XPF_1R_INT: case XPF_1R_LABEL:
+        if (op_code == OpCode::LOAD)
+            inst |= encode_op_with_pf(op_code, ParamForm::REG_REG_IMMD);
+        else
+            inst |= encode_op_with_pf(op_code, ParamForm::REG_IMMD);
         break;
     default:
         throw state.make_error(std::string(": <op_code> does not support ") +
@@ -775,8 +745,13 @@ StringCIter make_generic_memory_access
     if (equal_to_any(pf, XPF_3R, XPF_2R, XPF_2R_INT, XPF_2R_LABEL)) {
         inst |= encode_reg_reg(reg, string_to_register(*(beg + 1)));
     }
+
     if (equal_to_any(pf, XPF_1R, XPF_1R_INT, XPF_1R_LABEL)) {
-        inst |= encode_reg_reg(reg, reg);
+        if (op_code == OpCode::LOAD) {
+            inst |= encode_reg_reg(reg, reg);
+        } else {
+            inst |= encode_reg(reg);
+        }
     }
 
     state.add_instruction(inst, label);
@@ -795,7 +770,10 @@ StringCIter make_stack_op
     const constexpr auto SP = Reg::SP;
     // runtime constant
     const auto eol_c = get_eol(beg, end);
-    const int num_of_args_c = eol_c - (beg + 1);
+    if (eol_c - (beg + 1) > std::numeric_limits<int>::max())
+        throw state.make_error(": You know what you did...");
+
+    const int num_of_args_c = int(eol_c - (beg + 1));
 
     if (num_of_args_c == 0) return eol_c;
 
@@ -810,10 +788,7 @@ StringCIter make_stack_op
     // variable
     int stack_offset = val_op == OpCode::LOAD ? num_of_args_c : 1;
     while (++beg != eol_c) {
-        auto reg = string_to_register(*beg);
-        if (reg == Reg::COUNT) {
-            throw state.make_error(": \"" + *beg + "\" is not a valid register.");
-        }
+        auto reg = string_to_register_or_throw(state, *beg);
         state.add_instruction
             (encode(val_op, reg, SP, encode_immd_int(stack_offset)));
         stack_offset += val_op == OpCode::LOAD ? -1 : 1;
@@ -849,6 +824,34 @@ erfin::Immd deal_with_fp_immd
     double d;
     string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
     return erfin::encode_immd_fp(d);
+}
+
+template <int ARGUMENT_COUNT, int COMMAND_IDENTITY>
+StringCIter make_gpu_io_instruction
+    (TextProcessState & state, StringCIter beg, StringCIter end,
+     const char * argument_count_mismatch_error                 )
+{
+    // three arguments
+    using namespace erfin;
+    static constexpr const int REGISTERS_USED =
+        ARGUMENT_COUNT == 0 ? 1 : ARGUMENT_COUNT;
+    auto eol = get_eol(++beg, end);
+    if (eol - beg != REGISTERS_USED) {
+        state.make_error(argument_count_mismatch_error);
+    }
+    std::array<Reg, REGISTERS_USED> args;
+    for (Reg & arg : args) {
+        arg = string_to_register_or_throw(state, *beg++);
+    }
+    assert(beg == eol);
+    // what does push do to the SP?
+    make_gpu_io_command_send(state, COMMAND_IDENTITY, args[0]);
+    static constexpr const int GPU_INPUT_STREAM = device_addresses::GPU_INPUT_STREAM;
+    for (const Reg & arg : args) {
+        state.add_instruction( encode(OpCode::SAVE,                arg,
+                                      encode_immd_int(GPU_INPUT_STREAM)) );
+    }
+    return eol;
 }
 
 // <-------------------------------------------------------------------------->
@@ -979,6 +982,15 @@ void run_get_line_processing_function_tests() {
     assert(pdata[3] == encode(OpCode::SET , Reg::PC, encode_immd_int(2)));
     (void)pdata;
     }
+    {
+    constexpr const char * const sample_code =
+        "io upload x y z";
+    Assembler asmr;
+    asmr.assemble_from_string(sample_code);
+    const auto & pdata = asmr.program_data();
+    (void)pdata;
+    }
+    run_make_sysio_tests();
 }
 
 } // end of erfin namespace

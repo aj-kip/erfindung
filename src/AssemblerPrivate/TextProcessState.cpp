@@ -88,14 +88,14 @@ void TextProcessState::resolve_unfulfilled_labels() {
                         "\" not found anywhere in source code.");
         }
         const LabelPair & lbl_pair = itr->second;
-#       if 0
-        std::cout << "resolving label \"" << unfl_pair.label << "\" on "
-                  << lbl_pair.source_line << " to integer value: "
-                  << lbl_pair.program_location << std::endl;
-#       endif
+
         assert((serialize(m_program_data[unfl_pair.program_location]) & 0xFFFF) == 0);
+        if (lbl_pair.program_location > std::numeric_limits<int16_t>::max()) {
+            throw Error("Label resolves to a location that is too large for "
+                        "this assembler to handle.");
+        }
         m_program_data[unfl_pair.program_location] |=
-            erfin::encode_immd_int(lbl_pair.program_location);
+            erfin::encode_immd_int(int(lbl_pair.program_location));
         int i = erfin::decode_immd_as_int(m_program_data[unfl_pair.program_location]);
         (void)i;
         assert(i == int(lbl_pair.program_location));

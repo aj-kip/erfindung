@@ -36,6 +36,7 @@ class Debugger;
 
 class Assembler {
 public:
+
     enum SuffixAssumption {
         // -int, -fp must be set explicitly
         NO_ASSUMPTION = 0,
@@ -71,6 +72,7 @@ public:
     static void run_tests();
 
 private:
+
     ProgramData m_program;
 
     // debugging erfi program info

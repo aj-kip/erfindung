@@ -37,18 +37,18 @@ ____________ ]
        set  x 92
        set  y 19
        set  z erfindung-text
-       io   upload # upload sprite
+       io   upload x y z # upload sprite
        set  z a
 
-       io   rand
+       io   read random x
        mod  x a 228
 
-       io   rand
+       io   read random y
        mod  y a 221
 
        set  b 1 
        set  c 1
-       # stack pointer, points to an "initialized variable"
+       # stack pointer, points to an "initialized/in-use variable"
        # +---+        push +---+        pop +---+ 
        # | ? | [+3]        | c | <- sp      | ? | <- [ 0]  sp (was)
        # | ? | [+2]        | b |            | ? |    [-1]
@@ -56,35 +56,38 @@ ____________ ]
        # +---+ <- sp       +---+            +---+ <- sp
        # therefore push and pop offsets must be different
        jump start-program
-: loop io   wait
-       io   clear
+: loop 
+       set x 1
+       io wait  x
+       io clear x
 
        # semantic issue
        pop y x c b z
 
-       io   draw  # draw(x, y, z) = draw(x_pos, y_pos, sprite)
+       io draw x y z # draw(x, y, z) = draw(x_pos, y_pos, sprite)
+       
 
-       io   read 
+       io read controller a
        comp a    1
        skip a ==  # up is pressed
            set pc skip-press-up
        set c -1
        jump skip-press-down
 : skip-press-up
-       io read
+       io read controller a
        comp a    2
        skip a ==  # down is pressed
            set pc skip-press-down
        set c 1
 : skip-press-down
-       io read
+       io read controller a
        comp a    4 # left is pressed
        skip a ==
            set pc skip-press-left
        set b -1
        jump do-update
 : skip-press-left
-       io read
+       io read controller a
        comp a    8 # right is pressed
        skip a ==
            set pc do-update

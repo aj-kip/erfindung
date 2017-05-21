@@ -39,14 +39,11 @@ public:
     void reset();
 
     void do_nothing(MemorySpace &, ConsolePack *){}
-    void run_cycle(ConsolePack * console = nullptr);
-    void run_cycle(Inst inst, ConsolePack * console = nullptr);
-    void clear_flags();
+    void run_cycle(ConsolePack & console);
+    void run_cycle(Inst inst, ConsolePack & console);
 
     void print_registers(std::ostream & out) const;
     void update_debugger(Debugger & dbgr) const;
-    bool wait_was_called() const;
-    bool requesting_halt() const;
 
     static void run_tests();
 
@@ -58,27 +55,20 @@ private:
 
     template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
     void do_arth(Inst inst);
-
-    void do_syscall(Inst inst, ConsolePack & gpu);
-
     void do_set(Inst inst);
 
     void do_skip(Inst inst);
-    void do_call(Inst inst, MemorySpace & memspace);
+    void do_call(Inst inst, ConsolePack & pack);
 
     void do_not(Inst inst);
 
-    std::size_t get_move_op_address(Inst inst);
+    UInt32 get_move_op_address(Inst inst);
 
     void emit_error(Inst i) const;
 
     std::string disassemble_instruction(Inst i) const;
 
     RegisterPack m_registers;
-    bool m_wait_called;
-    bool m_halt_requested;
-
-    std::default_random_engine m_rand_generator;
 };
 
 template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>

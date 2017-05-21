@@ -21,8 +21,11 @@
 
 #include "ErfiApu.hpp"
 
+#include <SFML/Audio/SoundStream.hpp>
+
 #include <bitset>
 #include <iostream>
+#include <mutex>
 
 #include <cmath>
 #include <cassert>
@@ -30,6 +33,8 @@
 namespace {
 
 using Int16 = std::int16_t;
+using Error = std::runtime_error;
+
 constexpr const Int16 MIN_AMP = std::numeric_limits<Int16>::min();
 constexpr const Int16 MAX_AMP = std::numeric_limits<Int16>::max();
 
@@ -48,18 +53,13 @@ template <typename Func>
 void do_n_times(int n, Func && f) { do { f(); } while(--n); }
 
 template <typename Func>
-void do_n_times_until(int n, Func && f) {
-    // HA, use case for do while!
-    static_assert(std::is_same<decltype(f()), DoNTimes>::value,
-                  "Your function must return a DoNTimes enum value.");
-    do { if (f() == DoNTimes::BREAK) break; } while(--n);
-}
+void do_n_times_until(int n, Func && f);
 
 template <typename IntType>
 void set_bitset(IntType, std::bitset<sizeof(IntType)*8> &);
 
 using BaseWaveFunction = Int16(*)(Int16);
-BaseWaveFunction select_base_wave_function(Channel);
+BaseWaveFunction select_base_wave_function(erfin::Channel);
 
 template <typename Container>
 void remove_first(Container & c, std::size_t num);
@@ -70,11 +70,13 @@ void generate_note(std::vector<Int16> & samples,
 
 } // end of anonymous namespace
 
+namespace erfin {
+
 class SfmlAudioDevice : private sf::SoundStream {
 public:
     SfmlAudioDevice();
     void upload_samples(const std::vector<Int16> &);
-    ~SfmlAudioDevice() { }
+    ~SfmlAudioDevice() { stop(); }
 private:
     bool onGetData(Chunk & data) override final;
 
@@ -98,41 +100,56 @@ Apu::Apu():
 
 Apu::~Apu() { delete m_audio_device; }
 
-void Apu::enqueue(Channel c, ApuRateType t, int val) {
-    //if (*select_channel_tempo(c) == 0 && t == ApuRateType::NOTE)
-        //throw std::runtime_error("Cannot enqueue note for channel with zero tempo.");
-    m_insts.emplace(c, t, val);
+void Apu::enqueue(Channel c, ApuInstructionType t, int val) {
+    for (auto i : { UInt32(c), UInt32(t), UInt32(val) })
+        m_insts.push(i);
 }
 
-void Apu::enqueue(ApuInst i) { m_insts.push(i); }
+void Apu::enqueue(ApuInst i) { enqueue(i.channel, i.type, i.value); }
 
 void Apu::update(double) {
-
     process_instructions();
     merge_samples(m_samples_per_channel, m_samples, ALL_POSSIBLE_SAMPLE_FRAMES);
     m_audio_device->upload_samples(m_samples);
     m_samples.clear();
 }
 
-/* private */ void Apu::process_instructions() {
-    for (; !m_insts.empty(); m_insts.pop()) {
-        const auto & inst = m_insts.front();
+void Apu::io_write(UInt32 data) { m_insts.push(data); }
 
-        switch (inst.type) {
-        case ApuRateType::NOTE :
-            generate_note(select_channel(inst.channel),
-                          select_base_wave_function(inst.channel),
-                          inst.value, *select_channel_tempo(inst.channel),
-                          *select_duty_cycle_window(inst.channel));
+/* private */ void Apu::process_instructions() {
+    static constexpr const char * const INVALID_INST_ERROR_MSG =
+        "APU was provided an invalid instruction value, this could be a "
+        "result of pushing values out of order to the APU.";
+
+    static constexpr const char * const INVALID_CHNL_ERROR_MSG =
+        "APU was provided an invalid channel value, this could be a "
+        "result of pushing values out of order to the APU.";
+
+    auto front_and_pop = [this]() -> UInt32
+        { auto i = m_insts.front(); m_insts.pop(); return i; };
+
+    while (!m_insts.empty() && m_insts.size() >= 3) {
+        auto channel   = static_cast<Channel>(front_and_pop());
+        auto inst_type = static_cast<ApuInstructionType>(front_and_pop());
+        auto value     = int(front_and_pop());
+
+        if (!is_valid_value(inst_type)) throw Error(INVALID_INST_ERROR_MSG);
+        if (!is_valid_value(channel  )) throw Error(INVALID_CHNL_ERROR_MSG);
+
+        switch (inst_type) {
+        case ApuInstructionType::NOTE :
+            generate_note(select_channel(channel),
+                          select_base_wave_function(channel),
+                          value, *select_channel_tempo(channel),
+                          *select_duty_cycle_window(channel));
             break;
-        case ApuRateType::TEMPO:
-            *select_channel_tempo(inst.channel) = SAMPLE_RATE / inst.value;
+        case ApuInstructionType::TEMPO:
+            *select_channel_tempo(channel) = SAMPLE_RATE / value;
             break;
-        case ApuRateType::DUTY_CYCLE_WINDOW:
-            set_bitset(inst.value, *select_duty_cycle_window(inst.channel));
+        case ApuInstructionType::DUTY_CYCLE_WINDOW:
+            set_bitset(value, *select_duty_cycle_window(channel));
             break;
-        default:
-            throw std::runtime_error("Illegal type.");
+        default: std::terminate(); // must change is_valid_value for inst_type!
         }
     }
 }
@@ -163,6 +180,8 @@ void Apu::update(double) {
     output_samples.resize(std::size_t(sample_count));
 }
 
+} // end of erfin namespace
+
 namespace {
 
 class DutyCycleIterator {
@@ -177,8 +196,8 @@ private:
     const DutyCycleWindow * m_duty_cycle_window;
 };
 
-BaseWaveFunction select_base_wave_function(Channel c) {
-    using Ch = Channel;
+BaseWaveFunction select_base_wave_function(erfin::Channel c) {
+    using Ch = erfin::Channel;
     static constexpr const Int16 MAX = std::numeric_limits<Int16>::max();
     switch (c) {
     //      | .
@@ -210,6 +229,14 @@ void set_bitset(IntType x, std::bitset<sizeof(IntType)*8> & bset) {
     }
 }
 
+template <typename Func>
+void do_n_times_until(int n, Func && f) {
+    // HA, use case for do while!
+    static_assert(std::is_same<decltype(f()), DoNTimes>::value,
+                  "Your function must return a DoNTimes enum value.");
+    do { if (f() == DoNTimes::BREAK) break; } while(--n);
+}
+
 void generate_note(std::vector<Int16> & samples,
                    BaseWaveFunction base_function, int pitch, int tempo,
                    const DutyCycleWindow duty_cycles)
@@ -221,7 +248,9 @@ void generate_note(std::vector<Int16> & samples,
     //int tempo; // in samples per note
     //std::bitset<32> duty_cycles;
     DutyCycleIterator dci(duty_cycles);
-    assert(tempo != 0);
+    if (tempo == 0) {
+        throw Error("Tempo was not set for this channel, cannot generate note!");
+    }
 
     // zero hertz is taken as silence
     // (If it's not moving, it doesn't make a sound)
@@ -231,6 +260,7 @@ void generate_note(std::vector<Int16> & samples,
     }
 
     int wave_position = -MAX_AMP; // <- we can apply phase shift here
+    int last_sample = 0;
     for (int sample_position = 0; sample_position != tempo; ++sample_position) {
         samples.push_back(
             //dci.duty_cycle_function()(Int16(wave_position))* // duty cycle function
@@ -240,9 +270,12 @@ void generate_note(std::vector<Int16> & samples,
         if (wave_position > MAX_AMP) {
             // next period
             ++dci;
+            last_sample = sample_position;
             wave_position = -MAX_AMP;
         }
     }
+    for (int i = last_sample; i != tempo; ++i)
+        samples[std::size_t(i)] = 0;
 }
 
 template <typename Container>
@@ -254,6 +287,8 @@ void remove_first(Container & c, std::size_t num) {
 }
 
 } // end of <anonymous> namespace
+
+namespace erfin {
 
 SfmlAudioDevice::SfmlAudioDevice() {
     initialize(1, ApuAttorney::SAMPLE_RATE);
@@ -289,6 +324,8 @@ void SfmlAudioDevice::upload_samples(const std::vector<Int16> & samples_) {
     return true;
 }
 
+} // end of erfin namespace
+
 // ----------------------------------------------------------------------------
 
 namespace {
@@ -308,7 +345,7 @@ BaseWaveFunction DutyCycleIterator::duty_cycle_function() const {
                   "This function needs to be fixed to take into account "
                   "for the new 'sub-window' size.");
 
-    using DO = DutyCycleOption;
+    using DO = erfin::DutyCycleOption;
 
     const auto pos = std::size_t(m_position);
     int value = int(m_duty_cycle_window->test(pos)) |
@@ -319,7 +356,7 @@ BaseWaveFunction DutyCycleIterator::duty_cycle_function() const {
     static constexpr const Int16 QUART_THERSHOLD = -  (MAX_AMP / 2);
     static constexpr const Int16 FIFTH_THERSHOLD = -2*(MAX_AMP / 3);
 
-    switch (static_cast<DutyCycleOption>(value)) {
+    switch (static_cast<DO>(value)) {
     case DO::ONE_HALF:
         return [](Int16 x) -> Int16 { return (x > 0) ? 0 : 1; };
     case DO::ONE_THIRD:

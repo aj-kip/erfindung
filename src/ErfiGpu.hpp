@@ -33,19 +33,6 @@
 
 namespace erfin {
 
-namespace gpu_enum_types {
-
-enum GpuOpCode_e {
-    UPLOAD = std::size_t(SystemCallValue::UPLOAD_SPRITE),
-    UNLOAD = std::size_t(SystemCallValue::UNLOAD_SPRITE),
-    DRAW   = std::size_t(SystemCallValue::DRAW_SPRITE  ),
-    CLEAR  = std::size_t(SystemCallValue::SCREEN_CLEAR )
-};
-
-} // end of gpu_enum_types namespace
-
-using GpuOpCode = gpu_enum_types::GpuOpCode_e;
-
 struct GpuContext; // implementation detail
 
 class ErfiGpu {
@@ -60,10 +47,16 @@ public:
     // begins/resumes all draw operations ("split")
     void wait(MemorySpace & mem);
 
+    // high-level functions
+
     UInt32 upload_sprite(UInt32 width, UInt32 height, UInt32 address);
     void   unload_sprite(UInt32 index);
     void   draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
     void   screen_clear ();
+
+    // low-level functions
+    void io_write(UInt32);
+    UInt32 read() const;
 
     template <typename Func>
     void draw_pixels(Func f);

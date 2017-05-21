@@ -23,6 +23,9 @@
 #include "FixedPointUtil.hpp"
 
 #include <stdexcept>
+#include <limits>
+
+#include <cassert>
 
 namespace {
 
@@ -46,13 +49,24 @@ constexpr /* static */ const Immd ImmdConst::COMP_LESS_THAN_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_LESS_THAN_OR_EQUAL_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_OR_EQUAL_MASK;
-#if 0
-Inst encode_op(OpCode op) { return deserialize(UInt32(op) << OP_CODE_POS); }
+
+const char * device_addresses::to_string(int address) {
+    switch (address) {
+    case RESERVED_NULL          : return "RESERVED_NULL"          ;
+    case GPU_INPUT_STREAM       : return "GPU_INPUT_STREAM"       ;
+    case GPU_RESPONSE           : return "GPU_RESPONSE"           ;
+    case APU_INPUT_STREAM       : return "APU_INPUT_STREAM"       ;
+    case TIMER_WAIT_AND_SYNC    : return "TIMER_WAIT_AND_SYNC"    ;
+    case TIMER_QUERY_SYNC_ET    : return "TIMER_QUERY_SYNC_ET"    ;
+    case RANDOM_NUMBER_GENERATOR: return "RANDOM_NUMBER_GENERATOR";
+    case READ_CONTROLLER        : return "READ_CONTROLLER"        ;
+    case HALT_SIGNAL            : return "HALT_SIGNAL"            ;
+    case BUS_ERROR              : return "BUS_ERROR"              ;
+    default: return "<INVALID ADDRESS>";
+    }
+}
 
 
-Inst encode_param_form(ParamForm pf)
-    { return deserialize(UInt32(pf) << 28); /* at most 3 bits */ }
-#endif
 Inst encode_op_with_pf(OpCode op, ParamForm pf) {
     using O  = OpCode;
     using Pf = ParamForm;
@@ -104,11 +118,6 @@ Inst encode_op_with_pf(OpCode op, ParamForm pf) {
         default:
             throw Error("Parameter form invalid for Not");
         }
-    case O::SYSTEM_IO:
-        switch (pf) {
-        case Pf::IMMD: return deserialize(rv);
-        default      : throw Error("System calls only except \"IMMD\"");
-        }
     default: break;
     }
     throw Error("Cannot encode op code pf pair, perhaps invalid values were "
@@ -124,8 +133,16 @@ RegParamPack encode_reg_reg(Reg r0, Reg r1)
 RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2)
     { return RegParamPack(r0, r1, r2); }
 
-Immd encode_immd_int(int i)
-    { return Immd(i < 0 ? 0x8000u | encode_immd_int(-i).v : i & 0x7FFF); }
+Immd encode_immd_int(int i) {
+    if (i > std::numeric_limits<int16_t>::max() ||
+        i < std::numeric_limits<int16_t>::min())
+    {
+        throw Error("Cannot store number \"" + std::to_string(i) +
+                    "\" in an immediate.");
+    }
+    if (i < 0) return Immd(0x8000u | encode_immd_int(-(i + 1)).v);
+    return Immd(i & 0x7FFF);
+}
 
 Immd encode_immd_fp(double d) {
     UInt32 fullwidth = to_fixed_point(d);
@@ -174,8 +191,9 @@ JTypeParamForm decode_j_type_pf(Inst i) {
 }
 
 int decode_immd_as_int(Inst inst) {
-    return ((serialize(inst) & 0x8000) ? -1 : 1) *
-            int(serialize(inst) & 0x7FFF);
+    auto bits = serialize(inst) & 0xFFFF;
+    auto is_neg = bits & 0x8000;
+    return (is_neg ? -1 : 1)*int(bits & 0x7FFF) + (is_neg ? -1 : 0);
 }
 
 UInt32 decode_immd_as_fp(Inst inst) {
@@ -199,6 +217,21 @@ const char * register_to_string(Reg r) {
     case Reg::SP: return "bp";
     case Reg::PC: return "pc";
     default: throw Error("Invalid register, cannot convert to a string.");
+    }
+}
+
+void run_encode_decode_tests() {
+    using namespace device_addresses;
+    for (int i :{ RESERVED_NULL, GPU_INPUT_STREAM, GPU_RESPONSE,
+                  APU_INPUT_STREAM, TIMER_WAIT_AND_SYNC, TIMER_QUERY_SYNC_ET,
+                  RANDOM_NUMBER_GENERATOR, READ_CONTROLLER, HALT_SIGNAL,
+                  BUS_ERROR                                                   })
+    {
+        int product = decode_immd_as_int(Inst(encode_immd_int(i)));
+        if (i == product) continue;
+        throw Error(std::string("Failed to encode \"") + to_string(i)   +
+                    "\" expected: " + std::to_string(i) + " produced: " +
+                    std::to_string(product)                              );
     }
 }
 
@@ -255,6 +288,47 @@ Inst encode(OpCode op, Reg r0, Immd i) {
 Inst encode(OpCode op, Reg r0, Reg r1, Immd i) {
     return encode_op_with_pf(op, erfin::ParamForm::REG_REG_IMMD) |
            encode_reg_reg(r0, r1) | i;
+}
+
+// ---------------------- APU Constants/utility functions ---------------------
+
+bool is_valid_value(const ApuInstructionType it) {
+    using Ait = ApuInstructionType;
+    switch (it) {
+    case Ait::NOTE: case Ait::TEMPO: case Ait::DUTY_CYCLE_WINDOW: return true;
+    default: return false;
+    }
+}
+
+bool is_valid_value(Channel c) {
+    using Ch = Channel;
+    switch (c) {
+    case Ch::TRIANGLE: case Ch::PULSE_ONE: case Ch::PULSE_TWO: case Ch::NOISE:
+        return true;
+    default: return false;
+    }
+}
+
+bool is_valid_value(DutyCycleOption it) {
+    using Dco = DutyCycleOption;
+    switch (it) {
+    case Dco::ONE_HALF: case Dco::ONE_THIRD: case Dco::ONE_QUARTER:
+    case Dco::ONE_FIFTH: return true;
+    default: return false;
+    }
+}
+
+// ---------------------- GPU Constants/utility functions ---------------------
+
+int parameters_per_instruction(GpuOpCode code) {
+    using namespace gpu_enum_types;
+    switch (code) {
+    case UPLOAD: return 3;
+    case UNLOAD: return 1;
+    case DRAW  : return 3;
+    case CLEAR : return 0;
+    }
+    std::terminate();
 }
 
 } // end of erfin namespace

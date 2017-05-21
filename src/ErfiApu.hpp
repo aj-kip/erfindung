@@ -23,47 +23,17 @@
 #define MACRO_HEADER_ERFINDUNG_AUDIO_PU_HPP
 
 #include <limits>
-#include <mutex>
-#include <condition_variable>
+
 #include <vector>
 #include <queue>
-#include <array>
-#include <functional>
+
 #include <bitset>
-#include <iostream> // thread_safe_print
-#include <atomic>
 
 #include <cstdint>
 
-#include <SFML/Audio/SoundStream.hpp>
+#include "ErfiDefs.hpp"
 
-enum class Channel {
-    TRIANGLE ,
-    PULSE_ONE,
-    PULSE_TWO,
-    NOISE    ,
-    CHANNEL_COUNT
-};
-
-enum class ApuRateType {
-    NOTE ,
-    TEMPO,
-    DUTY_CYCLE_WINDOW
-};
-
-enum class DutyCycleOption {
-    ONE_HALF,
-    ONE_THIRD,
-    ONE_QUARTER,
-    ONE_FIFTH
-};
-
-template <typename T>
-void thread_safe_print(const T & obj) {
-    static std::mutex mtx;
-    std::unique_lock<std::mutex> ul(mtx); (void)ul;
-    std::cout << obj;
-}
+namespace erfin {
 
 class SfmlAudioDevice;
 
@@ -73,13 +43,12 @@ public:
 
     struct ApuInst {
         ApuInst(){}
-        ApuInst(Channel c, ApuRateType t, int32_t val):
+        ApuInst(Channel c, ApuInstructionType t, int32_t val):
             channel(c), type(t), value(val) {}
-        Channel     channel;
-        ApuRateType type   ;
-        int32_t     value  ;
+        Channel            channel;
+        ApuInstructionType type   ;
+        int32_t            value  ;
     };
-
 
     // I'm going to follow the NES somewhat (this will be a simplification
     // four channels of mono sound:
@@ -93,11 +62,13 @@ public:
 
     ~Apu();
 
-    void enqueue(Channel, ApuRateType, int);
+    void enqueue(Channel, ApuInstructionType, int);
 
     void enqueue(ApuInst);
 
     void update(double et);
+
+    void io_write(UInt32);
 
 private:
 
@@ -110,7 +81,7 @@ private:
 
     static const constexpr int ALL_POSSIBLE_SAMPLE_FRAMES = -1;
 
-    using InstructionQueue = std::queue<ApuInst>;
+    using InstructionQueue = std::queue<UInt32>;
 
     // channel stuff
     using Int16 = std::int16_t;
@@ -151,5 +122,7 @@ class ApuAttorney {
     friend class SfmlAudioDevice;
     static constexpr const int SAMPLE_RATE = Apu::SAMPLE_RATE;
 };
+
+} // end of erfin namespace
 
 #endif

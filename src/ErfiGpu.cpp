@@ -42,6 +42,9 @@ void clear_screen (erfin::GpuContext & ctx);
 
 void push_bits_to (std::vector<bool> & v, erfin::UInt32 bits);
 
+bool queue_has_enough_for_top_instruction(const erfin::GpuContext *);
+//parameters_per_instruction(static_cast<GpuOpCode>(context->command_buffer.front())) > int(context->command_buffer.size() - 1)
+
 } // end of <anonymous> namespace
 
 namespace erfin {
@@ -52,6 +55,7 @@ struct GpuContext {
     std::queue<UInt32>       command_buffer;
     std::queue<SpriteMeta *> sprite_data   ;
     VideoMemory              pixels        ;
+    UInt32                   bus_output    ;
 };
 
 /* static */ const int ErfiGpu::SCREEN_WIDTH  = 320;
@@ -143,6 +147,15 @@ void ErfiGpu::screen_clear() {
     m_cold->command_buffer.push(gpu_enum_types::CLEAR);
 }
 
+void ErfiGpu::io_write(UInt32 data) {
+    m_cold->command_buffer.push(data);
+}
+
+UInt32 ErfiGpu::read() const {
+    // mmm...
+    return m_cold->bus_output;
+}
+
 /* private */ void ErfiGpu::upload_sprite
     (UInt32 index, UInt32 width, UInt32 height, UInt32 address)
 {
@@ -175,6 +188,10 @@ void ErfiGpu::screen_clear() {
             { return tc.command_buffer_swaped || tc.finish; });
         tc.gpu_thread_ready = false;
         while (!context->command_buffer.empty()) {
+            // stop instruction process if there isn't enough for the next
+            // instruction
+            if (!queue_has_enough_for_top_instruction(context.get())) break;
+
             switch (front_and_pop(context->command_buffer)) {
             case UPLOAD: ::upload_sprite(*context, memory); break;
             case UNLOAD: ::unload_sprite(*context); break;
@@ -255,20 +272,7 @@ void draw_sprite(erfin::GpuContext & ctx) {
 }
 
 void clear_screen(erfin::GpuContext & ctx) {
-    using namespace erfin;
     std::fill(ctx.pixels.begin(), ctx.pixels.end(), false);
-#   if 0
-    for (UInt32 y = 0; y != UInt32(ErfiGpu::SCREEN_HEIGHT); ++y) {
-    for (UInt32 x = 0; x != UInt32(ErfiGpu::SCREEN_WIDTH ); ++x) {
-        if (ctx.pixels[coord_to_index(x, y)]) {
-            int h = 0;
-            ++h;
-            (void)h;
-        }
-
-        ctx.pixels[coord_to_index(x, y)] = false;
-    }}
-#   endif
 }
 
 void push_bits_to(std::vector<bool> & v, erfin::UInt32 bits) {
@@ -277,6 +281,13 @@ void push_bits_to(std::vector<bool> & v, erfin::UInt32 bits) {
     push_bits_to(v, UInt8((bits & 0x00FF0000) >> 16));
     push_bits_to(v, UInt8((bits & 0x0000FF00) >>  8));
     push_bits_to(v, UInt8((bits & 0x000000FF)      ));
+}
+
+bool queue_has_enough_for_top_instruction(const erfin::GpuContext * context) {
+    using namespace erfin;
+    auto code = static_cast<GpuOpCode>(context->command_buffer.front());
+    int left_after_code = int(context->command_buffer.size() - 1);
+    return left_after_code >= parameters_per_instruction(code);
 }
 
 std::size_t coord_to_index(erfin::UInt32 x, erfin::UInt32 y) {

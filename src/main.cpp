@@ -71,9 +71,9 @@ int main(int argc, char ** argv) {
         static constexpr const auto TRI = Channel::TRIANGLE;
         auto chan = Channel::TRIANGLE;
 
-        apu.enqueue(Channel::PULSE_ONE, ApuRateType::TEMPO, 4);
+        apu.enqueue(Channel::PULSE_ONE, ApuInstructionType::TEMPO, 4);
         auto push_note =
-            [&](int note) { apu.enqueue(chan, ApuRateType::NOTE, note); };
+            [&](int note) { apu.enqueue(chan, ApuInstructionType::NOTE, note); };
 
         //chan = Channel::PULSE_ONE;
         //for (int i = 0; i != 3*6; ++i) push_note(000);
@@ -81,7 +81,7 @@ int main(int argc, char ** argv) {
         for (auto c : { Channel::TRIANGLE, Channel::PULSE_ONE, Channel::TRIANGLE }) {
             chan = Channel::TRIANGLE; (void)c;
             for (int i : { -50, 50, 0 }) {
-                apu.enqueue(TRI, ApuRateType::TEMPO, 4);
+                apu.enqueue(TRI, ApuInstructionType::TEMPO, 4);
                 push_note(500 + i);
                 push_note(375 + i);
 
@@ -91,7 +91,7 @@ int main(int argc, char ** argv) {
                 push_note(500 + i); // one second passes
                 push_note(275 + i);
 
-                apu.enqueue(TRI, ApuRateType::TEMPO, 8);
+                apu.enqueue(TRI, ApuInstructionType::TEMPO, 8);
                 push_note( 75 + i);
                 push_note(125 + i);
                 push_note( 75 + i);
@@ -102,7 +102,7 @@ int main(int argc, char ** argv) {
         // implicit silence -- three seconds
     }
     apu.update(0.);
-    std::this_thread::sleep_for(std::chrono::milliseconds(20000));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 
 #   if 0
     for (int i = 0; i != 60; ++i) {
@@ -110,11 +110,12 @@ int main(int argc, char ** argv) {
         apu.update(0.1);
     }
 #   endif
-    return 0;
+    //return 0;
     //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     //apu.wait_for_play_thread_then_update();
 #   if 0//def MACRO_DEBUG
     try {
+        run_encode_decode_tests();
         run_numeric_encoding_tests();
         Assembler::run_tests();
         ErfiCpu::run_tests();
@@ -124,6 +125,7 @@ int main(int argc, char ** argv) {
         return ~0;
     }
 #   else
+    (void)run_encode_decode_tests();
     (void)run_numeric_encoding_tests;
     (void)Assembler::run_tests;
     (void)ErfiCpu::run_tests;
@@ -279,7 +281,6 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window) {
     pixel_array.resize(ErfiGpu::SCREEN_HEIGHT*ErfiGpu::SCREEN_WIDTH, 0);
 
     while (window.isOpen()) {
-
         if (clk.getElapsedTime().asSeconds() >= 1.0) {
             fps = frame_count;
             frame_count = 0;
