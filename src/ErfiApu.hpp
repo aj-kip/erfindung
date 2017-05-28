@@ -23,82 +23,31 @@
 #define MACRO_HEADER_ERFINDUNG_AUDIO_PU_HPP
 
 #include <limits>
-#include <mutex>
-#include <condition_variable>
+
 #include <vector>
 #include <queue>
-#include <array>
-#include <functional>
+
 #include <bitset>
 
 #include <cstdint>
 
-#include <SFML/Audio/SoundStream.hpp>
+#include "ErfiDefs.hpp"
 
-enum class Channel {
-    TRIANGLE ,
-    PULSE_ONE,
-    PULSE_TWO,
-    NOISE    ,
-    CHANNEL_COUNT
-};
+namespace erfin {
 
-enum class ApuRateType {
-    NOTE ,
-    TEMPO,
-    DUTY_CYCLE_WINDOW
-};
+class SfmlAudioDevice;
 
-enum class DutyCycleOption {
-    ONE_HALF,
-    ONE_THIRD,
-    ONE_QUARTER,
-    ONE_FIFTH
-};
-
-class Apu : private sf::SoundStream {
-private:
-    struct ChannelInfo {
-        int tempo;
-        std::bitset<sizeof(int32_t)*8> dc_window;
-    };
-    using ChannelNoteInfo = std::vector<ChannelInfo>;
-    using ChannelSamples = std::vector<std::vector<std::int16_t>>;
-
+class Apu {
 public:
-    // "Hardware" fixed sample rate
-    static constexpr const int SAMPLE_RATE = 11025;
-
-    // arbitary
-    static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 8;
+    friend class ApuAttorney;
 
     struct ApuInst {
         ApuInst(){}
-        ApuInst(Channel c, ApuRateType t, int32_t val):
+        ApuInst(Channel c, ApuInstructionType t, int32_t val):
             channel(c), type(t), value(val) {}
-        Channel     channel;
-        ApuRateType type   ;
-        int32_t     value  ;
-    };
-    using InstructionQueue = std::queue<ApuInst>;
-
-    class Interface {
-    public:
-        Interface(InstructionQueue * inst_queue);
-        Interface() = delete;
-        ~Interface();
-
-        Interface(const Interface &) = delete;
-        Interface(Interface &&) = delete;
-
-        Interface & operator = (const Interface &) = delete;
-        Interface & operator = (Interface &&) = delete;
-
-        void enqueue(Channel, ApuRateType, int);
-        void enqueue(ApuInst);
-
-    private:
-        InstructionQueue * m_inst_queue;
+        Channel            channel;
+        ApuInstructionType type   ;
+        int32_t            value  ;
     };
 
     // I'm going to follow the NES somewhat (this will be a simplification
@@ -111,41 +60,39 @@ public:
     // involuntarily multi-threaded (by API designer)
     Apu();
 
-    // apu.access([](Apu::Interface & ai) {
-    //    ;
-    //    ai.push_note(C::TRIANGLE_WAVE, ...)
-    // });
-    template <typename Func>
-    void access(Func && f) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        Interface ai(&m_insts);
-        f(std::ref(ai));
-    }
+    ~Apu();
 
-#   if 0
-    void set_notes_per_second(int nps) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        m_samples_per_note = SAMPLE_RATE / nps;
-    }
+    void enqueue(Channel, ApuInstructionType, int);
 
-    void push_note(int, int pitch) {
-        std::unique_lock<std::mutex> ul(m_note_mutex); (void)ul;
-        m_notes.push_back(pitch);
-    }
-#   endif
+    void enqueue(ApuInst);
+
+    void update(double et);
+
+    void io_write(UInt32);
 
 private:
+
+    // ------------------------------------------------------------------------
+
+    // "Hardware" fixed sample rate
+    static constexpr const int SAMPLE_RATE = 11025;
+
+    using DutyCycleWindow = std::bitset<sizeof(int32_t)*8>;
+
+    static const constexpr int ALL_POSSIBLE_SAMPLE_FRAMES = -1;
+
+    using InstructionQueue = std::queue<UInt32>;
+
+    // channel stuff
     using Int16 = std::int16_t;
-
-    struct ThreadControl {
-        std::mutex mtx;
-        std::condition_variable apu_side;
-        std::condition_variable main_thread;
+    struct ChannelInfo {
+        int tempo;
+        DutyCycleWindow dc_window;
     };
+    using ChannelNoteInfo = std::vector<ChannelInfo>;
+    using ChannelSamples = std::vector<std::vector<std::int16_t>>;
 
-    bool onGetData(Chunk & data) override final;
-
-    void onSeek(sf::Time) override final {}
+    static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 16;
 
     std::vector<Int16> & select_channel(Channel c)
         { return m_samples_per_channel[static_cast<std::size_t>(c)]; }
@@ -153,17 +100,29 @@ private:
     int * select_channel_tempo(Channel c)
         { return &m_channel_info[static_cast<std::size_t>(c)].tempo; }
 
-    std::bitset<32> * select_duty_cycle_window(Channel c)
+    DutyCycleWindow * select_duty_cycle_window(Channel c)
         { return &m_channel_info[static_cast<std::size_t>(c)].dc_window; }
+
+    void process_instructions();
+
+    static void merge_samples(ChannelSamples &, std::vector<Int16> &,
+                              int sample_count);
 
     std::vector<Int16> m_samples;
     InstructionQueue m_insts;
 
-    std::mutex m_note_mutex;
-
     ChannelNoteInfo m_channel_info;
-    ThreadControl m_thread_control;
     ChannelSamples m_samples_per_channel;
+    int m_sample_frames;
+
+    SfmlAudioDevice * m_audio_device;
 };
+
+class ApuAttorney {
+    friend class SfmlAudioDevice;
+    static constexpr const int SAMPLE_RATE = Apu::SAMPLE_RATE;
+};
+
+} // end of erfin namespace
 
 #endif

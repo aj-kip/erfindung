@@ -36,6 +36,7 @@ class Debugger;
 
 class Assembler {
 public:
+
     enum SuffixAssumption {
         // -int, -fp must be set explicitly
         NO_ASSUMPTION = 0,
@@ -52,6 +53,8 @@ public:
     void assemble_from_file(const char * file);
 
     void assemble_from_string(const std::string & source);
+
+    void print_warnings(std::ostream &) const;
 
     const ProgramData & program_data() const;
 
@@ -71,10 +74,13 @@ public:
     static void run_tests();
 
 private:
+
     ProgramData m_program;
 
     // debugging erfi program info
     DebuggerInstToLineMap m_inst_to_line_map;
+
+    std::vector<std::string> m_warnings;
 };
 
 } // end of erfin namespace

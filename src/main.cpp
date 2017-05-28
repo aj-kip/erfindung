@@ -62,36 +62,61 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window);
 
 int main(int argc, char ** argv) {
     using namespace erfin;
+#   if 0
     Apu apu;
-    apu.access([](Apu::Interface & face){
+    //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    apu.update(0.1);
+    //std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    {
         // needs to be clearer that it's notes per second
         static constexpr const auto TRI = Channel::TRIANGLE;
-        face.enqueue(TRI, ApuRateType::TEMPO, 3);
-        auto push_note =
-            [&](int note) { face.enqueue(TRI, ApuRateType::NOTE, note); };
-        push_note(150);
-        push_note(275);
-        push_note(400);
-        push_note(275);
-        push_note(560);
-        push_note(000);
-        push_note(150);
-        push_note(275);
-    });
-#   if 0
+        auto chan = Channel::TRIANGLE;
 
-    apu.set_notes_per_second(3);
-    apu.push_note(0, 150);
-    apu.push_note(0, 275);
-    apu.push_note(0, 400);
-    apu.push_note(0, 275);
-    apu.push_note(0, 560);
-    apu.push_note(0, 000);
-    apu.push_note(0, 150);
-    apu.push_note(0, 275);
+        apu.enqueue(Channel::PULSE_ONE, ApuInstructionType::TEMPO, 4);
+        auto push_note =
+            [&](int note) { apu.enqueue(chan, ApuInstructionType::NOTE, note); };
+
+        //chan = Channel::PULSE_ONE;
+        //for (int i = 0; i != 3*6; ++i) push_note(000);
+
+        for (auto c : { Channel::TRIANGLE, Channel::PULSE_ONE, Channel::TRIANGLE }) {
+            chan = Channel::TRIANGLE; (void)c;
+            for (int i : { -50, 50, 0 }) {
+                apu.enqueue(TRI, ApuInstructionType::TEMPO, 4);
+                push_note(500 + i);
+                push_note(375 + i);
+
+                push_note(500 + i); // one second passes
+                push_note(325 + i);
+
+                push_note(500 + i); // one second passes
+                push_note(275 + i);
+
+                apu.enqueue(TRI, ApuInstructionType::TEMPO, 8);
+                push_note( 75 + i);
+                push_note(125 + i);
+                push_note( 75 + i);
+                push_note(125 + i);
+            }
+        }
+
+        // implicit silence -- three seconds
+    }
+    apu.update(0.);
+    //std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 #   endif
-#   ifdef MACRO_DEBUG
+#   if 0
+    for (int i = 0; i != 60; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        apu.update(0.1);
+    }
+#   endif
+    //return 0;
+    //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    //apu.wait_for_play_thread_then_update();
+#   if 0//def MACRO_DEBUG
     try {
+        run_encode_decode_tests();
         run_numeric_encoding_tests();
         Assembler::run_tests();
         ErfiCpu::run_tests();
@@ -101,13 +126,14 @@ int main(int argc, char ** argv) {
         return ~0;
     }
 #   else
+    (void)run_encode_decode_tests();
     (void)run_numeric_encoding_tests;
     (void)Assembler::run_tests;
     (void)ErfiCpu::run_tests;
     (void)test_string_processing;
 #   endif
 
-    Assembler asmr;
+    Assembler assembler;
     Console console;
     sf::RenderWindow win;
 
@@ -116,8 +142,9 @@ int main(int argc, char ** argv) {
         filename = argv[1];
 
     try {
-        asmr.assemble_from_file(filename);
-        console.load_program(asmr.program_data());
+        assembler.assemble_from_file(filename);
+        assembler.print_warnings(std::cout);
+        console.load_program(assembler.program_data());
         win.create(sf::VideoMode(unsigned(ErfiGpu::SCREEN_WIDTH *3),
                                  unsigned(ErfiGpu::SCREEN_HEIGHT*3)), " ");
         adjust_window_view(win);
@@ -125,7 +152,7 @@ int main(int argc, char ** argv) {
     } catch (ErfiError & exp) {
         constexpr const char * const NO_LINE_NUM_MSG =
             "<no source line associated with this program location>";
-        auto line_num = asmr.translate_to_line_number(exp.program_location());
+        auto line_num = assembler.translate_to_line_number(exp.program_location());
         std::cerr << "A problem has occured on source line: ";
         if (line_num == Assembler::INVALID_LINE_NUMBER)
             std::cerr << NO_LINE_NUM_MSG;
@@ -256,7 +283,6 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window) {
     pixel_array.resize(ErfiGpu::SCREEN_HEIGHT*ErfiGpu::SCREEN_WIDTH, 0);
 
     while (window.isOpen()) {
-
         if (clk.getElapsedTime().asSeconds() >= 1.0) {
             fps = frame_count;
             frame_count = 0;

@@ -24,30 +24,68 @@
 
 #include "ErfiDefs.hpp"
 
+#include "ErfiApu.hpp"
 #include "ErfiCpu.hpp"
 #include "ErfiGpu.hpp"
 #include "ErfiGamePad.hpp"
 
+#include <SFML/System/Clock.hpp>
+
 #include <utility>
 #include <iosfwd>
 
-namespace sf {
-    class Event;
-}
+namespace sf { class Event; }
 
 namespace erfin {
 
-struct ConsolePack {
-    MemorySpace ram;
-    ErfiCpu     cpu;
-    ErfiGpu     gpu;
-    GamePad     pad;
+class UtilityDevices {
+public:
+    UtilityDevices();
+
+    // read actions
+    UInt32 generate_random_number(); // modifies rng state
+    UInt32 query_elapsed_time    () const;
+
+    // write actions
+    void power(UInt32);
+    void wait (UInt32);
+
+    // interface for program
+    bool wait_requested() const;
+
+    bool halt_requested() const;
+    void set_wait_time();
+
+    void set_bus_error(bool v) { m_bus_error = v; }
+    bool bus_error_present() const { return m_bus_error; }
+private:
+    std::default_random_engine m_rng;
+    sf::Clock m_clock;
+    bool m_wait ;
+    bool m_power;
+    UInt32 m_wait_time;
+    bool m_bus_error;
 };
 
+struct ConsolePack {
+    ConsolePack();
+    MemorySpace    * ram;
+    ErfiCpu        * cpu;
+    ErfiGpu        * gpu;
+    Apu            * apu;
+    GamePad        * pad;
+    UtilityDevices * dev;
+};
+
+void do_write(ConsolePack &, UInt32 address, UInt32 data);
+UInt32 do_read(ConsolePack &, UInt32 address);
+
+/** @brief User level view of the entire "Erfindung console"
+ *  The console has all the machine components built into it.
+ */
 class Console {
 public:
-    static void load_program_to_memory
-        (const ProgramData & program, MemorySpace & memspace);
+    Console();
 
     void load_program(const ProgramData & program);
 
@@ -66,23 +104,34 @@ public:
 
     template <typename Func>
     void draw_pixels(Func && f);
+
+    static void load_program_to_memory
+        (const ProgramData & program, MemorySpace & memspace);
+
 private:
     ConsolePack pack;
+
+    MemorySpace    m_ram;
+    ErfiCpu        m_cpu;
+    ErfiGpu        m_gpu;
+    Apu            m_apu;
+    GamePad        m_pad;
+    UtilityDevices m_dev;
 };
 
 template <typename Func>
 void Console::run_until_wait(Func && f) {
-    pack.gpu.wait(pack.ram);
-    pack.cpu.clear_flags();
-    while (!pack.cpu.wait_was_called() && !pack.cpu.requesting_halt()) {
-        pack.cpu.run_cycle(&pack);
+    pack.gpu->wait(*pack.ram);
+    pack.dev->set_wait_time();
+    while (!pack.dev->wait_requested() && !pack.dev->halt_requested()) {
+        pack.cpu->run_cycle(pack);
         f();
     }
 }
 
 template <typename Func>
 void Console::draw_pixels(Func && f) {
-    pack.gpu.draw_pixels(std::move(f));
+    pack.gpu->draw_pixels(std::move(f));
 }
 
 } // end of erfin namespace

@@ -84,9 +84,16 @@ void Assembler::assemble_from_string(const std::string & source) {
     TextProcessState tpstate;
 
     tpstate.process_tokens(tokens.begin(), tokens.end());
+    tpstate.retrieve_warnings(m_warnings);
     // only when a valid program has been assembled do we swap in the actual
     // instructions, as a throw may occur at any point of the text processing
     tpstate.move_program(m_program, m_inst_to_line_map);
+}
+
+void Assembler::print_warnings(std::ostream & out) const {
+    for (const auto & line : m_warnings) {
+        out << line << std::endl;
+    }
 }
 
 const ProgramData & Assembler::program_data() const

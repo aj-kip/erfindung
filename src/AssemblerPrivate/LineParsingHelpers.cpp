@@ -118,6 +118,15 @@ erfin::Reg string_to_register(const std::string & str) {
     }
 }
 
+Reg string_to_register_or_throw
+    (TextProcessState & state, const std::string & reg_str)
+{
+    auto rv = string_to_register(reg_str);
+    if (rv == Reg::COUNT)
+        throw state.make_error(": \"" + reg_str + "\" is not a valid register.");
+    return rv;
+}
+
 AssumptionResetRAII::AssumptionResetRAII(TextProcessState & state, SuffixAssumption new_assumpt):
     m_state(&state),
     m_old_assumpt(state.assumptions)

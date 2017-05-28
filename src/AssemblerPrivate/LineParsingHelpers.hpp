@@ -92,7 +92,10 @@ ExtendedParamForm get_lines_param_form
     (TokensConstIterator beg, TokensConstIterator end,
      NumericParseInfo * npi = nullptr);
 
-erfin::Reg string_to_register(const std::string & str);
+Reg string_to_register(const std::string & str);
+
+Reg string_to_register_or_throw
+    (TextProcessState & state, const std::string & reg_str);
 
 } // end of erfin namespace
 

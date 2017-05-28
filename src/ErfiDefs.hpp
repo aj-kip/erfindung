@@ -19,29 +19,144 @@
 
 *****************************************************************************/
 
-/** This document/source file defines Erfindung ISA/interpreter.
- *  Target features:
- *  - RISC + some bells and wistles
- *  - assemble to C++ and dynamically executable byte code
- *
- *  Erfindung is designed to handle two different types of numbers:
- *   - unsigned 32 bit integers (also used for pointers)
- *   - two's complement 32 bit fixed point real numbers
- *
- *  Each instruction is strictly 32bits
- *  There are 8 32bit registers.
- *   -
- *  Erfindung has instructions that can handle fixed point math
- *
- *
- *  Erfindung assmebly language: is a superset of the provided hardware
- *  instructions.
- *  Terms:
- *  - Hardware instruction: an instruction defined by the ISA
- *  - psuedo instruction: an instruction NOT defined by the ISA, but can be
- *    formed from a combination of one or more hardware instructions.
- *
- */
+/******************************************************************************
+
+This document defines Erfindung ISA/interpreter and acts as the manual.
+
+Target features:
+ - RISC + some bells and wistles
+ - assemble to C++ and dynamically executable byte code -> selved
+ - parts of the virtual machine can operate independantly from each other
+ - You can run programs using only the memory space and CPU
+ - You can upload instructions to the APU or GPU and expect the objects
+  to produce proper output and be well behaved.
+
+Erfindung Assembly Language
+---------------------------
+
+### Introduction
+Erfindung is designed to handle two different types of numbers:
+ - unsigned 32 bit integers (also used for pointers)
+ - two's complement 32 bit fixed point real numbers
+
+Each instruction is strictly 32bits
+There are 8 32bit registers.
+
+
+Erfindung has instructions that can handle fixed point math
+
+Erfindung assmebly language: is a superset of the provided hardware
+instructions.
+Terms:
+ - Hardware instruction: an instruction defined by the ISA
+ - psuedo instruction: an instruction NOT defined by the ISA, but can be
+formed from a combination of one or more hardware instructions.
+
+Complete Memory Map
+-------------------
+
++============================+============================+
+| Region                     | Address                    |
++============================+============================+
+| Device I/O                 | 0x0000 0000 - 0x0000 0010  |
++----------------------------+----------------------------+
+| Program Code               | 0x1??? ????                |
++----------------------------+----------------------------+
+| Free Memory for Stack/Heap | 0x1??? ???? + program size |
++----------------------------+----------------------------+
+
+Memory Mapped I/O Devices
+-------------------------
+
+### Stop Space/Reserved null (Address 0x0000 0000)
++----------+
+|0       31|
++----------+
+|          |
++----------+
+
+### GPU (Addresses 0x0000 0001 - 0x0000 0002)
++---------------------------+--------------------+
+|0                        31|32                63|
++---------------------------+--------------------+
+| write-only command stream | command output ROM |
++---------------------------+--------------------+
+
+Command Indentities
+Commands are uploaded to the GPU, first with the command indentity
+(a special ISA defined number), followed by its parameters (assume each are
+32bit integers, unless specified otherwise).
+
+UPLOAD_SPRITE
+ - parameters: width, height, address
+ - answers   : (in output ROM, available after write) index for sprite
+
+UNLOAD_SPRITE
+ - parameters: index for sprite
+
+DRAW_SPRITE
+ - parameters: x pos, y pox, index for sprite
+
+SCREEN_CLEAR
+ - takes no parameters
+
+### APU (Addresses 0x0000 0003 - 0x0000 0004)
++---------------------------+--------------+
+|0                        31|32          63|
++---------------------------+--------------+
+| write-only command stream | reserved ROM |
++---------------------------+--------------+
+
+### Timer (Addresses 0x0000 0005 - 0x0000 0006)
++-----+--------------------------+-------------------------+
+|0  30|31                      31|32                     63|
++-----+--------------------------+-------------------------+
+| ... | wait & sync (write-only) | query duration (fp/ROM) |
++-----+--------------------------+-------------------------+
+
+### RNG (Address 0x0000 0007)
++---------------------+
+|0                  31|
++---------------------+
+| random number (ROM) |
++---------------------+
+
+### Controller (Address 0x0000 0008)
+All are ROM
++----+------+------+-------+---+---+-------+-----+
+|0  0|1    1|2    2|3     3|4 4|5 5|6     6|7  31|
++----+------+------+-------+---+---+-------+-----+
+| UP | DOWN | LEFT | RIGHT | A | B | START | ... |
++----+------+------+-------+---+---+-------+-----+
+
+### Power (Address 0x0000 0009)
++-----+------------+
+|0  30|31        31|
++-----+------------+
+| ... | is_powered |
++-----+------------+
+
+### Flip to zero to HALT the machine
+
+Bus Error Data (Address 0x0000 0x000A)
++----------------+
+|0             31|
++----------------+
+| Bus Error Code |
++----------------+
+
+Bus Errors:
+ - no error
+ - write on ROM
+ - read on write-only
+ - queue overflow
+ - invalid address access
+
+### Addresses (0x0000 000B - 0x0000 0010)
+Reserved
+
+******************************************************************************/
+
 #ifndef MACRO_HEADER_GUARD_ERFIDEFS_HPP
 #define MACRO_HEADER_GUARD_ERFIDEFS_HPP
 
@@ -51,7 +166,7 @@
 
 namespace erfin {
 
-using UInt8  = uint8_t;
+using UInt8  = uint8_t ;
 using UInt16 = uint16_t;
 using UInt64 = uint64_t;
 using UInt32 = uint32_t;
@@ -191,7 +306,6 @@ enum class OpCode {
     // CALL, NOT
     NOT        , // bitwise complement
                  // "not x a"
-    // for SYSTEM_CALL:
     // I can reduce the instruction set size even further by defining, as all
     // ISAs do, function call conventions
     // therefore:
@@ -202,7 +316,7 @@ enum class OpCode {
     // go unto the program stack like so:
     //
     // +--------------------------+
-    // | callee's stack frane     |
+    // | callee's stack frame     |
     // +--------------------------+
     // | old stack pointer value  | <---+--- SP
     // +--------------------------+     |
@@ -215,7 +329,6 @@ enum class OpCode {
     // |                          |
     // +--------------------------+
     // registers SP and PC are neither (obviously)
-    SYSTEM_IO,
     COUNT        // sentinal value [not a valid op code]
 };
 
@@ -224,29 +337,23 @@ constexpr const int COMP_LESS_THAN_MASK    = (1 << 1);
 constexpr const int COMP_GREATER_THAN_MASK = (1 << 2);
 constexpr const int COMP_NOT_EQUAL_MASK    = (1 << 3);
 
-enum class SystemCallValue {
-    // system calls ignore paramform, and will only read the immediate
-    // this will provide a space of ~32,000 possible functions
-    // this enumeration defines constants that map to thier respective function
-    // calls
-    // system calls are "calls to the hardware"
-    // Erfindung needs a GPU of sorts to display
-    // it also needs system calls to read user input
-    UPLOAD_SPRITE , // parameters: x: width, y: height, z: address
-                    // answers   : a: index for sprite
-    UNLOAD_SPRITE , // parameters: x: index for sprite
-    DRAW_SPRITE   , // arguments: x: x pos, y: y pox, z: index for sprite
-    SCREEN_CLEAR  , // no arguments
-    //
-    WAIT_FOR_FRAME, // wait until the end of the frame
-    HALT          ,
-    // input
-    READ_INPUT    ,
-    // misc
-    RAND_NUMBER   , // a = a random set of 32 bits for a fp or int
-    READ_TIMER    , // reads system timer from last wait as fp
-    SYSTEM_CALL_COUNT // sentinal value
-};
+namespace device_addresses {
+    // these are all conviently negative n.-
+    constexpr const int RESERVED_NULL           = -1 ;
+    constexpr const int GPU_INPUT_STREAM        = -2 ;
+    constexpr const int GPU_RESPONSE            = -3 ;
+    constexpr const int APU_INPUT_STREAM        = -4 ;
+    constexpr const int TIMER_WAIT_AND_SYNC     = -5 ;
+    constexpr const int TIMER_QUERY_SYNC_ET     = -6 ;
+    constexpr const int RANDOM_NUMBER_GENERATOR = -7 ;
+    constexpr const int READ_CONTROLLER         = -8 ;
+    constexpr const int HALT_SIGNAL             = -9 ;
+    constexpr const int BUS_ERROR               = -10;
+    const char * to_string(int);
+
+    constexpr const int DEVICE_ADDRESS_MASK     = int(0x80000000);
+
+} // end of device_addresses namespace
 
 enum class ParamForm {
     REG_REG_REG,
@@ -514,7 +621,59 @@ bool decode_is_fixed_point_flag_set(Inst i);
 
 const char * register_to_string(Reg r);
 
+void run_encode_decode_tests();
+
 struct ConsolePack;
+
+// ---------------------- APU Constants/utility functions ---------------------
+
+enum class Channel {
+    TRIANGLE ,
+    PULSE_ONE,
+    PULSE_TWO,
+    NOISE    ,
+    CHANNEL_COUNT
+};
+
+enum class ApuInstructionType {
+    NOTE ,
+    TEMPO,
+    DUTY_CYCLE_WINDOW
+};
+
+enum class DutyCycleOption {
+    ONE_HALF,
+    ONE_THIRD,
+    ONE_QUARTER,
+    ONE_FIFTH
+};
+
+bool is_valid_value(const ApuInstructionType it);
+
+bool is_valid_value(Channel c);
+
+bool is_valid_value(DutyCycleOption it);
+
+// ---------------------- GPU Constants/utility functions ---------------------
+
+namespace gpu_enum_types {
+
+enum GpuOpCode_e {
+    UPLOAD,
+    //UNLOAD,
+    DRAW  ,
+    CLEAR ,
+};
+
+} // end of gpu_enum_types namespace
+
+// smallest possible sprite
+constexpr const int MINI_SPRITE_BIT_COUNT = 64; // 8x8
+//using MiniSprite = std::bitset<64>;
+
+using GpuOpCode = gpu_enum_types::GpuOpCode_e;
+
+int parameters_per_instruction(GpuOpCode code);
 
 } // end of erfin namespace
 
