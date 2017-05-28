@@ -1,7 +1,7 @@
 Erfindung
 =========
 
-Ficticious ISA/ASM-like Interpreter
+Fictitious ISA/ASM-like Interpreter
 -----------------------------------
 
 Erfindung (or &quot;Invention&quot; in German), is a ASM-like, GameBoy-esque virtual
@@ -10,13 +10,10 @@ It is intended to be a toy assembly language/virtual console.
 
 Development Progress
 --------------------
-Design-wise: Device I/O, I am considering memory-mapped I/O for communication with
-             the GPU, APU, Controller, Timer, RNG devices.
+Design-wise: Design is looking pretty good!
 
-Implementation-wise: I'm still trying to figure out multi-threading for the APU's
-                     implementation. Unfortunately SFML seems to require use of
-                     multiple threads for audio streaming. I may even drop down
-                     to raw OpenAL to handle audio, though I'd prefer not to.
+Implementation-wise: multi-threading is gone for the most part... I'd like to
+                     bring it back to some level, some day. :3
 
 My motivation for this project comes from several sources:
 --------------------------------------------------------------------

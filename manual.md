@@ -41,15 +41,15 @@ Complete Memory Map
 
 | Region                     | Address                    |
 |:---------------------------|:---------------------------|
-| Device I/O                 | 0x0000 0000 - 0x0000 0010  |
-| Program Code               | 0x0100 ????                |
-| Free Memory for Stack/Heap | 0x0100 ???? + program size |
+| Device I/O                 | 0x8000 0000 - 0xFFFFFFFF   |
+| Program Code               | 0x0000 0000                |
+| Free Memory for Stack/Heap | 0x0000 0000 + program size |
 
 Memory Mapped I/O Devices
 -------------------------
 
 ### Stop Space/Reserved null
-Address: 0x0000 0000
+Address: 0x8000 0000
 
 |0   -   31|
 |----------|
@@ -57,24 +57,53 @@ Address: 0x0000 0000
 
 
 ### GPU
-Addresses: 0x0000 0001 - 0x0000 0002
+Addresses: 0x8000 0001 - 0x8000 0002
 
 |0 -                      31|32 -              63|
 |---------------------------|--------------------|
 | write-only command stream | command output ROM |
 
 
-Command Indentities <br/>
-Commands are uploaded to the GPU, first with the command indentity
+Command Identities <br/>
+Commands are uploaded to the GPU, first with the command identity
 (a special ISA defined number), followed by its parameters (assume each are
 32bit integers, unless specified otherwise).
 
 UPLOAD_SPRITE
- - parameters: width, height, address
+ - parameters: width, height, address, index
  - answers   : (in output ROM, available after write) index for sprite
 
-UNLOAD_SPRITE
- - parameters: index for sprite
+sprite/texture quad indices
+These are organized as a set of nested quads (four at each layer)
+They are best described graphically...
+
+Each quad is further sub-divided into even smaller quads, terminating at 8x8 quads.
+
+<table>
+<tr><td>0</td><td>1</td></tr>
+<tr><td>2</td><td>3</td></tr>
+</table>
+
+This means there are:
+- 4    "mega"   (128 px) quads
+- 16   "large"   (64 px) quads
+- 64   "medium"  (32 px) quads
+- 256  "small"   (16 px) quads
+- 1024 "mini"     (8 px) quads
+
+At the highest level (the entire reserved memory for texture) looks like this:
+
+<table><tr><th> </th><th>128px</th><th>128px</th></tr><tr><th>128px</th><td><table><tr><th>0</th><th>64px</th><th>64px</th></tr><tr><th>64px</th><td>0</td><td>1</td></tr><tr><th>64px</th><td>2</td><td>3</td></tr></table></td><td><table><tr><th>1</th><th>64px</th><th>64px</th></tr><tr><th>64px</th><td>0</td><td>1</td></tr><tr><th>64px</th><td>2</td><td>3</td></tr></table></td></tr><tr><th>128px</th><td><table><tr><th>2</th><th>64px</th><th>64px</th></tr><tr><th>64px</th><td>0</td><td>1</td></tr><tr><th>64px</th><td>2</td><td>3</td></tr></table></td><td><table><tr><th>3</th><th>64px</th><th>64px</th></tr><tr><th>64px</th><td>0</td><td>1</td></tr><tr><th>64px</th><td>2</td><td>3</td></tr></table></td></tr></table>
+
+The complete table is much too large to include here.
+If you're curious you can run the following on your local Unix-like machine, provided bcat and lua are installed:
+<pre>lua table-gen.lua | bcat</pre>
+
+|31 -  13|12 -      10|9 -                      0|
+|--------|------------|--------------------------|
+| unused | size value | bit sets, 2 bits a piece |
+
+size value: means how many bit sets are needed to address the texture quad
 
 DRAW_SPRITE
  - parameters: x pos, y pox, index for sprite
@@ -83,28 +112,28 @@ SCREEN_CLEAR
  - takes no parameters
 
 ### APU
-Addresses (0x0000 0003 - 0x0000 0004)
+Addresses (0x8000 0003 - 0x8000 0004)
 
 |0 -                      31|32 -        63|
 |---------------------------|--------------|
 | write-only command stream | reserved ROM |
 
 ### Timer
-(Addresses 0x0000 0005 - 0x0000 0006)
+(Addresses 0x8000 0005 - 0x8000 0006)
 
 |0 - 30|31 -                    31|32 -                  63|
 |------|--------------------------|------------------------|
 | ...  | wait & sync (write-only) | query duration (fp/ROM) |
 
 ### RNG
-(Address 0x0000 0007)
+(Address 0x8000 0007)
 
 |0                  31|
 |---------------------|
 | random number (ROM) |
 
 ### Controller
-(Address 0x0000 0008)
+(Address 0x8000 0008)
 All are ROM
 
 |0 - 0|1 -  1|2 -  2|3 -   3|4 - 4|5 - 5|6 -   6|7 - 31|
@@ -112,7 +141,7 @@ All are ROM
 | UP  | DOWN | LEFT | RIGHT | A   | B   | START | ...  |
 
 ### Power
-(Address 0x0000 0009)
+(Address 0x8000 0009)
 
 |0 - 30|31 -      31|
 |------|------------|
@@ -121,7 +150,7 @@ All are ROM
 Flip to zero to HALT the machine
 
 ### Bus Error Data
-(Address 0x0000 0x000A)
+(Address 0x8000 0x000A)
 
 |0 -           31|
 |----------------|
@@ -137,21 +166,4 @@ Bus Errors:
 Split bits by device.
 
 ### Reserved Addresses
-(0x0000 000B - 0x0000 0010)
-
-huehuehue
-sprite-indicies
-8 -> 16 -> 32 -> 64 -> 128
-3 -> 4  -> 5  -> 6  -> 7
-0 -> 1  -> 2  -> 3  -> 4   => 3 bits
-index (per size) -> 8 bits
-4    "mega"   (128 px) quads
-16   "large"  ( 64 px) quads
-64   "medium" ( 32 px) quads
-256  "small"  ( 16 px) quads
-1024 "mini"   (  8 px) quads
-
-|31 -  13|12 -       10|9 -                         0|
-|--------|-------------|-----------------------------|
-| unused | sprite size | index (excess bits ignored) |
-8x8 min
+(0x8000 000B - 0xFFFF FFFF)
