@@ -37,7 +37,9 @@ using LineToInstFunc = StringCIter(*)(TextProcessState &, StringCIter, StringCIt
 StringCIter make_io_read        (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_apu_inst    (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_upload      (TextProcessState &, StringCIter, StringCIter);
+#if 0
 StringCIter make_io_unload      (TextProcessState &, StringCIter, StringCIter);
+#endif
 StringCIter make_io_clear_screen(TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_draw        (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_halt        (TextProcessState &, StringCIter, StringCIter);
@@ -80,11 +82,21 @@ StringCIter make_sysio
             throw state.make_error(": io contains no sub operation \"" +
                                    *beg + "\"."                         );
         }
+        if (state.last_instruction_was(OpCode::SKIP)) {
+            state.push_warning(": \"io\" is a pseudo-instruction following a "
+                               "skip instruction! Often io "
+                               "emits many instructions, some of which affect "
+                               "the stack. This may lead to stack corruption, "
+                               "however this does NOT necessarily restrict "
+                               "compliation.");
+        }
         return (*itr->second)(state, beg, end);
     }
     fmap["read"  ] = make_io_read;
     fmap["upload"] = make_io_upload;
+#   if 0
     fmap["unload"] = make_io_unload;
+#   endif
     fmap["clear" ] = make_io_clear_screen;
     fmap["draw"  ] = make_io_draw;
     fmap["halt"  ] = make_io_halt;
@@ -214,12 +226,13 @@ StringCIter make_io_upload
     // we need to use the stack in order to upload the constant classifying
     // the command for the gpu
     // I could just use a: save x GPU_WRITE_ADDRESSES
+    static constexpr const std::size_t ARG_COUNT = 4;
     auto eol = get_eol(++beg, end);
-    if (eol - beg != 3) {
-        throw state.make_error(": upload expects exactly three arguments: the "
-                               "width, height and address.");
+    if (eol - beg != ARG_COUNT) {
+        throw state.make_error(": upload expects exactly four arguments: the "
+                               "address, width, height, and index.");
     }
-    std::array<Reg, 3> args;
+    std::array<Reg, ARG_COUNT> args;
     for (Reg & arg : args) {
         arg = string_to_register_or_throw(state, *beg++);
     }
@@ -235,7 +248,7 @@ StringCIter make_io_upload
     }
     return eol;
 }
-
+#if 0
 StringCIter make_io_unload
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
@@ -254,7 +267,7 @@ StringCIter make_io_unload
                                   encode_immd_int(GPU_INPUT_STREAM)) );
     return erfin::get_eol(beg, end);
 }
-
+#endif
 StringCIter make_io_clear_screen
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
@@ -278,8 +291,8 @@ StringCIter make_io_draw
     using namespace erfin;
     auto eol = get_eol(++beg, end);
     if (eol - beg != 3) {
-        state.make_error(": upload expects exactly three arguments: the "
-                         "width, height and address.");
+        state.make_error(": draw expects exactly three arguments: the "
+                         "x position, y position, and index.");
     }
     std::array<Reg, 3> args;
     for (Reg & arg : args) {

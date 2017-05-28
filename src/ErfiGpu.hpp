@@ -29,6 +29,7 @@
 #include <vector>
 #include <thread>
 #include <memory>
+#include <bitset>
 #include <condition_variable>
 
 namespace erfin {
@@ -37,26 +38,35 @@ struct GpuContext; // implementation detail
 
 class ErfiGpu {
 public:
+
+    using MiniSprite = std::bitset<MINI_SPRITE_BIT_COUNT>;
+
     ErfiGpu();
     ~ErfiGpu();
 
-    // finishes all previous draw operations (join)
+    // finishes all previous draw operations
     // swaps command buffers
     // swaps graphics buffers
     // waits for frame time, time out
-    // begins/resumes all draw operations ("split")
+    // begins/resumes all draw operations
     void wait(MemorySpace & mem);
 
     // high-level functions
-
-    UInt32 upload_sprite(UInt32 width, UInt32 height, UInt32 address);
-    void   unload_sprite(UInt32 index);
-    void   draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
-    void   screen_clear ();
+    // indicies now "hard coded"
+    void upload_sprite(UInt32 address, UInt32 width, UInt32 height, UInt32 index);
+    //void unload_sprite(UInt32 index);
+    void draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
+    void screen_clear ();
 
     // low-level functions
     void io_write(UInt32);
     UInt32 read() const;
+
+    // you know what?
+    // you do your own sprite indicies...
+    // it can be hard-coded or handled by software
+
+    // 0b --- sss ii,ii,ii,ii,ii
 
     template <typename Func>
     void draw_pixels(Func f);
@@ -64,21 +74,13 @@ public:
     static const int SCREEN_WIDTH;
     static const int SCREEN_HEIGHT;
 
+    static bool is_valid_sprite_index(UInt32);
+
 private:
 
     using VideoMemory = std::vector<bool>;
     using CondVar = std::condition_variable;
     friend struct GpuContext;
-
-    struct SpriteMeta {
-        SpriteMeta(): width(0), height(0), delete_flag(false) {}
-        SpriteMeta(UInt32 w_, UInt32 h_): width(w_), height(h_), delete_flag(false) {}
-
-        UInt32 width;
-        UInt32 height;
-        std::vector<bool> pixels;
-        bool delete_flag;
-    };
 
     struct ThreadControl {
         ThreadControl():
@@ -92,14 +94,11 @@ private:
         bool command_buffer_swaped;
     };
 
-    void upload_sprite(UInt32 index, UInt32 width, UInt32 height, UInt32 address);
     std::size_t next_set_pixel(std::size_t i);
 
     static void do_gpu_tasks
         (std::unique_ptr<GpuContext> & context, const UInt32 * memory,
          ThreadControl & cv);
-
-    std::map<UInt32, SpriteMeta> m_sprite_map;
 
     UInt32 m_index_pos;
     ThreadControl m_thread_control;

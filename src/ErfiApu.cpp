@@ -212,6 +212,7 @@ BaseWaveFunction select_base_wave_function(erfin::Channel c) {
         if (t < 0) return Int16(-int(t) - int(MAX));
         if (t > 0) return Int16(-int(t) + int(MAX));
         assert(false);
+        return 0; // gcc seems to be pessimistic about flow control
     };
     case Ch::PULSE_ONE:
     case Ch::PULSE_TWO:

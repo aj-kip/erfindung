@@ -323,12 +323,15 @@ bool is_valid_value(DutyCycleOption it) {
 int parameters_per_instruction(GpuOpCode code) {
     using namespace gpu_enum_types;
     switch (code) {
-    case UPLOAD: return 3;
+    case UPLOAD: return 4;
+#   if 0
     case UNLOAD: return 1;
+#   endif
     case DRAW  : return 3;
     case CLEAR : return 0;
     }
-    std::terminate();
+    throw Error("Invalid gpu instruction code provided... Malformed gpu "
+                "command perhaps?"                                       );
 }
 
 } // end of erfin namespace

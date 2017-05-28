@@ -141,12 +141,26 @@ void TextProcessState::process_tokens(StringCIter beg, StringCIter end) {
     process_text(*this, beg, end);
 }
 
+void TextProcessState::push_warning(const std::string & warning_string) {
+    std::string warn_str = "Warning on line " +
+        std::to_string(m_current_source_line) +
+        warning_string                        ;
+    m_warnings.emplace_back(std::move(warn_str));
+}
+
+void TextProcessState::retrieve_warnings(std::vector<std::string> & target) {
+    m_warnings.swap(target);
+}
+
 std::runtime_error TextProcessState::make_error(const std::string & str) const noexcept {
     return std::runtime_error("On line " + std::to_string(m_current_source_line) + str);
 }
 
 std::size_t TextProcessState::current_source_line() const
     { return m_current_source_line; }
+
+bool TextProcessState::last_instruction_was(OpCode op) const
+    { return decode_op_code(m_program_data.back()) == op; }
 
 } // end of erfin namespace
 

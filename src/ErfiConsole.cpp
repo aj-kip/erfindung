@@ -38,6 +38,7 @@ void do_device_write(erfin::ConsolePack &, erfin::UInt32 address, erfin::UInt32 
 namespace erfin {
 
 UtilityDevices::UtilityDevices():
+    m_rng(std::random_device()()),
     m_wait(false),
     m_power(true),
     m_bus_error(false)

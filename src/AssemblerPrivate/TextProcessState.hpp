@@ -71,9 +71,15 @@ public:
 
     void process_tokens(StringCIter beg, StringCIter end);
 
+    void push_warning(const std::string &);
+
+    void retrieve_warnings(std::vector<std::string> &);
+
     std::runtime_error make_error(const std::string & str) const noexcept;
 
     std::size_t current_source_line() const;
+
+    bool last_instruction_was(OpCode) const;
 
     static void run_tests();
 
@@ -83,6 +89,7 @@ private:
     std::vector<std::size_t> m_inst_to_source_line;
     std::vector<UnfilledLabelPair> m_unfulfilled_labels;
     std::map<std::string, LabelPair> m_labels;
+    std::vector<std::string> m_warnings;
 };
 
 } // end of erfin namespace

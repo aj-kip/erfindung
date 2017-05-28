@@ -138,3 +138,20 @@ Split bits by device.
 
 ### Reserved Addresses
 (0x0000 000B - 0x0000 0010)
+
+huehuehue
+sprite-indicies
+8 -> 16 -> 32 -> 64 -> 128
+3 -> 4  -> 5  -> 6  -> 7
+0 -> 1  -> 2  -> 3  -> 4   => 3 bits
+index (per size) -> 8 bits
+4    "mega"   (128 px) quads
+16   "large"  ( 64 px) quads
+64   "medium" ( 32 px) quads
+256  "small"  ( 16 px) quads
+1024 "mini"   (  8 px) quads
+
+|31 -  13|12 -       10|9 -                         0|
+|--------|-------------|-----------------------------|
+| unused | sprite size | index (excess bits ignored) |
+8x8 min

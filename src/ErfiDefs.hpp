@@ -660,12 +660,16 @@ namespace gpu_enum_types {
 
 enum GpuOpCode_e {
     UPLOAD,
-    UNLOAD,
+    //UNLOAD,
     DRAW  ,
     CLEAR ,
 };
 
 } // end of gpu_enum_types namespace
+
+// smallest possible sprite
+constexpr const int MINI_SPRITE_BIT_COUNT = 64; // 8x8
+//using MiniSprite = std::bitset<64>;
 
 using GpuOpCode = gpu_enum_types::GpuOpCode_e;
 

@@ -54,6 +54,8 @@ public:
 
     void assemble_from_string(const std::string & source);
 
+    void print_warnings(std::ostream &) const;
+
     const ProgramData & program_data() const;
 
     void setup_debugger(Debugger & dbgr);
@@ -77,6 +79,8 @@ private:
 
     // debugging erfi program info
     DebuggerInstToLineMap m_inst_to_line_map;
+
+    std::vector<std::string> m_warnings;
 };
 
 } // end of erfin namespace

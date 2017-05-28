@@ -5,11 +5,9 @@ assume fixed-point
     add  y 1
     load y
     div  z x y
-    #io   halt
     set b x
     set sp stack-start
     call expo
-    #io   halt
   jump main
 : erfindung-text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
@@ -32,40 +30,47 @@ ________________________________________________________________________________
 ____________________________________________________________________________________X_______
 X_X_X_X_X_X_X_X_X_X_X_X_X_X_X_XX__XX__XX__XX__XX__XXXXXXXXXXXXXXXXXXXXXXXX_____XXXXXX_______
 ____________ ]
-: main 
+: main
        set sp stack-start
        set  x 92
        set  y 19
        set  z erfindung-text
-       io   upload x y z # upload sprite
+       set  a 0 # OK, not too bad, a was for answer for io, so little change is
+                # needed. 0 -> 000(mega size) first texture quadrant
+       io   upload x y z a # upload sprite
        set  z a
 
        io   read random x
-       mod  x a 228
+       mod  x x 228
 
        io   read random y
-       mod  y a 221
+       mod  y y 221
 
-       set  b 1 
+       set  b 1
        set  c 1
        # stack pointer, points to an "initialized/in-use variable"
-       # +---+        push +---+        pop +---+ 
+       # +---+        push +---+        pop +---+
        # | ? | [+3]        | c | <- sp      | ? | <- [ 0]  sp (was)
        # | ? | [+2]        | b |            | ? |    [-1]
        # | ? | [+1]        | a |            | ? |    [-2]
        # +---+ <- sp       +---+            +---+ <- sp
        # therefore push and pop offsets must be different
        jump start-program
-: loop 
+: loop
        set x 1
        io wait  x
+       io read random x
+       and x x 8
+       mod x x 8
+       comp x    1
+       skip x ==
+           jump skip-clear
        io clear x
-
+: skip-clear
        # semantic issue
        pop y x c b z
 
        io draw x y z # draw(x, y, z) = draw(x_pos, y_pos, sprite)
-       
 
        io read controller a
        comp a    1
@@ -102,15 +107,15 @@ ____________ ]
        # x = x_pos (already set)
        set  y b  # y = x velocity
        set  z 228
-       # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds 
+       # a = check_bounds(x, y, z) x -> pos, y -> vel, z -> bounds
 
-       # x = x_pos, y = x_vel -> a = new_x_vel       
+       # x = x_pos, y = x_vel -> a = new_x_vel
        call check-bounds
 
        save a sp -3 # I guess where x velocity is
-       
+
        # load y_pos, y_vel
-       load x sp 
+       load x sp
        load y sp -2
        set  z 221
 
@@ -119,7 +124,7 @@ ____________ ]
        # save to y velocity
        save a sp -2
        jump loop
-       
+
 # this is a """function"""
 assume integer
 : check-bounds

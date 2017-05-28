@@ -62,6 +62,7 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window);
 
 int main(int argc, char ** argv) {
     using namespace erfin;
+#   if 0
     Apu apu;
     //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     apu.update(0.1);
@@ -103,7 +104,7 @@ int main(int argc, char ** argv) {
     }
     apu.update(0.);
     //std::this_thread::sleep_for(std::chrono::milliseconds(20000));
-
+#   endif
 #   if 0
     for (int i = 0; i != 60; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(15));
@@ -142,6 +143,7 @@ int main(int argc, char ** argv) {
 
     try {
         assembler.assemble_from_file(filename);
+        assembler.print_warnings(std::cout);
         console.load_program(assembler.program_data());
         win.create(sf::VideoMode(unsigned(ErfiGpu::SCREEN_WIDTH *3),
                                  unsigned(ErfiGpu::SCREEN_HEIGHT*3)), " ");
