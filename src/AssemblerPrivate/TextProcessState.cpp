@@ -51,6 +51,70 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end);
 
 namespace erfin {
 
+/* explicit */ AssumptionRAII::AssumptionRAII(Assumption * ptr):
+    m_ptr(ptr),
+    m_old(*ptr)
+{}
+
+AssumptionRAII::AssumptionRAII(AssumptionRAII && rhs):
+    m_ptr(rhs.m_ptr),
+    m_old(rhs.m_old)
+{
+    rhs.m_ptr = nullptr;
+}
+
+AssumptionRAII & AssumptionRAII::operator = (AssumptionRAII && rhs) {
+    if (this != &rhs) {
+        m_ptr = rhs.m_ptr;
+        m_old = rhs.m_old;
+        rhs.m_ptr = nullptr;
+    }
+    return *this;
+}
+
+AssumptionRAII::~AssumptionRAII() {
+    if (!m_ptr) return;
+    *m_ptr = m_old;
+}
+
+void TextProcessState::include_assumption(Assumption assume) {
+    using Asr = Assembler;
+    switch (assume) {
+    case Asr::NO_ASSUMPTIONS: m_assumptions = assume; return;
+    case Asr::USING_FP: case Asr::USING_INT:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        ((m_assumptions & ~0x3) | assume);
+        return;
+    case Asr::SAVE_AND_RESTORE_REGISTERS:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        (m_assumptions | assume);
+        return;
+    default:
+        throw Error("Invalid assumption to include.");
+    }
+}
+
+void TextProcessState::exclude_assumption(Assumption assume) {
+    using Asr = Assembler;
+    switch (assume) {
+    case Asr::NO_ASSUMPTIONS: return;
+    case Asr::USING_FP: case Asr::USING_INT:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        (m_assumptions & ~0x3);
+        return;
+    case Asr::SAVE_AND_RESTORE_REGISTERS:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        (m_assumptions & ~0x4);
+        return;
+    default:
+        throw Error("Invalid assumption to exclude.");
+    }
+}
+
+AssumptionRAII TextProcessState::get_scoped_assumption_restorer() {
+    return AssumptionRAII(&m_assumptions);
+}
+
 void TextProcessState::add_instruction
     (erfin::Inst inst, const std::string * label)
 {
@@ -159,8 +223,10 @@ std::runtime_error TextProcessState::make_error(const std::string & str) const n
 std::size_t TextProcessState::current_source_line() const
     { return m_current_source_line; }
 
-bool TextProcessState::last_instruction_was(OpCode op) const
-    { return decode_op_code(m_program_data.back()) == op; }
+bool TextProcessState::last_instruction_was(OpCode op) const {
+    if (m_program_data.empty()) return false;
+    return decode_op_code(m_program_data.back()) == op;
+}
 
 } // end of erfin namespace
 
@@ -182,7 +248,7 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
         // and a newline character is what is expected to be returned, expect
         // for the special functions which are not gotten from
         // get_line_processing_func
-        auto func = erfin::get_line_processing_function(state.assumptions, *beg);
+        auto func = erfin::get_line_processing_function(state.assumptions(), *beg);
         if (func) {
             auto new_beg = func(state, beg, end);
             for (auto itr = beg; itr != new_beg; ++itr)

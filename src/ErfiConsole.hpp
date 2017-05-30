@@ -122,6 +122,7 @@ private:
 template <typename Func>
 void Console::run_until_wait(Func && f) {
     pack.gpu->wait(*pack.ram);
+    pack.apu->update();
     pack.dev->set_wait_time();
     while (!pack.dev->wait_requested() && !pack.dev->halt_requested()) {
         pack.cpu->run_cycle(pack);

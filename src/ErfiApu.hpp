@@ -66,7 +66,7 @@ public:
 
     void enqueue(ApuInst);
 
-    void update(double et);
+    void update();
 
     void io_write(UInt32);
 

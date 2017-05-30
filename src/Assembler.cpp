@@ -37,7 +37,7 @@ namespace {
 using StringCIter = std::vector<std::string>::const_iterator;
 using UInt32 = erfin::UInt32;
 using Error = std::runtime_error;
-using SuffixAssumption = erfin::Assembler::SuffixAssumption;
+using SuffixAssumption = erfin::Assembler::Assumption;
 using TextProcessState = erfin::TextProcessState;
 
 // high level textual processing

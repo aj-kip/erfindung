@@ -65,7 +65,7 @@ int main(int argc, char ** argv) {
 #   if 0
     Apu apu;
     //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    apu.update(0.1);
+    apu.update();
     //std::this_thread::sleep_for(std::chrono::milliseconds(100));
     {
         // needs to be clearer that it's notes per second
@@ -102,7 +102,7 @@ int main(int argc, char ** argv) {
 
         // implicit silence -- three seconds
     }
-    apu.update(0.);
+    apu.update();
     //std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 #   endif
 #   if 0
@@ -114,7 +114,7 @@ int main(int argc, char ** argv) {
     //return 0;
     //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     //apu.wait_for_play_thread_then_update();
-#   if 0//def MACRO_DEBUG
+#   ifdef MACRO_DEBUG
     try {
         run_encode_decode_tests();
         run_numeric_encoding_tests();

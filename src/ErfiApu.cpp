@@ -107,7 +107,7 @@ void Apu::enqueue(Channel c, ApuInstructionType t, int val) {
 
 void Apu::enqueue(ApuInst i) { enqueue(i.channel, i.type, i.value); }
 
-void Apu::update(double) {
+void Apu::update() {
     process_instructions();
     merge_samples(m_samples_per_channel, m_samples, ALL_POSSIBLE_SAMPLE_FRAMES);
     m_audio_device->upload_samples(m_samples);

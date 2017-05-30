@@ -126,14 +126,14 @@ Reg string_to_register_or_throw
         throw state.make_error(": \"" + reg_str + "\" is not a valid register.");
     return rv;
 }
-
+#if 0
 AssumptionResetRAII::AssumptionResetRAII(TextProcessState & state, SuffixAssumption new_assumpt):
     m_state(&state),
     m_old_assumpt(state.assumptions)
 { state.assumptions = new_assumpt; }
 
 AssumptionResetRAII::~AssumptionResetRAII() { m_state->assumptions = m_old_assumpt; }
-
+#endif
 TokensConstIterator get_eol(TokensConstIterator beg, TokensConstIterator end) {
     while (*beg != "\n") {
         ++beg;
@@ -148,7 +148,7 @@ ExtendedParamForm get_lines_param_form
     using namespace erfin;
 
     // this had better not be the begging of the line
-    assert(!get_line_processing_function(erfin::Assembler::NO_ASSUMPTION, *beg));
+    assert(!get_line_processing_function(erfin::Assembler::NO_ASSUMPTIONS, *beg));
 
     // naturally anyone can read this (oh god it's shit)
     const int arg_count = int(end - beg);
