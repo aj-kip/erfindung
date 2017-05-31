@@ -77,13 +77,18 @@ AssumptionRAII::~AssumptionRAII() {
     *m_ptr = m_old;
 }
 
+TextProcessState::TextProcessState():
+    m_assumptions(Assembler::SAVE_AND_RESTORE_REGISTERS),
+    m_current_source_line(1)
+{}
+
 void TextProcessState::include_assumption(Assumption assume) {
     using Asr = Assembler;
     switch (assume) {
     case Asr::NO_ASSUMPTIONS: m_assumptions = assume; return;
     case Asr::USING_FP: case Asr::USING_INT:
         m_assumptions = static_cast<Assembler::Assumption>
-                        ((m_assumptions & ~0x3) | assume);
+                        ((m_assumptions & ~Asr::NUMERIC_ASSUMPTION_BIT_MASK) | assume);
         return;
     case Asr::SAVE_AND_RESTORE_REGISTERS:
         m_assumptions = static_cast<Assembler::Assumption>
@@ -100,11 +105,11 @@ void TextProcessState::exclude_assumption(Assumption assume) {
     case Asr::NO_ASSUMPTIONS: return;
     case Asr::USING_FP: case Asr::USING_INT:
         m_assumptions = static_cast<Assembler::Assumption>
-                        (m_assumptions & ~0x3);
+                        (m_assumptions & ~Asr::NUMERIC_ASSUMPTION_BIT_MASK);
         return;
     case Asr::SAVE_AND_RESTORE_REGISTERS:
         m_assumptions = static_cast<Assembler::Assumption>
-                        (m_assumptions & ~0x4);
+                        (m_assumptions & ~Asr::SAVE_AND_RESTORE_REGISTERS);
         return;
     default:
         throw Error("Invalid assumption to exclude.");
@@ -152,7 +157,6 @@ void TextProcessState::resolve_unfulfilled_labels() {
                         "\" not found anywhere in source code.");
         }
         const LabelPair & lbl_pair = itr->second;
-
         assert((serialize(m_program_data[unfl_pair.program_location]) & 0xFFFF) == 0);
         if (lbl_pair.program_location > std::numeric_limits<int16_t>::max()) {
             throw Error("Label resolves to a location that is too large for "
@@ -160,9 +164,8 @@ void TextProcessState::resolve_unfulfilled_labels() {
         }
         m_program_data[unfl_pair.program_location] |=
             erfin::encode_immd_int(int(lbl_pair.program_location));
-        int i = erfin::decode_immd_as_int(m_program_data[unfl_pair.program_location]);
-        (void)i;
-        assert(i == int(lbl_pair.program_location));
+        assert(decode_immd_as_int(m_program_data[unfl_pair.program_location]) ==
+               int(lbl_pair.program_location)                                  );
     }
     m_unfulfilled_labels.clear();
 }
@@ -251,8 +254,10 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
         auto func = erfin::get_line_processing_function(state.assumptions(), *beg);
         if (func) {
             auto new_beg = func(state, beg, end);
+#           ifdef MACRO_DEBUG
             for (auto itr = beg; itr != new_beg; ++itr)
                 assert(*itr != "\n");
+#           endif
             beg = new_beg;
         } else if (*beg == "data") {
             beg = process_data(state, beg, end, &data_cache);
@@ -394,12 +399,11 @@ StringCIter process_numbers
         NumericParseInfo npi;
         npi = parse_number(*beg);
         switch (npi.type) {
-        case INTEGER: data.push_back(npi.integer); break;
+        case INTEGER: data.push_back(UInt32(npi.integer)); break;
         case DECIMAL: data.push_back(to_fixed_point(npi.floating_point)); break;
         case NOT_NUMERIC:
             throw state.make_error(": all entries in the data sequence must be"
                                    "  numeric");
-            break;
         default: assert(false); break;
         }
     }

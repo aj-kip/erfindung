@@ -117,7 +117,48 @@ StringCIter make_sysio
 }
 
 void run_make_sysio_tests() {
-    ;
+#   ifdef MACRO_DEBUG
+    {
+    constexpr const char * const with_io_throw_away =
+        "assume io-throw-away\n"
+        "io triangle tempo x 4\n"
+        "io triangle note x 400 500 300";
+    constexpr const char * const without_io_throw_away =
+        "io triangle tempo x 4\n"
+        "io triangle note x 400 500 300";
+    std::size_t throw_away_size;
+    {
+    Assembler asr;
+    asr.assemble_from_string(with_io_throw_away);
+    throw_away_size = asr.program_data().size();
+    }
+    Assembler asr;
+    asr.assemble_from_string(without_io_throw_away);
+    assert(throw_away_size < asr.program_data().size());
+    }
+    {
+    constexpr const char * const all_io_expressions =
+        "io read controller x\n"
+        "io read timer      x # <- time since last wait\n"
+        "io read random     x y z # <- rng semantics\n"
+        "io read gpu        x # <- read any output from the gpu\n"
+        "io read bus-error  x # <- check if a bus error occured\n"
+        "io read random     x y z a b c\n"
+        "io pulse one tempo x 4\n"
+        "io triangle note x 100\n"
+        "io pulse two duty-cycle-window x\n"
+        "io noise note x 900 800 700 600 500 400 300 200 100\n"
+        "io upload x y z a\n"
+        "io clear x\n"
+        "io draw x y z\n"
+        "io wait x\n"
+        "io halt y\n"
+        "io upload x y x z # should emit a warning\n"
+        "io read random x y x a # should also emit a warning\n";
+    Assembler asr;
+    asr.assemble_from_string(all_io_expressions);
+    }
+#   endif
 }
 
 } // end of erfin namespace
@@ -331,7 +372,7 @@ StringCIter make_io_halt
     using namespace erfin;
     using namespace device_addresses;
     auto eol = get_eol(++beg, end);
-    if (beg - eol != 1) {
+    if (eol - beg != 1) {
         throw state.make_error(": halt io command must have exactly one "
                                "register argument.");
     }

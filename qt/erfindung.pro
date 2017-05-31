@@ -69,6 +69,8 @@ linux-clang {
     DEFINES += MACRO_COMPILER_CLANG
 }
 
+#message($$DEFINES)
+
 INCLUDEPATH += \
     /media/data/dev/c++/inc
 

@@ -73,19 +73,7 @@ struct NumericParseInfo {
 const char * extended_param_form_to_string(ExtendedParamForm xpf);
 
 NumericParseInfo parse_number(const std::string & str);
-#if 0
-class AssumptionResetRAII {
-public:
-    using SuffixAssumption = erfin::Assembler::Assumption;
 
-    AssumptionResetRAII(TextProcessState & state, SuffixAssumption new_assumpt);
-    ~AssumptionResetRAII();
-
-private:
-    TextProcessState * m_state;
-    const SuffixAssumption m_old_assumpt;
-};
-#endif
 TokensConstIterator get_eol(TokensConstIterator beg, TokensConstIterator end);
 
 ExtendedParamForm get_lines_param_form

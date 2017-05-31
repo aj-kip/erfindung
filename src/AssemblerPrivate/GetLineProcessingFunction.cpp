@@ -48,9 +48,6 @@ namespace {
 using StringCIter = erfin::TokensConstIterator;
 using TextProcessState = erfin::TextProcessState;
 using Assembler = erfin::Assembler;
-#if 0
-using AssumptionResetRAII = erfin::AssumptionResetRAII;
-#endif
 using UInt32 = erfin::UInt32;
 
 StringCIter make_plus(TextProcessState &, StringCIter, StringCIter);

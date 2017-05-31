@@ -95,25 +95,26 @@ NumericParseInfo parse_number(const std::string & str) {
 
 erfin::Reg string_to_register(const std::string & str) {
     using namespace erfin;
-
-    if (str.empty()) return Reg::COUNT;
-
-    auto is1ch = [&str] (Reg r) { return (str.size() == 1) ? r : Reg::COUNT; };
-    auto _2ndch = [&str] (Reg r, char c) {
-        if (str.size() == 2)
-            return str[1] == c ? r : Reg::COUNT;
-        return Reg::COUNT;
+    static_assert(sizeof(char)*2 == sizeof(UInt16)               ,
+                  "string_to_register Implementation must change");
+    auto first2eq = [](const char * lhs, const char * rhs) {
+        return *reinterpret_cast<const UInt16 *>(lhs) ==
+               *reinterpret_cast<const UInt16 *>(rhs);
     };
 
-    switch (str[0]) {
-    case 'x': return is1ch(Reg::X);
-    case 'y': return is1ch(Reg::Y);
-    case 'z': return is1ch(Reg::Z);
-    case 'a': return is1ch(Reg::A);
-    case 'b': return is1ch(Reg::B);
-    case 'c': return is1ch(Reg::C);
-    case 's': return _2ndch(Reg::SP, 'p');
-    case 'p': return _2ndch(Reg::PC, 'c');
+    switch (str.size()) {
+    case 1: switch (str[0]) {
+        case 'x': return Reg::X    ;
+        case 'y': return Reg::Y    ;
+        case 'z': return Reg::Z    ;
+        case 'a': return Reg::A    ;
+        case 'b': return Reg::B    ;
+        case 'c': return Reg::C    ;
+        default : return Reg::COUNT;
+        }
+    case 2: if (first2eq(str.c_str(), "pc")) return Reg::PC;
+            if (first2eq(str.c_str(), "sp")) return Reg::SP;
+            return Reg::COUNT;
     default: return Reg::COUNT;
     }
 }
@@ -126,14 +127,7 @@ Reg string_to_register_or_throw
         throw state.make_error(": \"" + reg_str + "\" is not a valid register.");
     return rv;
 }
-#if 0
-AssumptionResetRAII::AssumptionResetRAII(TextProcessState & state, SuffixAssumption new_assumpt):
-    m_state(&state),
-    m_old_assumpt(state.assumptions)
-{ state.assumptions = new_assumpt; }
 
-AssumptionResetRAII::~AssumptionResetRAII() { m_state->assumptions = m_old_assumpt; }
-#endif
 TokensConstIterator get_eol(TokensConstIterator beg, TokensConstIterator end) {
     while (*beg != "\n") {
         ++beg;

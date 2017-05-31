@@ -65,9 +65,6 @@ UInt32 div_fp  (UInt32 x, UInt32 y);
 UInt32 div_int (UInt32 x, UInt32 y);
 UInt32 mod_fp  (UInt32 x, UInt32 y);
 UInt32 mod_int (UInt32 x, UInt32 y);
-#if 0
-UInt32 comp_fp (UInt32 x, UInt32 y);
-#endif
 UInt32 comp_int(UInt32 x, UInt32 y);
 
 } // end of <anonymous> namespace
@@ -324,18 +321,7 @@ UInt32 mod_int (UInt32 x, UInt32 y) {
     int rv = mag(int(x)) % mag(int(y));
     return UInt32(sign(x)*sign(y)*rv);
 }
-#if 0
-UInt32 comp_fp (UInt32 x, UInt32 y) {
-    using namespace erfin;
-    UInt32 temp = 0;
-    int res = erfin::fp_compare(x, y);
-    if (res == 0) temp |= COMP_EQUAL_MASK;
-    if (res <  0) temp |= COMP_LESS_THAN_MASK;
-    if (res >  0) temp |= COMP_GREATER_THAN_MASK;
-    if (res != 0) temp |= COMP_NOT_EQUAL_MASK;
-    return temp;
-}
-#endif
+
 UInt32 comp_int(UInt32 x, UInt32 y) {
     using namespace erfin;
     UInt32 temp = 0;

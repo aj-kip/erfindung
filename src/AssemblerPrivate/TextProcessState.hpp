@@ -58,18 +58,7 @@ public:
     friend class StrWrapTextStateAttorney;
     friend void run_get_line_processing_function_tests();
 
-    TextProcessState(): m_assumptions(Assembler::NO_ASSUMPTIONS),
-                        m_current_source_line(1) {}
-
-    struct LabelPair { std::size_t program_location, source_line; };
-    struct UnfilledLabelPair {
-        UnfilledLabelPair(std::size_t i_, const std::string & s_):
-            program_location(i_),
-            label(s_)
-        {}
-        std::size_t program_location;
-        std::string label;
-    };
+    TextProcessState();
 
     Assumption assumptions() const { return m_assumptions; }
     void include_assumption(Assumption);
@@ -82,9 +71,11 @@ public:
 
     void add_instruction(erfin::Inst inst, const std::string * label = nullptr);
 
+    // regular text processing does not need this
     void move_program
         (ProgramData & prog, std::vector<std::size_t> & inst_to_line);
 
+    // regular text processing does not need this
     void resolve_unfulfilled_labels();
 
     StringCIter process_label(StringCIter beg, StringCIter end);
@@ -95,6 +86,7 @@ public:
 
     void push_warning(const std::string &);
 
+    // regular text processing does not need this
     void retrieve_warnings(std::vector<std::string> &);
 
     std::runtime_error make_error(const std::string & str) const noexcept;
@@ -106,6 +98,17 @@ public:
     static void run_tests();
 
 private:
+    struct UnfilledLabelPair {
+        UnfilledLabelPair(std::size_t i_, const std::string & s_):
+            program_location(i_),
+            label(s_)
+        {}
+        std::size_t program_location;
+        std::string label;
+    };
+
+    struct LabelPair { std::size_t program_location, source_line; };
+
     Assumption m_assumptions;
     std::size_t m_current_source_line;
     ProgramData m_program_data;
