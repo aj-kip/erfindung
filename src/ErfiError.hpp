@@ -26,10 +26,10 @@
 
 namespace erfin {
 
-class ErfiError : public std::exception {
+class ErfiCpuError : public std::exception {
 public:
-    ErfiError(std::size_t program_location_, const std::string && msg);
-    ErfiError(std::size_t program_location_, const char * msg);
+    ErfiCpuError(std::size_t program_location_, const std::string && msg);
+    ErfiCpuError(std::size_t program_location_, const char * msg);
 
     const char * what() const noexcept override { return m_message.c_str(); }
 
@@ -40,13 +40,13 @@ private:
     std::string m_message;
 };
 
-inline ErfiError::ErfiError
+inline ErfiCpuError::ErfiCpuError
     (std::size_t program_location_, const std::string && msg):
     m_program_location(program_location_),
     m_message(std::move(msg))
 {}
 
-inline ErfiError::ErfiError(std::size_t program_location_, const char * msg):
+inline ErfiCpuError::ErfiCpuError(std::size_t program_location_, const char * msg):
     m_program_location(program_location_),
     m_message(msg)
 {}

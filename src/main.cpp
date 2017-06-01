@@ -29,6 +29,7 @@
 #include <sstream>
 #include <queue>
 #include <algorithm>
+#include <fstream>
 
 #include <SFML/Graphics.hpp>
 
@@ -48,19 +49,224 @@ namespace {
 
 using Error = std::runtime_error;
 
-void test_string_processing();
+struct ProgramOptions {
+    ProgramOptions();
+    ProgramOptions(const ProgramOptions &) = delete;
+    ProgramOptions(ProgramOptions &&);
+    ~ProgramOptions();
+
+    ProgramOptions & operator = (const ProgramOptions &) = delete;
+#   if 0
+    ProgramOptions & operator = (ProgramOptions &&);
+#   endif
+    void swap(ProgramOptions &);
+
+    bool run_tests;
+    int window_scale;
+    std::istream * input_stream_ptr;
+};
+
+struct OptionsPair : ProgramOptions {
+    OptionsPair();
+    void (*mode)(const ProgramOptions &, const erfin::ProgramData &);
+};
+
+OptionsPair parse_program_options(int argc, char ** argv);
+void run_tests();
+
+} // end of <anonymous> namespace
+
+int main(int argc, char ** argv) {
+    erfin::Assembler assembler;
+    try {
+        auto options = parse_program_options(argc, argv);
+        if (options.run_tests) run_tests();
+        if (options.input_stream_ptr)
+            assembler.assemble_from_stream(*options.input_stream_ptr);
+        assembler.print_warnings(std::cout);
+
+        options.mode(options, assembler.program_data());
+        return 0;
+    } catch (erfin::ErfiCpuError & exp) {
+        using namespace erfin;
+        constexpr const char * const NO_LINE_NUM_MSG =
+            "<no source line associated with this program location>";
+        auto line_num = assembler.translate_to_line_number(exp.program_location());
+        std::cerr << "A problem has occured on source line: ";
+        if (line_num == Assembler::INVALID_LINE_NUMBER)
+            std::cerr << NO_LINE_NUM_MSG;
+        else
+            std::cerr << line_num;
+        std::cerr << "\n(At address " << exp.program_location() << ")\n";
+        std::cerr << exp.what() << std::endl;
+    } catch (std::exception & exp) {
+        std::cerr << exp.what() << std::endl;
+    } catch (...) {
+        std::cerr << "An unknown exceptions was thrown." << std::endl;
+    }
+    return ~0;
+}
+
+namespace {
+
+void windowed_run(const ProgramOptions &, const erfin::ProgramData &);
+void cli_run(const ProgramOptions &, const erfin::ProgramData &);
+void print_help(const ProgramOptions &, const erfin::ProgramData &);
 
 void run_numeric_encoding_tests();
+void test_string_processing();
 
-void adjust_window_view(sf::RenderWindow & window);
+ProgramOptions::ProgramOptions():
+    run_tests(false),
+    window_scale(3),
+    input_stream_ptr(nullptr)
+{}
+
+ProgramOptions::ProgramOptions(ProgramOptions && lhs):
+    ProgramOptions()
+    { swap(lhs); }
+
+ProgramOptions::~ProgramOptions() {
+    if (!input_stream_ptr || input_stream_ptr == &std::cin) return;
+    delete input_stream_ptr;
+}
+#if 0
+ProgramOptions & ProgramOptions::operator = (ProgramOptions && lhs) {
+    swap(lhs);
+    return *this;
+}
+#endif
+void ProgramOptions::swap(ProgramOptions & lhs) {
+    std::swap(run_tests       , lhs.run_tests       );
+    std::swap(window_scale    , lhs.window_scale    );
+    std::swap(input_stream_ptr, lhs.input_stream_ptr);
+}
+
+OptionsPair::OptionsPair():
+    mode(windowed_run)
+{}
+
+OptionsPair parse_program_options(int argc, char ** argv) {
+    OptionsPair opts;
+    static constexpr const char * const ONLY_ONE_INPUT_MSG =
+        "Only one input option permitted.";
+
+    auto select_input = [](OptionsPair & opts, char ** beg, char ** end) {
+        if (beg == end) {
+            opts.mode = print_help;
+            return;
+        }
+        if (end - beg > 1) throw Error("Only one file can be loaded.");
+        if (opts.input_stream_ptr) throw Error(ONLY_ONE_INPUT_MSG);
+        opts.input_stream_ptr = new std::ifstream(*beg, std::ifstream::binary);
+        opts.input_stream_ptr->unsetf(std::ios_base::skipws);
+    };
+
+    auto select_cli = [](OptionsPair & opts, char **, char **)
+        { opts.mode = cli_run; };
+
+    auto select_help = [](OptionsPair & opts, char **, char **)
+        { opts.mode = print_help; };
+
+    auto select_tests = [](OptionsPair & opts, char**, char **)
+        { opts.run_tests = true; };
+
+    auto select_stream_input = [](OptionsPair & opts, char**, char **) {
+        if (opts.input_stream_ptr) throw Error(ONLY_ONE_INPUT_MSG);
+        opts.input_stream_ptr = &std::cin;
+        std::cin.unsetf(std::ios_base::skipws);
+    };
+
+    auto select_window_scale = [](OptionsPair & opts, char ** beg, char ** end) {
+        if (end - beg != 1)
+            throw Error("Window scale expects exactly one argument.");
+        const char * s_end = *beg;
+        const char * s_beg = *beg;
+        while (*s_end) ++s_end;
+        static constexpr const char * const NUM_ERR_MSG =
+            "Window scale expects only base 10 positive integers.";
+        if (!string_to_number(s_beg, s_end, opts.window_scale, 10))
+            throw Error(NUM_ERR_MSG);
+        if (opts.window_scale <= 0) throw Error(NUM_ERR_MSG);
+    };
+
+    static const struct {
+        char identity;
+        const char * longform;
+        void (*process)(OptionsPair &, char **, char **);
+    } options_table[] = {
+        { 'i', "input"       , select_input        },
+        { 'h', "help"        , select_help         },
+        { 'c', "command-line", select_cli          },
+        { 't', "run-tests"   , select_tests        },
+        { 's', "stream-input", select_stream_input },
+        { 'w', "window-scale", select_window_scale }
+    };
+
+    auto unrecogized_option = [](const char * opt) {
+        std::cout << "Unrecognized option: \"" << opt << "\"." << std::endl;
+    };
+
+    int last = 1;
+    void (*process_options)(OptionsPair &, char **, char **) = select_input;
+    auto process_step = [&](int end_index, const char * opt) {
+        if (process_options)
+            process_options(opts, argv + last, argv + end_index);
+        else
+            unrecogized_option(opt);
+    };
+
+    for (int i = 1; i != argc; ++i) {
+        if (argv[i][0] != '-') continue;
+        // switch options
+        process_step(i, argv[last - 1]);
+        last = i + 1;
+        if (argv[i][1] == '-') {
+            process_options = nullptr;
+            for (const auto & entry : options_table) {
+                if (strcmp(argv[i] + 2, entry.longform) == 0) {
+                    process_options = entry.process;
+                    break;
+                }
+            }
+        } else {
+            // shortform (or series of shortforms)
+            decltype (process_options) process = nullptr;
+            for (char * c = argv[i] + 1; *c; ++c) {
+                for (const auto & entry : options_table) {
+                    if (entry.identity != *c) continue;
+                    if (process)
+                        process(opts, nullptr, nullptr);
+                    process = entry.process;
+                }
+            }
+            process_options = process ? process : select_input;
+        }
+    }
+    // if dereference happens here: default option is wrongly being
+    // 'unrecognized'
+    process_step(argc, last == 1 ? nullptr : argv[last - 1]);
+    return opts;
+}
+
+void run_tests() {
+    using namespace erfin;
+    OstreamFormatSaver osfs(std::cout); (void)osfs;
+
+    run_encode_decode_tests();
+    run_numeric_encoding_tests();
+    Assembler::run_tests();
+    ErfiCpu::run_tests();
+    test_string_processing();
+}
+
+void setup_window_view(sf::RenderWindow & window, const ProgramOptions &);
 
 void process_events(erfin::Console & console, sf::Window & window);
 
 void run_console_loop(erfin::Console & console, sf::RenderWindow & window);
 
-} // end of <anonymous> namespace
-
-int main(int argc, char ** argv) {
+void windowed_run(const ProgramOptions & opts, const erfin::ProgramData & program) {
     using namespace erfin;
 #   if 0
     Apu apu;
@@ -106,73 +312,36 @@ int main(int argc, char ** argv) {
     //std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 #   endif
 #   if 0
-    for (int i = 0; i != 60; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
-        apu.update(0.1);
-    }
-#   endif
-    //return 0;
-    //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    //apu.wait_for_play_thread_then_update();
-#   ifdef MACRO_DEBUG
-    try {
-        run_encode_decode_tests();
-        run_numeric_encoding_tests();
-        Assembler::run_tests();
-        ErfiCpu::run_tests();
-        test_string_processing();
-    } catch (std::exception & exp) {
-        std::cout << exp.what() << std::endl;
-        return ~0;
-    }
-#   else
-    (void)run_encode_decode_tests();
-    (void)run_numeric_encoding_tests;
-    (void)Assembler::run_tests;
-    (void)ErfiCpu::run_tests;
-    (void)test_string_processing;
-#   endif
-
     Assembler assembler;
+#   endif
     Console console;
+#   if 0
+    assembler.assemble_from_stream(*opts.input_stream_ptr);
+    assembler.print_warnings(std::cout);
+    console.load_program(assembler.program_data());
+#   endif
+    console.load_program(program);
     sf::RenderWindow win;
+    setup_window_view(win, opts);
+    run_console_loop(console, win);
 
-    const char * filename = "sample.efas";
-    if (argc > 1)
-        filename = argv[1];
-
-    try {
-        assembler.assemble_from_file(filename);
-        assembler.print_warnings(std::cout);
-        console.load_program(assembler.program_data());
-        win.create(sf::VideoMode(unsigned(ErfiGpu::SCREEN_WIDTH *3),
-                                 unsigned(ErfiGpu::SCREEN_HEIGHT*3)), " ");
-        adjust_window_view(win);
-        run_console_loop(console, win);
-    } catch (ErfiError & exp) {
-        constexpr const char * const NO_LINE_NUM_MSG =
-            "<no source line associated with this program location>";
-        auto line_num = assembler.translate_to_line_number(exp.program_location());
-        std::cerr << "A problem has occured on source line: ";
-        if (line_num == Assembler::INVALID_LINE_NUMBER)
-            std::cerr << NO_LINE_NUM_MSG;
-        else
-            std::cerr << line_num;
-        std::cerr << "\n(At address " << exp.program_location() << ")";
-        std::cerr << std::endl;
-        std::cerr << exp.what() << std::endl;
-        return ~0;
-    } catch (std::exception & exp) {
-        std::cout << exp.what() << std::endl;
-        return ~0;
-    }
-    std::cout << std::dec;
     console.print_cpu_registers(std::cout);
     std::cout << "# of op codes " << static_cast<int>(erfin::OpCode::COUNT) << std::endl;
-    return 0;
 }
 
-namespace {
+void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
+    using namespace erfin;
+    Console console;
+    console.load_program(program);
+    while (!console.trying_to_shutdown()) {
+        console.run_until_wait();
+    }
+    console.print_cpu_registers(std::cout);
+}
+
+void print_help(const ProgramOptions &, const erfin::ProgramData &) {
+
+}
 
 void test_fp_multiply(double a, double b);
 
@@ -242,7 +411,7 @@ void run_numeric_encoding_tests() {
     //test_fp_divide(-9.0, 1.1);
 }
 
-void adjust_window_view(sf::RenderWindow & window) {
+void setup_window_view(sf::RenderWindow & window, const ProgramOptions & opts) {
     using namespace erfin;
     sf::View view = window.getView();
     view.setCenter(float(ErfiGpu::SCREEN_WIDTH /2),
@@ -250,6 +419,10 @@ void adjust_window_view(sf::RenderWindow & window) {
     view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
     window.setVerticalSyncEnabled(true);
     window.setView(view);
+    sf::VideoMode vm;
+    vm.width  = unsigned(ErfiGpu::SCREEN_WIDTH *opts.window_scale);
+    vm.height = unsigned(ErfiGpu::SCREEN_HEIGHT*opts.window_scale);
+    window.create(vm, " ");
 }
 
 void process_events(erfin::Console & console, sf::Window & window) {
@@ -276,7 +449,7 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window) {
     sf::Clock clk;
     int fps = 0;
     int frame_count = 0;
-    //int pc_ticks = 0;
+
     sf::Texture screen_pixels;
     std::vector<UInt32> pixel_array;
     screen_pixels.create(ErfiGpu::SCREEN_WIDTH, ErfiGpu::SCREEN_HEIGHT);
@@ -294,11 +467,7 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window) {
 
         window.clear();
 
-        console.run_until_wait([](){
-            //++pc_ticks;
-            //std::cout << "tick " << pc_ticks << ":\n";
-            //console.print_cpu_registers(std::cout);
-        });
+        console.run_until_wait();
         if (console.trying_to_shutdown())
             break;
 

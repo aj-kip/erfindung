@@ -1,0 +1,20 @@
+set sp stack-start
+call rand-10
+set x a
+call rand-10
+set y a
+call rand-10
+set z a
+call rand-10
+set b a
+call rand-10
+set c a
+call rand-10
+save pc -9 # halts machine
+:rand-10
+    io read random a
+    and a a 255
+    mod a a 10
+    add a 1
+    pop pc
+:stack-start data numbers [0]

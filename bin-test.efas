@@ -1,0 +1,4 @@
+set x 0b111   
+rotate x -10
+save pc -9
+

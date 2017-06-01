@@ -29,6 +29,7 @@
 #include <limits>
 #include <string>
 #include <set>
+#include <iosfwd>
 
 namespace erfin {
 
@@ -55,6 +56,8 @@ public:
 
     void assemble_from_file(const char * file);
 
+    void assemble_from_stream(std::istream &);
+
     void assemble_from_string(const std::string & source);
 
     void print_warnings(std::ostream &) const;
@@ -77,6 +80,8 @@ public:
     static void run_tests();
 
 private:
+
+    void assemble_from_work_string(std::string & source);
 
     ProgramData m_program;
 

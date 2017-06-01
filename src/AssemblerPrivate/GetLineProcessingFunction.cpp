@@ -596,11 +596,11 @@ bool op_code_supports_integer_immd(erfin::OpCode op_code) {
     using O = erfin::OpCode;
     switch (op_code) {
     case O::PLUS: case O::MINUS: case O::TIMES: case O::AND: case O::XOR:
-    case O::OR: case O::DIVIDE: case O::COMP: case O::MODULUS:
+    case O::OR  : case O::DIVIDE: case O::COMP: case O::MODULUS:
+    case O::ROTATE:
         return true;
-    default: assert(false); break;
+    default: return false;
     }
-    std::terminate();
 }
 
 StringCIter make_generic_logic

@@ -67,8 +67,8 @@ ____________ ]
        set x 1
        io wait  x
        io read random x
-       and x x 8
-       mod x x 8
+       and x x 3
+       mod x x 2
        comp x    1
        skip x ==
            jump skip-clear

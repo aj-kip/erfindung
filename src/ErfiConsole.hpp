@@ -62,7 +62,7 @@ private:
     std::default_random_engine m_rng;
     sf::Clock m_clock;
     bool m_wait ;
-    bool m_power;
+    bool m_halt_flag;
     UInt32 m_wait_time;
     bool m_bus_error;
 };

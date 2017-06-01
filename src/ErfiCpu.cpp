@@ -81,8 +81,8 @@ void ErfiCpu::reset() {
 
 void ErfiCpu::run_cycle(ConsolePack & console) {
     auto do_read = std::bind(::erfin::do_read, console, std::placeholders::_1);
-    run_cycle(deserialize(do_read(m_registers[std::size_t(Reg::PC)]++)),
-              console                                                 );
+    auto inst = deserialize(do_read(m_registers[std::size_t(Reg::PC)]++));
+    run_cycle(inst, console);
 }
 
 void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
@@ -108,7 +108,7 @@ void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     case O::COMP   : do_arth<fp_compare , comp_int>(inst); return;
     // M-type (2bits for pf, 0 bits for is_fp) (set types)
     // SET, SAVE, LOAD
-    case O::SET : do_set(inst);                                     return;
+    case O::SET : do_set(inst); return;
     case O::SAVE: do_write(console, get_move_op_address(inst), reg0(inst)); return;
     case O::LOAD: reg0(inst) = do_read(console, get_move_op_address(inst)); return;
     // J-type (reducable to 0-bits for "pf")
@@ -117,8 +117,8 @@ void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     case O::CALL: do_call(inst, console); return;
     // "O"-types (0 bits for "pf") (odd-out types)
     // CALL, NOT
-    case O::NOT      : do_not(inst);                            return;
-    default: emit_error(inst);
+    case O::NOT: do_not(inst); return;
+    default: throw_error(inst); // throws
     };
 }
 
@@ -202,7 +202,7 @@ void try_program(const char * source_code, const int inst_limit_c) {
         Console::load_program_to_memory(asmr.program_data(), *con.ram);
         for (int i = 0; i != inst_limit_c; ++i)
             con.cpu->run_cycle(con);
-    } catch (ErfiError & err) {
+    } catch (ErfiCpuError & err) {
         auto sline = asmr.translate_to_line_number(err.program_location());
         std::cerr << "Illegal instruction occured!\n";
         std::cerr << "See line " << sline << " in source\n";
@@ -268,12 +268,12 @@ void try_program(const char * source_code, const int inst_limit_c) {
     std::terminate();
 }
 
-/* private */ void ErfiCpu::emit_error(Inst i) const {
+/* private */ [[noreturn]] void ErfiCpu::throw_error(Inst i) const {
     //               PC increment while the instruction is executing
     //               so it will be one too great if an illegal instruction
-    //               is encountered
-    throw ErfiError(m_registers[std::size_t(Reg::PC)] - 1,
-                    std::move(disassemble_instruction(i)));
+    //               is encountered -> what about jumps?
+    throw ErfiCpuError(m_registers[std::size_t(Reg::PC)] - 1,
+                       std::move(disassemble_instruction(i)));
 }
 
 /* private */ std::string ErfiCpu::disassemble_instruction(Inst i) const {

@@ -25,6 +25,7 @@
 #include "Debugger.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <iostream>
 #include <fstream>
 #include <map>
@@ -56,12 +57,19 @@ int get_file_size(const char * filename);
 namespace erfin {
 
 void Assembler::assemble_from_file(const char * file) {
+#   if 0
     std::string file_contents;
+#   endif
+    // imposes a file size limit of ~2.1GB (no reasonable source file should
+    //                                      ever be this large!)
     int fsize = get_file_size(file);
     if (fsize < 0) {
         throw Error("Could not read file contents (file too large/not "
                     "there?).");
     }
+    std::fstream file_stream(file);
+    assemble_from_stream(file_stream);
+#   if 0
     file_contents.reserve(std::size_t(fsize));
     std::fstream file_stream(file);
     for (int i = 0; i != fsize; ++i) {
@@ -69,25 +77,18 @@ void Assembler::assemble_from_file(const char * file) {
         file_stream.read(&file_contents.back(), 1);
     }
     assemble_from_string(file_contents);
+#   endif
+}
+
+void Assembler::assemble_from_stream(std::istream & in) {
+    std::string temp { std::istream_iterator<char>(in),
+                       std::istream_iterator<char>()   };
+    assemble_from_work_string(temp);
 }
 
 void Assembler::assemble_from_string(const std::string & source) {
-    m_program.clear();
-    std::string source_copy = source;
-    convert_to_lower_case(source_copy);
-    std::vector<std::string> line_list = seperate_into_lines(source_copy);
-    for (std::string & str : line_list)
-        remove_comments_from(str);
-    // I need some means to sync line numbers with the source code
-    std::vector<std::string> tokens = tokenize(line_list);
-
-    TextProcessState tpstate;
-
-    tpstate.process_tokens(tokens.begin(), tokens.end());
-    tpstate.retrieve_warnings(m_warnings);
-    // only when a valid program has been assembled do we swap in the actual
-    // instructions, as a throw may occur at any point of the text processing
-    tpstate.move_program(m_program, m_inst_to_line_map);
+    std::string temp = source;
+    assemble_from_work_string(temp);
 }
 
 void Assembler::print_warnings(std::ostream & out) const {
@@ -102,6 +103,24 @@ const ProgramData & Assembler::program_data() const
 void Assembler::setup_debugger(Debugger & dbgr) {
     AssemblerDebuggerAttorney::copy_line_inst_map_to_debugger
         (m_inst_to_line_map, dbgr);
+}
+
+/* private */ void Assembler::assemble_from_work_string(std::string & source) {
+    m_program.clear();
+    convert_to_lower_case(source);
+    std::vector<std::string> line_list = seperate_into_lines(source);
+    for (std::string & str : line_list)
+        remove_comments_from(str);
+    // I need some means to sync line numbers with the source code
+    std::vector<std::string> tokens = tokenize(line_list);
+
+    TextProcessState tpstate;
+
+    tpstate.process_tokens(tokens.begin(), tokens.end());
+    tpstate.retrieve_warnings(m_warnings);
+    // only when a valid program has been assembled do we swap in the actual
+    // instructions, as a throw may occur at any point of the text processing
+    tpstate.move_program(m_program, m_inst_to_line_map);
 }
 
 std::size_t Assembler::translate_to_line_number

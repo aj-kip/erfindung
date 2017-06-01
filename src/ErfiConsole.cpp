@@ -40,7 +40,7 @@ namespace erfin {
 UtilityDevices::UtilityDevices():
     m_rng(std::random_device()()),
     m_wait(false),
-    m_power(true),
+    m_halt_flag(false),
     m_bus_error(false)
 {}
 
@@ -50,13 +50,13 @@ UInt32 UtilityDevices::generate_random_number()
 
 UInt32 UtilityDevices::query_elapsed_time() const { return m_wait_time; }
 
-void UtilityDevices::power(UInt32 p) { m_power = (p != 0); }
+void UtilityDevices::power(UInt32 p) { m_halt_flag = (p != 0); }
 
 void UtilityDevices::wait (UInt32 w) { m_wait = (w != 0); }
 
 bool UtilityDevices::wait_requested() const { return m_wait; }
 
-bool UtilityDevices::halt_requested() const { return !m_power; }
+bool UtilityDevices::halt_requested() const { return m_halt_flag; }
 
 void UtilityDevices::set_wait_time() {
     double et = double(m_clock.getElapsedTime().asSeconds());
