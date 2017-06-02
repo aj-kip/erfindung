@@ -332,9 +332,11 @@ void windowed_run(const ProgramOptions & opts, const erfin::ProgramData & progra
 void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
     using namespace erfin;
     Console console;
+
     console.load_program(program);
     while (!console.trying_to_shutdown()) {
         console.run_until_wait();
+        sf::sleep(sf::microseconds(16667));
     }
     console.print_cpu_registers(std::cout);
 }
@@ -413,16 +415,19 @@ void run_numeric_encoding_tests() {
 
 void setup_window_view(sf::RenderWindow & window, const ProgramOptions & opts) {
     using namespace erfin;
+    sf::VideoMode vm;
+    vm.width  = unsigned(ErfiGpu::SCREEN_WIDTH *opts.window_scale);
+    vm.height = unsigned(ErfiGpu::SCREEN_HEIGHT*opts.window_scale);
+    window.create(vm, " ");
+
     sf::View view = window.getView();
     view.setCenter(float(ErfiGpu::SCREEN_WIDTH /2),
                    float(ErfiGpu::SCREEN_HEIGHT/2));
     view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
     window.setVerticalSyncEnabled(true);
+    window.setFramerateLimit(60);
     window.setView(view);
-    sf::VideoMode vm;
-    vm.width  = unsigned(ErfiGpu::SCREEN_WIDTH *opts.window_scale);
-    vm.height = unsigned(ErfiGpu::SCREEN_HEIGHT*opts.window_scale);
-    window.create(vm, " ");
+
 }
 
 void process_events(erfin::Console & console, sf::Window & window) {

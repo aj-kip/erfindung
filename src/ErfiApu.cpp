@@ -301,14 +301,18 @@ void SfmlAudioDevice::upload_samples(const std::vector<Int16> & samples_) {
     m_samples.insert(m_samples.end(), samples_.begin(), samples_.end());
     if (!m_samples.empty() && getStatus() == Stopped)
         play();
+#   if 0
     std::cout << "Uploaded " << samples_.size() << " samples." << std::endl;
+#   endif
 }
 
 /* private override final */ bool SfmlAudioDevice::onGetData(Chunk & data) {
     {
     std::unique_lock<std::mutex> lock(m_samples_mutex);
     (void)lock;
+#   if 0
     std::cout << "Swapping in " << m_samples.size() << " samples." << std::endl;
+#   endif
     m_samples_hot.swap(m_samples);
     m_samples.clear();
     }

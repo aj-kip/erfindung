@@ -631,7 +631,7 @@ StringCIter make_generic_arithemetic
     default: assumption_matters = true; break;
     }
 
-    Reg a1;
+    Reg ans; // the first register is ALWAYS the answer
     ++beg;
     auto eol = get_eol(beg, end);
     const auto pf = get_lines_param_form(beg, eol);
@@ -649,13 +649,13 @@ StringCIter make_generic_arithemetic
         MACRO_FALLTHROUGH;
     case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
     case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
-        a1 = string_to_register(*beg);
+        ans = string_to_register(*beg);
         break;
     default:
         throw state.make_error(": unsupported parameters.");
     }
 
-    Reg a2, ans;
+    Reg a1, a2;
     Inst inst;
     Immd (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
     const std::string * label = nullptr;
@@ -688,20 +688,20 @@ StringCIter make_generic_arithemetic
 
     switch (pf) {
     case XPF_2R: // psuedo instruction
-        a2 = ans = string_to_register(*(beg + 1));
-        inst = encode(op_code, a1, a2, ans);
+        a1 = a2 = string_to_register(*(beg + 1));
+        inst = encode(op_code, ans, a1, a2);
         break;
     case XPF_3R:
-        a2  = string_to_register(*(beg + 1));
-        ans = string_to_register(*(beg + 2));
-        inst = encode(op_code, a1, a2, ans);
+        a1 = string_to_register(*(beg + 1));
+        a2 = string_to_register(*(beg + 2));
+        inst = encode(op_code, ans, a1, a2);
         break;
     case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
-        ans = string_to_register(*(beg + 1));
-        inst = encode(op_code, a1, ans, handle_immd(eol, op_code, state));
+        a2 = string_to_register(*(beg + 1));
+        inst = encode(op_code, ans, a2, handle_immd(eol, op_code, state));
         break;
     case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
-        inst = encode(op_code, a1, a1, handle_immd(eol, op_code, state));
+        inst = encode(op_code, ans, ans, handle_immd(eol, op_code, state));
         break;
     default: assert(false); break;
     }

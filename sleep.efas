@@ -1,0 +1,14 @@
+set sp stack-start
+set x 120
+call sleep
+save pc -9
+:sleep
+    comp a x    0
+    skip a   != 
+        jump sleep-end
+    sub x 1
+    io wait a
+    call sleep
+:sleep-end pop pc
+:stack-start data numbers [0]
+
