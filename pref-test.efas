@@ -1,0 +1,112 @@
+set sp stack-start
+:back
+assume integer
+set x l00
+set y l01
+sub z y x # z -> one part of the jump table
+
+#save pc -9
+
+#set y end
+#sub y y x # y -> length of table
+#div x y z # x -> number of table cells
+
+io read random x
+call abs
+set  x 0
+mod  a a 22 # 0x16 -> 22
+set  b a
+mul  a z
+add  a l00
+set  x 100
+set  y 200
+
+add c 1
+jump a
+
+: l00
+    add  z x y 
+    jump end
+: l01 
+    sub  z x y
+    jump end
+: l02
+    and  z x y
+    jump end
+: l03
+    xor  z x y
+    jump end
+: l04
+    or  z x y
+    jump end
+: l05
+    rot  z x y
+    jump end
+: l06
+    mul  z x y
+    jump end
+: l07
+    div  z x y
+    jump end
+: l08 
+    mod  z x y
+    jump end
+: l09 
+    comp z x y
+    jump end
+assume fp
+: l0A 
+    add  z x y
+    jump end
+: l0B 
+    sub  z x y
+    jump end
+: l0C 
+    and  z x y
+    jump end
+: l0D 
+    xor  z x y
+    jump end
+: l0E  
+    or   z x y
+    jump end
+: l0F 
+    mul  z x y
+    jump end
+: l10 
+    div  z x y
+    jump end
+: l11 
+    mod  z x y
+    jump end
+: l12 
+    comp z x y
+    jump end
+# neither integer nor fp specific
+: l13 
+    set z x
+    jump end
+: l14 
+    save z save-spot
+    jump end
+: l15 
+    load z save-spot
+    jump end
+:end
+assume int
+
+set  z 1000
+mul  z 10000
+comp z c    z
+skip z   ==
+    jump back
+save pc -9
+:abs
+push x
+comp a x    0
+skip a   >=
+    mul x x -1
+set a x
+pop x pc
+:save-spot   data numbers [0]
+:stack-start data numbers [0]

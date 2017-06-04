@@ -64,7 +64,6 @@ struct GpuContext {
 /* static */ const int ErfiGpu::SCREEN_HEIGHT = 240;
 
 ErfiGpu::ErfiGpu():
-    m_index_pos(0),
     m_cold(new GpuContext()),
     m_hot (new GpuContext())
 {
@@ -260,13 +259,12 @@ void upload_sprite(erfin::GpuContext & ctx, const erfin::UInt32 * memory) {
     std::bitset<32> line32 = *start;
     UInt32 bit_pos = 0;
     for (UInt32 y = 0; y != height; ++y) {
-
         for (UInt32 x = 0; x != width ; ++x) {
             ctx.sprite_memory[dest_offset + x] = line32[31 - (bit_pos % 32)];
             ++bit_pos;
             if (bit_pos % 32 == 0) {
                 line32 = *++start;
-                assert(start != end);
+                assert(start != end || bit_pos == width*height);
             }
         }
         dest_offset += dest_size;
@@ -288,7 +286,7 @@ void draw_sprite(erfin::GpuContext & ctx) {
     const UInt32 SCREEN_WIDTH  = UInt32(ErfiGpu::SCREEN_WIDTH );
     const UInt32 SCREEN_HEIGHT = UInt32(ErfiGpu::SCREEN_HEIGHT);
 
-    auto text_size   = compute_size_of_sprite(text_index);
+    auto text_size   = compute_size_of_sprite (text_index);
     auto text_offset = convert_index_to_offset(text_index);
 
     // grab the bits and render (using xor)

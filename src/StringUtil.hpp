@@ -30,6 +30,7 @@
 
 #include <type_traits>
 #include <stdexcept>
+#include <limits>
 #include <iostream>
 
 // <------------------------- Implementation Detail -------------------------->

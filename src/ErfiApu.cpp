@@ -35,7 +35,9 @@ namespace {
 using Int16 = std::int16_t;
 using Error = std::runtime_error;
 
+#if 0
 constexpr const Int16 MIN_AMP = std::numeric_limits<Int16>::min();
+#endif
 constexpr const Int16 MAX_AMP = std::numeric_limits<Int16>::max();
 
 constexpr const std::size_t DUTY_CYCLE_WINDOW_SIZE = sizeof(int32_t)*8;
@@ -88,9 +90,11 @@ private:
 };
 
 Apu::Apu():
-    m_channel_info       (static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
-    m_samples_per_channel(static_cast<std::size_t>(Channel::CHANNEL_COUNT)),
+    m_channel_info       (static_cast<std::size_t>(Channel::COUNT)),
+    m_samples_per_channel(static_cast<std::size_t>(Channel::COUNT)),
+#   if 0
     m_sample_frames      (0),
+#   endif
     m_audio_device       (new SfmlAudioDevice())
 {
     static_assert(std::is_same<DutyCycleWindow, ::DutyCycleWindow>::value,
@@ -107,7 +111,7 @@ void Apu::enqueue(Channel c, ApuInstructionType t, int val) {
 
 void Apu::enqueue(ApuInst i) { enqueue(i.channel, i.type, i.value); }
 
-void Apu::update(double) {
+void Apu::update() {
     process_instructions();
     merge_samples(m_samples_per_channel, m_samples, ALL_POSSIBLE_SAMPLE_FRAMES);
     m_audio_device->upload_samples(m_samples);
@@ -161,6 +165,19 @@ void Apu::io_write(UInt32 data) { m_insts.push(data); }
     // no harm possible, but should be clearer on which member variables
     // "belong" to which thread
     output_samples.clear();
+    (void)sample_count;
+    std::size_t themax = 0;
+    for (const auto & samples_cont : channel_samples)
+        themax = std::max(samples_cont.size(), themax);
+    for (std::size_t i = 0; i != themax; ++i) {
+        for (const auto & samples_cont : channel_samples) {
+            auto val = (i >= samples_cont.size()) ? Int16(0) : samples_cont[i];
+            output_samples.push_back(val);
+        }
+    }
+    for (auto & samples_cont : channel_samples)
+        samples_cont.clear();
+#   if 0
     for (const auto & samples_cont : channel_samples) {
         // for sample count sentinel value: ALL_POSSIBLE_SAMPLE_FRAMES
         // loop behavior will be okay, so long as that comparator is "!="
@@ -178,6 +195,7 @@ void Apu::io_write(UInt32 data) { m_insts.push(data); }
     for (auto & samples_cont : channel_samples)
         remove_first(samples_cont, std::size_t(sample_count));
     output_samples.resize(std::size_t(sample_count));
+#   endif
 }
 
 } // end of erfin namespace
@@ -206,19 +224,19 @@ BaseWaveFunction select_base_wave_function(erfin::Channel c) {
     //   . .|
     //    . |
     case Ch::TRIANGLE : return [](Int16 t) -> Int16 {
-        if (mag(t) < MAX / 2) return t;
+        if (mag(t) < MAX / 2) return 2*t;
         // I also like it when the intercepts for the following function
         // segments are doubled (we'll have to control for overflow then
-        if (t < 0) return Int16(-int(t) - int(MAX));
-        if (t > 0) return Int16(-int(t) + int(MAX));
+        if (t < 0) return 2*Int16(-int(t) - int(MAX));
+        if (t > 0) return 2*Int16(-int(t) + int(MAX));
         assert(false);
         return 0; // gcc seems to be pessimistic about flow control
     };
     case Ch::PULSE_ONE:
     case Ch::PULSE_TWO:
     case Ch::NOISE    :
-        return [] (Int16 x) -> Int16 { return (x < 0) ? -MAX : MAX; };
-    case Ch::CHANNEL_COUNT: default: break;
+        return [] (Int16 x) -> Int16 { return (x < 0) ? -(MAX / 4): MAX / 4; };
+    case Ch::COUNT: default: break;
     }
     throw std::runtime_error("Invalid wave function specified.");
 }
@@ -292,7 +310,7 @@ void remove_first(Container & c, std::size_t num) {
 namespace erfin {
 
 SfmlAudioDevice::SfmlAudioDevice() {
-    initialize(1, ApuAttorney::SAMPLE_RATE);
+    initialize(unsigned(Channel::COUNT), ApuAttorney::SAMPLE_RATE);
 }
 
 void SfmlAudioDevice::upload_samples(const std::vector<Int16> & samples_) {
@@ -301,14 +319,18 @@ void SfmlAudioDevice::upload_samples(const std::vector<Int16> & samples_) {
     m_samples.insert(m_samples.end(), samples_.begin(), samples_.end());
     if (!m_samples.empty() && getStatus() == Stopped)
         play();
+#   if 0
     std::cout << "Uploaded " << samples_.size() << " samples." << std::endl;
+#   endif
 }
 
 /* private override final */ bool SfmlAudioDevice::onGetData(Chunk & data) {
     {
     std::unique_lock<std::mutex> lock(m_samples_mutex);
     (void)lock;
+#   if 0
     std::cout << "Swapping in " << m_samples.size() << " samples." << std::endl;
+#   endif
     m_samples_hot.swap(m_samples);
     m_samples.clear();
     }

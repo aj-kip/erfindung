@@ -1,0 +1,6 @@
+set  x 1
+set  y 2
+add  a x 3
+add  b x y
+comp c z 4123
+save pc -9

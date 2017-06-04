@@ -64,7 +64,7 @@ private:
 
     UInt32 get_move_op_address(Inst inst);
 
-    void emit_error(Inst i) const;
+    [[noreturn]] void throw_error(Inst i) const;
 
     std::string disassemble_instruction(Inst i) const;
 

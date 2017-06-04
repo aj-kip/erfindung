@@ -33,36 +33,49 @@
 
 namespace erfin {
 
+class AssumptionRAII {
+public:
+    using Assumption = Assembler::Assumption;
+    explicit AssumptionRAII(Assumption *);
+
+    AssumptionRAII(const AssumptionRAII &) = delete;
+    AssumptionRAII & operator = (const AssumptionRAII &) = delete;
+
+    AssumptionRAII(AssumptionRAII &&);
+    AssumptionRAII & operator = (AssumptionRAII &&);
+
+    ~AssumptionRAII();
+private:
+    Assumption * m_ptr;
+    Assumption m_old;
+};
+
 class TextProcessState {
 public:
     using StringCIter = TokensConstIterator;
-    using SuffixAssumption = erfin::Assembler::SuffixAssumption;
+    using Assumption = Assembler::Assumption;
 
     friend class StrWrapTextStateAttorney;
     friend void run_get_line_processing_function_tests();
 
-    TextProcessState(): assumptions(erfin::Assembler::NO_ASSUMPTION),
-                        m_current_source_line(1) {}
-    struct LabelPair { std::size_t program_location, source_line; };
-    struct UnfilledLabelPair {
-        UnfilledLabelPair(std::size_t i_, const std::string & s_):
-            program_location(i_),
-            label(s_)
-        {}
-        std::size_t program_location;
-        std::string label;
-    };
+    TextProcessState();
 
-    SuffixAssumption assumptions;
+    Assumption assumptions() const { return m_assumptions; }
+    void include_assumption(Assumption);
+    void exclude_assumption(Assumption);
+
+    AssumptionRAII get_scoped_assumption_restorer();
 
     // having some encapsulation, helps me to change the state in predictable
     // ways rather than having to micro-manage everything >.>
 
     void add_instruction(erfin::Inst inst, const std::string * label = nullptr);
 
+    // regular text processing does not need this
     void move_program
         (ProgramData & prog, std::vector<std::size_t> & inst_to_line);
 
+    // regular text processing does not need this
     void resolve_unfulfilled_labels();
 
     StringCIter process_label(StringCIter beg, StringCIter end);
@@ -73,6 +86,7 @@ public:
 
     void push_warning(const std::string &);
 
+    // regular text processing does not need this
     void retrieve_warnings(std::vector<std::string> &);
 
     std::runtime_error make_error(const std::string & str) const noexcept;
@@ -84,6 +98,18 @@ public:
     static void run_tests();
 
 private:
+    struct UnfilledLabelPair {
+        UnfilledLabelPair(std::size_t i_, const std::string & s_):
+            program_location(i_),
+            label(s_)
+        {}
+        std::size_t program_location;
+        std::string label;
+    };
+
+    struct LabelPair { std::size_t program_location, source_line; };
+
+    Assumption m_assumptions;
     std::size_t m_current_source_line;
     ProgramData m_program_data;
     std::vector<std::size_t> m_inst_to_source_line;

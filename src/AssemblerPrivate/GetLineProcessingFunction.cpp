@@ -47,7 +47,7 @@ namespace {
 
 using StringCIter = erfin::TokensConstIterator;
 using TextProcessState = erfin::TextProcessState;
-using AssumptionResetRAII = erfin::AssumptionResetRAII;
+using Assembler = erfin::Assembler;
 using UInt32 = erfin::UInt32;
 
 StringCIter make_plus(TextProcessState &, StringCIter, StringCIter);
@@ -119,7 +119,7 @@ StringCIter make_pop(TextProcessState &, StringCIter, StringCIter);
 namespace erfin {
 
 LineToInstFunc get_line_processing_function
-    (Assembler::SuffixAssumption assumptions, const std::string & fname)
+    (Assembler::Assumption assumptions, const std::string & fname)
 {
     using LineFuncMap = std::map<std::string, LineToInstFunc>;
     static bool is_initialized = false;
@@ -240,14 +240,16 @@ StringCIter make_multiply
 StringCIter make_multiply_int
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_INT); (void)arr;
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_INT);
     return make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
 }
 
 StringCIter make_multiply_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_FP);
     return make_generic_arithemetic(erfin::OpCode::TIMES, state, beg, end);
 }
 
@@ -260,14 +262,16 @@ StringCIter make_divide
 StringCIter make_divide_int
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_INT); (void)arr;
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_INT);
     return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
 }
 
 StringCIter make_divide_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_FP);
     return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
 }
 
@@ -280,15 +284,17 @@ StringCIter make_modulus
 StringCIter make_modulus_int
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
-    return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_INT);
+    return make_generic_arithemetic(erfin::OpCode::MODULUS, state, beg, end);
 }
 
 StringCIter make_modulus_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
-    return make_generic_arithemetic(erfin::OpCode::DIVIDE, state, beg, end);
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_FP);
+    return make_generic_arithemetic(erfin::OpCode::MODULUS, state, beg, end);
 }
 
 StringCIter make_and
@@ -367,14 +373,16 @@ StringCIter make_cmp
 StringCIter make_cmp_fp
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_FP); (void)arr;
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_FP);
     return make_cmp(state, beg, end);
 }
 
 StringCIter make_cmp_int
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
-    AssumptionResetRAII arr(state, erfin::Assembler::USING_INT); (void)arr;
+    auto arr = state.get_scoped_assumption_restorer(); (void)arr;
+    state.include_assumption(Assembler::USING_INT);
     return make_cmp(state, beg, end);
 }
 
@@ -523,11 +531,19 @@ StringCIter assume_directive
     auto eol = get_eol(++beg, end);
     if ((eol - beg) == 1) {
         if (equal_to_any(*beg, "fp", "fixed-point")) {
-            state.assumptions = Assembler::USING_FP;
+            state.include_assumption(Assembler::USING_FP);
         } else if (equal_to_any(*beg, "int", "integer")) {
-            state.assumptions = Assembler::USING_INT;
+            state.include_assumption(Assembler::USING_INT);
         } else if (equal_to_any(*beg, "none", "nothing")) {
-            state.assumptions = Assembler::NO_ASSUMPTION;
+            state.include_assumption(Assembler::NO_ASSUMPTIONS);
+        } else if (equal_to_any(*beg, "io-throw-away-registers",
+                                      "io-throw-away"          ))
+        {
+            state.exclude_assumption(Assembler::SAVE_AND_RESTORE_REGISTERS);
+        } else if (equal_to_any(*beg, "io-save-and-restore-registers",
+                                      "io-save-and-restore"          ))
+        {
+            state.include_assumption(Assembler::SAVE_AND_RESTORE_REGISTERS);
         } else {
             throw state.make_error(": \"" + *beg + "\" is not a valid assumption.");
         }
@@ -580,11 +596,11 @@ bool op_code_supports_integer_immd(erfin::OpCode op_code) {
     using O = erfin::OpCode;
     switch (op_code) {
     case O::PLUS: case O::MINUS: case O::TIMES: case O::AND: case O::XOR:
-    case O::OR: case O::DIVIDE: case O::COMP: case O::MODULUS:
+    case O::OR  : case O::DIVIDE: case O::COMP: case O::MODULUS:
+    case O::ROTATE:
         return true;
-    default: assert(false); break;
+    default: return false;
     }
-    std::terminate();
 }
 
 StringCIter make_generic_logic
@@ -615,27 +631,31 @@ StringCIter make_generic_arithemetic
     default: assumption_matters = true; break;
     }
 
-    Reg a1;
+    Reg ans; // the first register is ALWAYS the answer
     ++beg;
     auto eol = get_eol(beg, end);
     const auto pf = get_lines_param_form(beg, eol);
 
     switch (pf) {
-    case XPF_3R   : case XPF_2R:
+    case XPF_3R   : case XPF_2R: {
         // perfect chance to check if assumptions are ok!
-        if (assumption_matters && state.assumptions == Assembler::NO_ASSUMPTION) {
+        auto assumpt = state.assumptions();
+        if (assumption_matters && !(   assumpt & Assembler::USING_FP
+                                    || assumpt & Assembler::USING_INT))
+        {
             throw state.make_error(fp_int_ambig_msg);
+        }
         }
         MACRO_FALLTHROUGH;
     case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
     case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
-        a1 = string_to_register(*beg);
+        ans = string_to_register(*beg);
         break;
     default:
         throw state.make_error(": unsupported parameters.");
     }
 
-    Reg a2, ans;
+    Reg a1, a2;
     Inst inst;
     Immd (*handle_immd)(StringCIter, OpCode, TextProcessState &) = nullptr;
     const std::string * label = nullptr;
@@ -660,28 +680,29 @@ StringCIter make_generic_arithemetic
     default: break;
     }
     if (type_indentity == INDETERMINATE) {
-        if (state.assumptions == Assembler::USING_FP)
+        if (state.assumptions() & Assembler::USING_FP)
             type_indentity = IS_FP;
-        else if (state.assumptions == Assembler::USING_INT)
+        else if (state.assumptions() & Assembler::USING_INT)
             type_indentity = IS_INT;
     }
 
     switch (pf) {
     case XPF_2R: // psuedo instruction
-        a2 = ans = string_to_register(*(beg + 1));
-        inst = encode(op_code, a1, a2, ans);
+        a1 = ans;
+        a2 = string_to_register(*(beg + 1));
+        inst = encode(op_code, ans, a1, a2);
         break;
     case XPF_3R:
-        a2  = string_to_register(*(beg + 1));
-        ans = string_to_register(*(beg + 2));
-        inst = encode(op_code, a1, a2, ans);
+        a1 = string_to_register(*(beg + 1));
+        a2 = string_to_register(*(beg + 2));
+        inst = encode(op_code, ans, a1, a2);
         break;
     case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
-        ans = string_to_register(*(beg + 1));
-        inst = encode(op_code, a1, ans, handle_immd(eol, op_code, state));
+        a2 = string_to_register(*(beg + 1));
+        inst = encode(op_code, ans, a2, handle_immd(eol, op_code, state));
         break;
     case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
-        inst = encode(op_code, a1, a1, handle_immd(eol, op_code, state));
+        inst = encode(op_code, ans, ans, handle_immd(eol, op_code, state));
         break;
     default: assert(false); break;
     }
@@ -702,7 +723,7 @@ StringCIter make_generic_memory_access
     assert(op_code == OpCode::LOAD || op_code == OpCode::SAVE);
 
     const auto eol = get_eol(++beg, end);
-    assert(!get_line_processing_function(Assembler::NO_ASSUMPTION, *beg));
+    assert(!get_line_processing_function(Assembler::NO_ASSUMPTIONS, *beg));
 
     const std::string * label = nullptr;
     Inst inst;
@@ -984,7 +1005,7 @@ void run_get_line_processing_function_tests() {
     }
     {
     constexpr const char * const sample_code =
-        "io upload x y z";
+        "io upload x y z a";
     Assembler asmr;
     asmr.assemble_from_string(sample_code);
     const auto & pdata = asmr.program_data();

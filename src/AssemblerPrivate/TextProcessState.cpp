@@ -51,6 +51,75 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end);
 
 namespace erfin {
 
+/* explicit */ AssumptionRAII::AssumptionRAII(Assumption * ptr):
+    m_ptr(ptr),
+    m_old(*ptr)
+{}
+
+AssumptionRAII::AssumptionRAII(AssumptionRAII && rhs):
+    m_ptr(rhs.m_ptr),
+    m_old(rhs.m_old)
+{
+    rhs.m_ptr = nullptr;
+}
+
+AssumptionRAII & AssumptionRAII::operator = (AssumptionRAII && rhs) {
+    if (this != &rhs) {
+        m_ptr = rhs.m_ptr;
+        m_old = rhs.m_old;
+        rhs.m_ptr = nullptr;
+    }
+    return *this;
+}
+
+AssumptionRAII::~AssumptionRAII() {
+    if (!m_ptr) return;
+    *m_ptr = m_old;
+}
+
+TextProcessState::TextProcessState():
+    m_assumptions(Assembler::SAVE_AND_RESTORE_REGISTERS),
+    m_current_source_line(1)
+{}
+
+void TextProcessState::include_assumption(Assumption assume) {
+    using Asr = Assembler;
+    switch (assume) {
+    case Asr::NO_ASSUMPTIONS: m_assumptions = assume; return;
+    case Asr::USING_FP: case Asr::USING_INT:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        ((m_assumptions & ~Asr::NUMERIC_ASSUMPTION_BIT_MASK) | assume);
+        return;
+    case Asr::SAVE_AND_RESTORE_REGISTERS:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        (m_assumptions | assume);
+        return;
+    default:
+        throw Error("Invalid assumption to include.");
+    }
+}
+
+void TextProcessState::exclude_assumption(Assumption assume) {
+    using Asr = Assembler;
+    switch (assume) {
+    case Asr::NO_ASSUMPTIONS: return;
+    case Asr::USING_FP: case Asr::USING_INT:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        (m_assumptions & ~Asr::NUMERIC_ASSUMPTION_BIT_MASK);
+        return;
+    case Asr::SAVE_AND_RESTORE_REGISTERS:
+        m_assumptions = static_cast<Assembler::Assumption>
+                        (m_assumptions & ~Asr::SAVE_AND_RESTORE_REGISTERS);
+        return;
+    default:
+        throw Error("Invalid assumption to exclude.");
+    }
+}
+
+AssumptionRAII TextProcessState::get_scoped_assumption_restorer() {
+    return AssumptionRAII(&m_assumptions);
+}
+
 void TextProcessState::add_instruction
     (erfin::Inst inst, const std::string * label)
 {
@@ -88,7 +157,6 @@ void TextProcessState::resolve_unfulfilled_labels() {
                         "\" not found anywhere in source code.");
         }
         const LabelPair & lbl_pair = itr->second;
-
         assert((serialize(m_program_data[unfl_pair.program_location]) & 0xFFFF) == 0);
         if (lbl_pair.program_location > std::numeric_limits<int16_t>::max()) {
             throw Error("Label resolves to a location that is too large for "
@@ -96,9 +164,8 @@ void TextProcessState::resolve_unfulfilled_labels() {
         }
         m_program_data[unfl_pair.program_location] |=
             erfin::encode_immd_int(int(lbl_pair.program_location));
-        int i = erfin::decode_immd_as_int(m_program_data[unfl_pair.program_location]);
-        (void)i;
-        assert(i == int(lbl_pair.program_location));
+        assert(decode_immd_as_int(m_program_data[unfl_pair.program_location]) ==
+               int(lbl_pair.program_location)                                  );
     }
     m_unfulfilled_labels.clear();
 }
@@ -159,8 +226,10 @@ std::runtime_error TextProcessState::make_error(const std::string & str) const n
 std::size_t TextProcessState::current_source_line() const
     { return m_current_source_line; }
 
-bool TextProcessState::last_instruction_was(OpCode op) const
-    { return decode_op_code(m_program_data.back()) == op; }
+bool TextProcessState::last_instruction_was(OpCode op) const {
+    if (m_program_data.empty()) return false;
+    return decode_op_code(m_program_data.back()) == op;
+}
 
 } // end of erfin namespace
 
@@ -182,11 +251,13 @@ void process_text(TextProcessState & state, StringCIter beg, StringCIter end) {
         // and a newline character is what is expected to be returned, expect
         // for the special functions which are not gotten from
         // get_line_processing_func
-        auto func = erfin::get_line_processing_function(state.assumptions, *beg);
+        auto func = erfin::get_line_processing_function(state.assumptions(), *beg);
         if (func) {
             auto new_beg = func(state, beg, end);
+#           ifdef MACRO_DEBUG
             for (auto itr = beg; itr != new_beg; ++itr)
                 assert(*itr != "\n");
+#           endif
             beg = new_beg;
         } else if (*beg == "data") {
             beg = process_data(state, beg, end, &data_cache);
@@ -328,12 +399,11 @@ StringCIter process_numbers
         NumericParseInfo npi;
         npi = parse_number(*beg);
         switch (npi.type) {
-        case INTEGER: data.push_back(npi.integer); break;
+        case INTEGER: data.push_back(UInt32(npi.integer)); break;
         case DECIMAL: data.push_back(to_fixed_point(npi.floating_point)); break;
         case NOT_NUMERIC:
             throw state.make_error(": all entries in the data sequence must be"
                                    "  numeric");
-            break;
         default: assert(false); break;
         }
     }

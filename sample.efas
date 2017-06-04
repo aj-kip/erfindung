@@ -1,4 +1,12 @@
 assume fixed-point
+    set sp stack-start
+    io triangle tempo x 4
+    io triangle note x 500 375
+    io triangle note x 500 325
+    io triangle note x 500 275
+    io triangle tempo x 8
+    io triangle note x 75 125
+    io triangle note x 75 125
     set  x test-data
     load x
     set  y test-data
@@ -6,7 +14,6 @@ assume fixed-point
     load y
     div  z x y
     set b x
-    set sp stack-start
     call expo
   jump main
 : erfindung-text data [
@@ -60,8 +67,8 @@ ____________ ]
        set x 1
        io wait  x
        io read random x
-       and x x 8
-       mod x x 8
+       and x x 3
+       mod x x 2
        comp x    1
        skip x ==
            jump skip-clear

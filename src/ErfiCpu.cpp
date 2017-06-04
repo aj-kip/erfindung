@@ -65,9 +65,6 @@ UInt32 div_fp  (UInt32 x, UInt32 y);
 UInt32 div_int (UInt32 x, UInt32 y);
 UInt32 mod_fp  (UInt32 x, UInt32 y);
 UInt32 mod_int (UInt32 x, UInt32 y);
-#if 0
-UInt32 comp_fp (UInt32 x, UInt32 y);
-#endif
 UInt32 comp_int(UInt32 x, UInt32 y);
 
 } // end of <anonymous> namespace
@@ -84,8 +81,8 @@ void ErfiCpu::reset() {
 
 void ErfiCpu::run_cycle(ConsolePack & console) {
     auto do_read = std::bind(::erfin::do_read, console, std::placeholders::_1);
-    run_cycle(deserialize(do_read(m_registers[std::size_t(Reg::PC)]++)),
-              console                                                 );
+    auto inst = deserialize(do_read(m_registers[std::size_t(Reg::PC)]++));
+    run_cycle(inst, console);
 }
 
 void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
@@ -111,7 +108,7 @@ void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     case O::COMP   : do_arth<fp_compare , comp_int>(inst); return;
     // M-type (2bits for pf, 0 bits for is_fp) (set types)
     // SET, SAVE, LOAD
-    case O::SET : do_set(inst);                                     return;
+    case O::SET : do_set(inst); return;
     case O::SAVE: do_write(console, get_move_op_address(inst), reg0(inst)); return;
     case O::LOAD: reg0(inst) = do_read(console, get_move_op_address(inst)); return;
     // J-type (reducable to 0-bits for "pf")
@@ -120,8 +117,8 @@ void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     case O::CALL: do_call(inst, console); return;
     // "O"-types (0 bits for "pf") (odd-out types)
     // CALL, NOT
-    case O::NOT      : do_not(inst);                            return;
-    default: emit_error(inst);
+    case O::NOT: do_not(inst); return;
+    default: throw_error(inst); // throws
     };
 }
 
@@ -150,7 +147,6 @@ void ErfiCpu::update_debugger(Debugger & dbgr) const {
 void try_program(const char * source_code, const int inst_limit_c);
 
 /* static */ void ErfiCpu::run_tests() {
-#   if 1
     try_program(
         "     assume integer \n"
         "     set  x -10\n"
@@ -160,7 +156,6 @@ void try_program(const char * source_code, const int inst_limit_c);
         "     skip a >= \n"
         "     jump   inc\n"
         ":safety-loop set pc safety-loop", 20);
-#   endif
     try_program(
         "set  sp safety-loop\n"
         "set  a 1\n"
@@ -191,6 +186,11 @@ void try_program(const char * source_code, const int inst_limit_c);
         "     pop a b c x y z\n"
         ":safety-loop set pc safety-loop\n"
         ":stack-start data [________ ________ ________ ________]", 30);
+    assert(mod_int(UInt32(-1), UInt32(-1)) == 0);
+    assert(mod_int( 3,  2) == 1);
+    assert(mod_int( 7,  4) == 7 % 4);
+    assert(int(mod_int(UInt32(-7), UInt32( 4))) == -(7 % 4));
+    assert(int(mod_int(UInt32( 7), UInt32(-4))) == -(7 % 4));
 }
 
 void try_program(const char * source_code, const int inst_limit_c) {
@@ -205,7 +205,7 @@ void try_program(const char * source_code, const int inst_limit_c) {
         Console::load_program_to_memory(asmr.program_data(), *con.ram);
         for (int i = 0; i != inst_limit_c; ++i)
             con.cpu->run_cycle(con);
-    } catch (ErfiError & err) {
+    } catch (ErfiCpuError & err) {
         auto sline = asmr.translate_to_line_number(err.program_location());
         std::cerr << "Illegal instruction occured!\n";
         std::cerr << "See line " << sline << " in source\n";
@@ -271,12 +271,12 @@ void try_program(const char * source_code, const int inst_limit_c) {
     std::terminate();
 }
 
-/* private */ void ErfiCpu::emit_error(Inst i) const {
+/* private */ [[noreturn]] void ErfiCpu::throw_error(Inst i) const {
     //               PC increment while the instruction is executing
     //               so it will be one too great if an illegal instruction
-    //               is encountered
-    throw ErfiError(m_registers[std::size_t(Reg::PC)] - 1,
-                    std::move(disassemble_instruction(i)));
+    //               is encountered -> what about jumps?
+    throw ErfiCpuError(m_registers[std::size_t(Reg::PC)] - 1,
+                       std::move(disassemble_instruction(i)));
 }
 
 /* private */ std::string ErfiCpu::disassemble_instruction(Inst i) const {
@@ -318,24 +318,13 @@ UInt32 mod_fp  (UInt32 x, UInt32 y) {
 
 UInt32 mod_int (UInt32 x, UInt32 y) {
     if (y == 0) throw Error("Attempted to divide by zero.");
-    auto sign = [](int x) { return x < 0 ? -1 : 1; };
-    auto mag  = [](int x) { return x < 0 ? -x : x; };
+    static const auto sign = [](UInt32 x) { return x & 0x80000000; };
+    static const auto mag  = [](UInt32 x) { return sign(x) ? ~(x - 1) : x; };
     // the C++ standard does not specify how negatives are moded
-    int rv = mag(int(x)) % mag(int(y));
-    return UInt32(sign(x)*sign(y)*rv);
+    // using two's complement
+    return (sign(x) ^ sign(y)) ? ~((mag(x) % mag(y)) - 1) : (mag(x) % mag(y));
 }
-#if 0
-UInt32 comp_fp (UInt32 x, UInt32 y) {
-    using namespace erfin;
-    UInt32 temp = 0;
-    int res = erfin::fp_compare(x, y);
-    if (res == 0) temp |= COMP_EQUAL_MASK;
-    if (res <  0) temp |= COMP_LESS_THAN_MASK;
-    if (res >  0) temp |= COMP_GREATER_THAN_MASK;
-    if (res != 0) temp |= COMP_NOT_EQUAL_MASK;
-    return temp;
-}
-#endif
+
 UInt32 comp_int(UInt32 x, UInt32 y) {
     using namespace erfin;
     UInt32 temp = 0;

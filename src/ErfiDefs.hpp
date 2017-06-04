@@ -632,7 +632,7 @@ enum class Channel {
     PULSE_ONE,
     PULSE_TWO,
     NOISE    ,
-    CHANNEL_COUNT
+    COUNT
 };
 
 enum class ApuInstructionType {
@@ -660,7 +660,6 @@ namespace gpu_enum_types {
 
 enum GpuOpCode_e {
     UPLOAD,
-    //UNLOAD,
     DRAW  ,
     CLEAR ,
 };
@@ -669,7 +668,6 @@ enum GpuOpCode_e {
 
 // smallest possible sprite
 constexpr const int MINI_SPRITE_BIT_COUNT = 64; // 8x8
-//using MiniSprite = std::bitset<64>;
 
 using GpuOpCode = gpu_enum_types::GpuOpCode_e;
 

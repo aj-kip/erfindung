@@ -37,13 +37,25 @@ using LineToInstFunc = StringCIter(*)(TextProcessState &, StringCIter, StringCIt
 StringCIter make_io_read        (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_apu_inst    (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_upload      (TextProcessState &, StringCIter, StringCIter);
-#if 0
-StringCIter make_io_unload      (TextProcessState &, StringCIter, StringCIter);
-#endif
 StringCIter make_io_clear_screen(TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_draw        (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_halt        (TextProcessState &, StringCIter, StringCIter);
 StringCIter make_io_wait        (TextProcessState &, StringCIter, StringCIter);
+
+constexpr const int FOLLOW_ASSUMPTIONS = -1;
+constexpr const int FORCE_SAVE_RESTORE = -2;
+
+class SaveRestoreRegRAII {
+public:
+    SaveRestoreRegRAII(TextProcessState &, Reg, int = FOLLOW_ASSUMPTIONS);
+    ~SaveRestoreRegRAII();
+private:
+    bool should_emit_save_restore() const noexcept;
+
+    TextProcessState * m_tps;
+    Reg m_reg;
+    int m_assumption_flag;
+};
 
 } // end of <anonymous> namespace
 
@@ -94,9 +106,6 @@ StringCIter make_sysio
     }
     fmap["read"  ] = make_io_read;
     fmap["upload"] = make_io_upload;
-#   if 0
-    fmap["unload"] = make_io_unload;
-#   endif
     fmap["clear" ] = make_io_clear_screen;
     fmap["draw"  ] = make_io_draw;
     fmap["halt"  ] = make_io_halt;
@@ -108,7 +117,48 @@ StringCIter make_sysio
 }
 
 void run_make_sysio_tests() {
-    ;
+#   ifdef MACRO_DEBUG
+    {
+    constexpr const char * const with_io_throw_away =
+        "assume io-throw-away\n"
+        "io triangle tempo x 4\n"
+        "io triangle note x 400 500 300";
+    constexpr const char * const without_io_throw_away =
+        "io triangle tempo x 4\n"
+        "io triangle note x 400 500 300";
+    std::size_t throw_away_size;
+    {
+    Assembler asr;
+    asr.assemble_from_string(with_io_throw_away);
+    throw_away_size = asr.program_data().size();
+    }
+    Assembler asr;
+    asr.assemble_from_string(without_io_throw_away);
+    assert(throw_away_size < asr.program_data().size());
+    }
+    {
+    constexpr const char * const all_io_expressions =
+        "io read controller x\n"
+        "io read timer      x # <- time since last wait\n"
+        "io read random     x y z # <- rng semantics\n"
+        "io read gpu        x # <- read any output from the gpu\n"
+        "io read bus-error  x # <- check if a bus error occured\n"
+        "io read random     x y z a b c\n"
+        "io pulse one tempo x 4\n"
+        "io triangle note x 100\n"
+        "io pulse two duty-cycle-window x\n"
+        "io noise note x 900 800 700 600 500 400 300 200 100\n"
+        "io upload x y z a\n"
+        "io clear x\n"
+        "io draw x y z\n"
+        "io wait x\n"
+        "io halt y\n"
+        "io upload x y x z # should emit a warning\n"
+        "io read random x y x a # should also emit a warning\n";
+    Assembler asr;
+    asr.assemble_from_string(all_io_expressions);
+    }
+#   endif
 }
 
 } // end of erfin namespace
@@ -155,6 +205,15 @@ StringCIter make_io_apu_inst
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     using namespace erfin;
+
+    auto emit_ait_prelude = [](TextProcessState & state, Reg reg, Channel channel, ApuInstructionType ait) {
+        const auto apu_strm_address = encode_immd_int(device_addresses::APU_INPUT_STREAM);
+        state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(channel))));
+        state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
+        state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(ait))));
+        state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
+    };
+
     auto eol = get_eol(beg, end);
     Channel channel;
     if (*beg == "triangle") {
@@ -190,8 +249,24 @@ StringCIter make_io_apu_inst
     // next we expect a register
     Reg reg = string_to_register_or_throw(state, *beg++);
 
-    // next (optional) argument is a value to write to the apu
-    if (beg != eol) {
+    const auto apu_strm_address = encode_immd_int(device_addresses::APU_INPUT_STREAM);
+
+    // hit last argument?
+    if (beg == eol) {
+        {
+        SaveRestoreRegRAII srrr(state, reg, FORCE_SAVE_RESTORE); (void)srrr;
+        emit_ait_prelude(state, reg, channel, ait);
+        }
+        state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
+        return eol;
+    }
+    if (ait != ApuInstructionType::NOTE && (eol - beg) > 1) {
+        throw state.make_error(": mutliple values are supported for note "
+                               "instructions only.");
+    }
+    SaveRestoreRegRAII srrr(state, reg); (void)srrr;
+    // (optional) arguments are values to write to the apu
+    for (; beg != eol; ++beg) {
         Immd immd;
         NumericParseInfo npi = parse_number(*beg);
         const std::string * label = nullptr;
@@ -208,11 +283,10 @@ StringCIter make_io_apu_inst
             label = &(*beg);
             break;
         }
+        emit_ait_prelude(state, reg, channel, ait);
         state.add_instruction(encode(OpCode::SET, reg, immd), label);
+        state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
     }
-    auto immd = encode_immd_int(device_addresses::APU_INPUT_STREAM);
-    (void)ait; (void)channel;
-    state.add_instruction(encode(OpCode::SAVE, reg, immd));
 
     return eol;
 }
@@ -248,26 +322,7 @@ StringCIter make_io_upload
     }
     return eol;
 }
-#if 0
-StringCIter make_io_unload
-    (TextProcessState & state, StringCIter beg, StringCIter end)
-{
-    // unload using one argument
-    using namespace erfin;
-    static constexpr const char * const NEED_EXACTLY_ONE_MSG =
-        ": unload excepts exactly one argument, the sprite index to unload.";
-    auto eol = get_eol(++beg, end);
-    if (eol - beg != 1) throw state.make_error(NEED_EXACTLY_ONE_MSG);
-    Reg reg = string_to_register_or_throw(state, *beg);
-    static constexpr const int GPU_INPUT_STREAM = device_addresses::GPU_INPUT_STREAM;
-    emit_set_aside_register_instructions
-        (state, GPU_INPUT_STREAM, gpu_enum_types::UNLOAD, reg);
 
-    state.add_instruction( encode(OpCode::SAVE,                reg,
-                                  encode_immd_int(GPU_INPUT_STREAM)) );
-    return erfin::get_eol(beg, end);
-}
-#endif
 StringCIter make_io_clear_screen
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
@@ -317,7 +372,7 @@ StringCIter make_io_halt
     using namespace erfin;
     using namespace device_addresses;
     auto eol = get_eol(++beg, end);
-    if (beg - eol != 1) {
+    if (eol - beg != 1) {
         throw state.make_error(": halt io command must have exactly one "
                                "register argument.");
     }
@@ -340,6 +395,26 @@ StringCIter make_io_wait
     auto reg = string_to_register_or_throw(state, *beg);
     state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_int(TIMER_WAIT_AND_SYNC)));
     return eol;
+}
+
+SaveRestoreRegRAII::SaveRestoreRegRAII(TextProcessState & state, Reg r,
+                                       int assumed                    ):
+    m_tps(&state), m_reg(r), m_assumption_flag(assumed)
+{
+    if (!should_emit_save_restore()) return;
+    state.add_instruction(encode(OpCode::PLUS, Reg::SP, Reg::SP, encode_immd_int(1)));
+    state.add_instruction(encode(OpCode::SAVE, r, Reg::SP));
+}
+
+SaveRestoreRegRAII::~SaveRestoreRegRAII() {
+    if (!should_emit_save_restore()) return;
+    m_tps->add_instruction(encode(OpCode::SAVE, m_reg, Reg::SP));
+    m_tps->add_instruction(encode(OpCode::MINUS, Reg::SP, Reg::SP, encode_immd_int(1)));
+}
+
+/* private */ bool SaveRestoreRegRAII::should_emit_save_restore() const noexcept {
+    if (m_assumption_flag == FORCE_SAVE_RESTORE) return true;
+    return m_tps->assumptions() & Assembler::SAVE_AND_RESTORE_REGISTERS;
 }
 
 // ----------------------------------------------------------------------------

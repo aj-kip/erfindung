@@ -29,6 +29,7 @@
 #include <limits>
 #include <string>
 #include <set>
+#include <iosfwd>
 
 namespace erfin {
 
@@ -37,13 +38,16 @@ class Debugger;
 class Assembler {
 public:
 
-    enum SuffixAssumption {
+    enum Assumption {
         // -int, -fp must be set explicitly
-        NO_ASSUMPTION = 0,
+        NO_ASSUMPTIONS = 0,
         // only -int must be set explicitly
         USING_FP  = 1 << 1,
         // only -fp must be set explicitly
-        USING_INT = 1 << 2
+        USING_INT = 1 << 2,
+        INVALID_FP_INT_ASSUMPTION = 0x3,
+        NUMERIC_ASSUMPTION_BIT_MASK = 0x3,
+        SAVE_AND_RESTORE_REGISTERS = 1 << 3
     };
 
     static constexpr const std::size_t INVALID_LINE_NUMBER = std::size_t(-1);
@@ -51,6 +55,8 @@ public:
     Assembler() {}
 
     void assemble_from_file(const char * file);
+
+    void assemble_from_stream(std::istream &);
 
     void assemble_from_string(const std::string & source);
 
@@ -74,6 +80,8 @@ public:
     static void run_tests();
 
 private:
+
+    void assemble_from_work_string(std::string & source);
 
     ProgramData m_program;
 

@@ -42,7 +42,7 @@ HEADERS += \
 
 TARGET = erfindung
 
-QMAKE_CXXFLAGS += -pthread -Wno-maybe-uninitialized
+QMAKE_CXXFLAGS += -pthread
 QMAKE_LFLAGS   += -pthread
 
 CONFIG (debug, debug|release) {
@@ -62,12 +62,16 @@ CONFIG (release, debug|release) {
 }
 
 linux-g++ {
-    DEFINES += MACRO_COMPILER_GCC
+    DEFINES += MACRO_COMPILER_GCC MACRO_PLATFORM_LINUX
+    QMAKE_CXXFLAGS += -Wno-maybe-uninitialized
 }
 
 linux-clang {
     DEFINES += MACRO_COMPILER_CLANG
+    QMAKE_CXXFLAGS_DEBUG -= -Wno-uninitialized
 }
+
+#message($$DEFINES)
 
 INCLUDEPATH += \
     /media/data/dev/c++/inc

@@ -62,7 +62,7 @@ private:
     std::default_random_engine m_rng;
     sf::Clock m_clock;
     bool m_wait ;
-    bool m_power;
+    bool m_halt_flag;
     UInt32 m_wait_time;
     bool m_bus_error;
 };
@@ -122,6 +122,7 @@ private:
 template <typename Func>
 void Console::run_until_wait(Func && f) {
     pack.gpu->wait(*pack.ram);
+    pack.apu->update();
     pack.dev->set_wait_time();
     while (!pack.dev->wait_requested() && !pack.dev->halt_requested()) {
         pack.cpu->run_cycle(pack);

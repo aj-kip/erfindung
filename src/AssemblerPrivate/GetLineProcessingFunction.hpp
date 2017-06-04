@@ -39,7 +39,7 @@ using LineToInstFunc = TokensConstIterator(*)
 // each of the line to inst functions should have uniform requirements
 // this is a deceptively complex function
 LineToInstFunc get_line_processing_function
-    (Assembler::SuffixAssumption assumptions, const std::string & fname);
+    (Assembler::Assumption assumptions, const std::string & fname);
 
 void run_get_line_processing_function_tests();
 
