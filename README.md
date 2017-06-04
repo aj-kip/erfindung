@@ -4,16 +4,15 @@ Erfindung
 Fictitious ISA/ASM-like Interpreter
 -----------------------------------
 
-Erfindung (or &quot;Invention&quot; in German), is a ASM-like, GameBoy-esque virtual
-machine and interpreter.
+Erfindung (or &quot;Invention&quot; in German), is a ASM-like, GameBoy-esque 
+virtual machine and interpreter.
 It is intended to be a toy assembly language/virtual console.
 
 Development Progress
 --------------------
 Design-wise: Design is looking pretty good!
 
-Implementation-wise: multi-threading is gone for the most part... I'd like to
-                     bring it back to some level, some day. :3
+Implementation-wise: just the noise channel, proper documentation, and testing!
 
 My motivation for this project comes from several sources:
 --------------------------------------------------------------------

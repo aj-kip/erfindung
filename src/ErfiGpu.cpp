@@ -64,7 +64,6 @@ struct GpuContext {
 /* static */ const int ErfiGpu::SCREEN_HEIGHT = 240;
 
 ErfiGpu::ErfiGpu():
-    m_index_pos(0),
     m_cold(new GpuContext()),
     m_hot (new GpuContext())
 {

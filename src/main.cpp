@@ -41,6 +41,10 @@
 
 #include <cstring>
 
+#ifdef MACRO_PLATFORM_LINUX
+#   include <signal.h>
+#endif
+
 #include "Assembler.hpp"
 #include "ErfiConsole.hpp"
 #include "ErfiApu.hpp"
@@ -77,6 +81,7 @@ void run_tests();
 } // end of <anonymous> namespace
 
 int main(int argc, char ** argv) {
+
     erfin::Assembler assembler;
     try {
         auto options = parse_program_options(argc, argv);
@@ -269,26 +274,28 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window);
 void windowed_run(const ProgramOptions & opts, const erfin::ProgramData & program) {
     using namespace erfin;
 #   if 0
-    Apu apu;
+    //Apu apu;
     //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    apu.update();
+    //apu.update();
     //std::this_thread::sleep_for(std::chrono::milliseconds(100));
     {
         // needs to be clearer that it's notes per second
-        static constexpr const auto TRI = Channel::TRIANGLE;
-        auto chan = Channel::TRIANGLE;
+        //static constexpr const auto TRI = Channel::TRIANGLE;
+        //auto chan = Channel::TRIANGLE;
 
-        apu.enqueue(Channel::PULSE_ONE, ApuInstructionType::TEMPO, 4);
+        //apu.enqueue(Channel::PULSE_ONE, ApuInstructionType::TEMPO, 4);
         auto push_note =
-            [&](int note) { apu.enqueue(chan, ApuInstructionType::NOTE, note); };
+            [&](int note) { std::cout << note << std::endl; };
 
         //chan = Channel::PULSE_ONE;
         //for (int i = 0; i != 3*6; ++i) push_note(000);
 
         for (auto c : { Channel::TRIANGLE, Channel::PULSE_ONE, Channel::TRIANGLE }) {
-            chan = Channel::TRIANGLE; (void)c;
+            //chan = Channel::TRIANGLE;
+            (void)c;
             for (int i : { -50, 50, 0 }) {
-                apu.enqueue(TRI, ApuInstructionType::TEMPO, 4);
+                //apu.enqueue(TRI, ApuInstructionType::TEMPO, 4);
+                std::cout << "tempo 4 " << std::endl;
                 push_note(500 + i);
                 push_note(375 + i);
 
@@ -298,7 +305,8 @@ void windowed_run(const ProgramOptions & opts, const erfin::ProgramData & progra
                 push_note(500 + i); // one second passes
                 push_note(275 + i);
 
-                apu.enqueue(TRI, ApuInstructionType::TEMPO, 8);
+                //apu.enqueue(TRI, ApuInstructionType::TEMPO, 8);
+                std::cout << "tempo 8 " << std::endl;
                 push_note( 75 + i);
                 push_note(125 + i);
                 push_note( 75 + i);
@@ -308,7 +316,7 @@ void windowed_run(const ProgramOptions & opts, const erfin::ProgramData & progra
 
         // implicit silence -- three seconds
     }
-    apu.update();
+    //apu.update();
     //std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 #   endif
 #   if 0
@@ -326,12 +334,32 @@ void windowed_run(const ProgramOptions & opts, const erfin::ProgramData & progra
     run_console_loop(console, win);
 
     console.print_cpu_registers(std::cout);
-    std::cout << "# of op codes " << static_cast<int>(erfin::OpCode::COUNT) << std::endl;
 }
 
-void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
+#ifdef MACRO_PLATFORM_LINUX
+template <typename Func>
+void global_console_pointer_access(Func && f) {
+    static std::mutex access_mtx;
+    static erfin::Console * g_console_ptr = nullptr;
+    access_mtx.lock();
+    f(std::ref(g_console_ptr));
+    access_mtx.unlock();
+}
+#endif
+
+void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {    
     using namespace erfin;
     Console console;
+#   ifdef MACRO_PLATFORM_LINUX
+    global_console_pointer_access([&console](Console *& c_ptr) {
+        c_ptr = &console;
+    });
+    signal(SIGPROF, [](int) {
+        global_console_pointer_access([](Console *& c_ptr) {
+            c_ptr->print_cpu_registers(std::cout);
+        });
+    });
+#   endif
 
     console.load_program(program);
     while (!console.trying_to_shutdown()) {
@@ -339,10 +367,43 @@ void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
         sf::sleep(sf::microseconds(16667));
     }
     console.print_cpu_registers(std::cout);
+#   ifdef MACRO_PLATFORM_LINUX
+    global_console_pointer_access([&console](Console *& c_ptr) {
+        c_ptr = nullptr;
+    });
+#   endif
 }
 
 void print_help(const ProgramOptions &, const erfin::ProgramData &) {
-
+    std::cout << "Erfindung command line options\n"
+                 "If the entire text does not show, you can always stream the "
+                 "output to a file or use \"less\" on *nix machines.\n\n"
+                 "-i / --input\n"
+                 "\tSpecify input file, not compatible with --stream-input "
+                  "option\n"
+                 "-h / --help\n"
+                 "\tShow this help text.\n"
+                 "-c / --command-line\n"
+                 "\tCauses the program to not open a window, the program will "
+                  "finsih once and only when the halt signal is sent (you "
+                  "can still cancel the program with ctrl-c as usual)\n"
+                 "-t / --run-tests\n"
+                 "\tRun developer tests (for debugging purposes only). If you "
+                  "run this and the program doesn't crash, that means it "
+                  "works!\n"
+                 "-s / --stream-input\n"
+                 "\tThe program will accept stdin as a source \"file\" this "
+                  "option is not compatible with -i.\n"
+                 "-w / --window-scale\n"
+                 "\tScales the window by an integer factor.\n"
+                 "Each program \"command\" accepts parameters between each "
+                 "of these \"commands\" e.g.\n"
+                 "\n\t ./erfindung -i sample.efas -w 3 -c\n"
+                 "Erfindung is GPLv3 software, refer to COPYING on the terms "
+                 "and conditions for copying.\n"
+                 "There is a software manual that should be present with "
+                 "your distrobution that you can refer to on how to use the "
+                 "software." << std::endl;
 }
 
 void test_fp_multiply(double a, double b);

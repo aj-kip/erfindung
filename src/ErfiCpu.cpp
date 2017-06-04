@@ -147,7 +147,6 @@ void ErfiCpu::update_debugger(Debugger & dbgr) const {
 void try_program(const char * source_code, const int inst_limit_c);
 
 /* static */ void ErfiCpu::run_tests() {
-#   if 1
     try_program(
         "     assume integer \n"
         "     set  x -10\n"
@@ -157,7 +156,6 @@ void try_program(const char * source_code, const int inst_limit_c);
         "     skip a >= \n"
         "     jump   inc\n"
         ":safety-loop set pc safety-loop", 20);
-#   endif
     try_program(
         "set  sp safety-loop\n"
         "set  a 1\n"
@@ -188,6 +186,11 @@ void try_program(const char * source_code, const int inst_limit_c);
         "     pop a b c x y z\n"
         ":safety-loop set pc safety-loop\n"
         ":stack-start data [________ ________ ________ ________]", 30);
+    assert(mod_int(UInt32(-1), UInt32(-1)) == 0);
+    assert(mod_int( 3,  2) == 1);
+    assert(mod_int( 7,  4) == 7 % 4);
+    assert(int(mod_int(UInt32(-7), UInt32( 4))) == -(7 % 4));
+    assert(int(mod_int(UInt32( 7), UInt32(-4))) == -(7 % 4));
 }
 
 void try_program(const char * source_code, const int inst_limit_c) {
@@ -315,11 +318,11 @@ UInt32 mod_fp  (UInt32 x, UInt32 y) {
 
 UInt32 mod_int (UInt32 x, UInt32 y) {
     if (y == 0) throw Error("Attempted to divide by zero.");
-    auto sign = [](int x) { return x < 0 ? -1 : 1; };
-    auto mag  = [](int x) { return x < 0 ? -x : x; };
+    static const auto sign = [](UInt32 x) { return x & 0x80000000; };
+    static const auto mag  = [](UInt32 x) { return sign(x) ? ~(x - 1) : x; };
     // the C++ standard does not specify how negatives are moded
-    int rv = mag(int(x)) % mag(int(y));
-    return UInt32(sign(x)*sign(y)*rv);
+    // using two's complement
+    return (sign(x) ^ sign(y)) ? ~((mag(x) % mag(y)) - 1) : (mag(x) % mag(y));
 }
 
 UInt32 comp_int(UInt32 x, UInt32 y) {

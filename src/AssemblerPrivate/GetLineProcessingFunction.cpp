@@ -688,7 +688,8 @@ StringCIter make_generic_arithemetic
 
     switch (pf) {
     case XPF_2R: // psuedo instruction
-        a1 = a2 = string_to_register(*(beg + 1));
+        a1 = ans;
+        a2 = string_to_register(*(beg + 1));
         inst = encode(op_code, ans, a1, a2);
         break;
     case XPF_3R:

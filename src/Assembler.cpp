@@ -57,9 +57,6 @@ int get_file_size(const char * filename);
 namespace erfin {
 
 void Assembler::assemble_from_file(const char * file) {
-#   if 0
-    std::string file_contents;
-#   endif
     // imposes a file size limit of ~2.1GB (no reasonable source file should
     //                                      ever be this large!)
     int fsize = get_file_size(file);
@@ -69,15 +66,6 @@ void Assembler::assemble_from_file(const char * file) {
     }
     std::fstream file_stream(file);
     assemble_from_stream(file_stream);
-#   if 0
-    file_contents.reserve(std::size_t(fsize));
-    std::fstream file_stream(file);
-    for (int i = 0; i != fsize; ++i) {
-        file_contents.push_back(' ');
-        file_stream.read(&file_contents.back(), 1);
-    }
-    assemble_from_string(file_contents);
-#   endif
 }
 
 void Assembler::assemble_from_stream(std::istream & in) {

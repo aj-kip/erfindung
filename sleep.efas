@@ -1,7 +1,29 @@
+assume io-throw-away
 set sp stack-start
-set x 120
+call descent
+call something
+call something
+call descent
+set x 60
+mul x 8
 call sleep
 save pc -9
+
+:descent
+io pulse one tempo x 4
+io pulse two tempo x 4
+io pulse one note  x 165 275 165 275 165 275 165 275
+io pulse two note  x 600 575 550 525 500 475 450 425
+pop pc
+
+:something
+io pulse one tempo x 2
+io pulse two tempo x 8
+io pulse one note  x 100 167 133 200
+io pulse two note  x 700 400 600 500 550 500 600 500
+io pulse two note  x 650 450 575 550 565 575 600 575
+pop pc
+
 :sleep
     comp a x    0
     skip a   != 

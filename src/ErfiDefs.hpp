@@ -632,7 +632,7 @@ enum class Channel {
     PULSE_ONE,
     PULSE_TWO,
     NOISE    ,
-    CHANNEL_COUNT
+    COUNT
 };
 
 enum class ApuInstructionType {
@@ -660,7 +660,6 @@ namespace gpu_enum_types {
 
 enum GpuOpCode_e {
     UPLOAD,
-    //UNLOAD,
     DRAW  ,
     CLEAR ,
 };

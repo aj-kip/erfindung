@@ -100,7 +100,6 @@ private:
         (std::unique_ptr<GpuContext> & context, const UInt32 * memory,
          ThreadControl & cv);
 
-    UInt32 m_index_pos;
     ThreadControl m_thread_control;
     std::thread m_gfx_thread;
 

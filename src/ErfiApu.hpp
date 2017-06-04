@@ -113,8 +113,9 @@ private:
 
     ChannelNoteInfo m_channel_info;
     ChannelSamples m_samples_per_channel;
+#   if 0
     int m_sample_frames;
-
+#   endif
     SfmlAudioDevice * m_audio_device;
 };
 
