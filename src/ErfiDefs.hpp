@@ -349,6 +349,9 @@ namespace device_addresses {
     constexpr const int READ_CONTROLLER         = -8 ;
     constexpr const int HALT_SIGNAL             = -9 ;
     constexpr const int BUS_ERROR               = -10;
+    // as runtime constant -> allows direct pointer comparison
+    extern const char * INVALID_DEVICE_ADDRESS;
+    //! @return returns INVALID_DEVICE_ADDRESS pointer if the address is invalid
     const char * to_string(int);
 
     constexpr const int DEVICE_ADDRESS_MASK     = int(0x80000000);
@@ -642,10 +645,10 @@ enum class ApuInstructionType {
 };
 
 enum class DutyCycleOption {
+    FULL_WAVE,
     ONE_HALF,
     ONE_THIRD,
-    ONE_QUARTER,
-    ONE_FIFTH
+    ONE_QUARTER
 };
 
 bool is_valid_value(const ApuInstructionType it);

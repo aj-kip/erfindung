@@ -23,6 +23,9 @@
 #include "Assembler.hpp"
 #include "FixedPointUtil.hpp"
 
+#include <sstream>
+#include <iomanip>
+
 namespace {
 
 using LineNumIter = erfin::DebuggerInstToLineMap::const_iterator;
@@ -60,7 +63,7 @@ bool Debugger::remove_break_point(std::size_t line_number) {
     m_break_points.erase(itr);
     return true;
 }
-
+#if 1
 void Debugger::update_internals(const RegisterPack & cpu_regs) {
     if (is_outside_program())
         return;
@@ -69,13 +72,42 @@ void Debugger::update_internals(const RegisterPack & cpu_regs) {
     m_at_break_point = (itr != m_break_points.end());
     m_regs = cpu_regs;
 }
-
+#endif
 const std::string & Debugger::interpret_register(Reg r, Interpretation intr)
     { return interpret_register(r, intr, nullptr); }
-
+#if 0
 const std::string & Debugger::interpret_register
     (Reg r, Interpretation intr, const MemorySpace & memory)
 { return interpret_register(r, intr, &memory); }
+#endif
+std::string Debugger::print_current_frame_to_string() const {
+
+    std::stringstream out;
+    out.precision(5);
+    out << std::dec << std::fixed;
+    out << "---------------------------------------------------------------\n";
+    out << "Line Number: ";
+    if (m_inst_to_line_map.empty()) {
+        out << "<Cannot map program counter to line numbers!>\n";
+    } else if (m_regs[std::size_t(Reg::PC)] < m_inst_to_line_map.size()) {
+        out << m_inst_to_line_map[m_regs[std::size_t(Reg::PC)]] << "\n";
+    } else {
+        out << "<PC is outside the original program!>\n";
+    }
+    for (int i = 0; i != int(Reg::COUNT); ++i) {
+        const char * reg_name = register_to_string(Reg(i));
+        out << reg_name;
+        if (reg_name[1] == 0)
+            out << " ";
+        out << " | " << std::setw(9) << int(m_regs[std::size_t(i)]);
+        if (i != int(Reg::PC) && i != int(Reg::SP)) {
+            auto val = fixed_point_to_double(m_regs[std::size_t(i)]);
+            out << " | " << std::setw(12) << val;
+        }
+        out << "\n";
+    }
+    return out.str();
+}
 
 /* private */ const std::string & Debugger::interpret_register
     (Reg r, Interpretation intr, const MemorySpace * memory)
@@ -85,11 +117,13 @@ const std::string & Debugger::interpret_register
     const UInt32 * source = nullptr;
     auto reg_idx = std::size_t(r);
     static_assert(std::is_same<const UInt32 &, decltype((*memory)[0])>::value, "");
+
     if (memory && m_regs[reg_idx] <= memory->size()) {
         source = &(*memory)[0] + m_regs[reg_idx];
     } else {
         source = &m_regs[reg_idx];
     }
+
     if (intr == AS_FP) {
         m_reg_int_cache += std::to_string(fixed_point_to_double(*source));
     } else if (intr == AS_INT) {
@@ -97,6 +131,7 @@ const std::string & Debugger::interpret_register
     } else {
         throw Error("Bad value provided for interpretation.");
     }
+
     return m_reg_int_cache;
 }
 

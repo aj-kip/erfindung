@@ -24,6 +24,7 @@
 
 #include "ErfiDefs.hpp"
 #include "ErfiError.hpp"
+#include "FixedPointUtil.hpp"
 
 #include <iosfwd>
 #include <random>
@@ -41,12 +42,21 @@ public:
     void do_nothing(MemorySpace &, ConsolePack *){}
     void run_cycle(ConsolePack & console);
     void run_cycle(Inst inst, ConsolePack & console);
-
+#   if 0
     void print_registers(std::ostream & out) const;
+#   endif
     void update_debugger(Debugger & dbgr) const;
 
     static void run_tests();
+#   if 0
+    template <typename T>
+    typename std::enable_if<std::is_floating_point<T>::value, T>::
+    type read_register(Reg) const;
 
+    template <typename T>
+    typename std::enable_if<std::is_integral<T>::value && std::is_signed<T>::value, T>::
+    type read_register(Reg) const;
+#   endif
 private:
 
     UInt32 & reg0(Inst inst);
@@ -71,6 +81,8 @@ private:
     RegisterPack m_registers;
 };
 
+// -------------------------- Implemenation Detail ----------------------------
+
 template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
 /* private */ void ErfiCpu::do_arth(Inst inst) {
     using Pf = RTypeParamForm;
@@ -82,7 +94,19 @@ template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
     case Pf::_2R_IMMD_FP : r0 = FuncFp (r1, decode_immd_as_fp (inst)); return;
     }
 }
+#if 0
+template <typename T>
+typename std::enable_if<std::is_floating_point<T>::value, T>::
+type ErfiCpu::read_register(Reg r) const {
+    return fixed_point_to_double(m_registers[std::size_t(r)]);
+}
 
+template <typename T>
+typename std::enable_if<std::is_integral<T>::value && std::is_signed<T>::value, T>::
+type ErfiCpu::read_register(Reg r) const {
+    return T(m_registers[std::size_t(r)]);
+}
+#endif
 } // end of erfin namespace
 
 #endif

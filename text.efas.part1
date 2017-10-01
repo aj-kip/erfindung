@@ -341,5 +341,3 @@ io halt x
   ________   # 6
   ________ ] # 7
 : text-space data numbers [0 0]
-
-#: stack-start data numbers [0]

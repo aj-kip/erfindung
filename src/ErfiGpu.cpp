@@ -313,6 +313,11 @@ bool queue_has_enough_for_top_instruction(const erfin::GpuContext * context) {
 }
 
 UInt32 compute_size_of_sprite(UInt32 index) {
+    // 0 -> mega
+    // 1 -> large
+    // 2 -> medium
+    // 3 -> small
+    // 4 -> mini
     // size mask, number of bits used to encode which "sprite" to use
     UInt32 bits_used = (SIZE_BITS_MASK & index) >> 10;
     if (bits_used > 4)

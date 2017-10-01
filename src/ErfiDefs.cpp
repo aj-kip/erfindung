@@ -50,6 +50,9 @@ constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_LESS_THAN_OR_EQUAL_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_OR_EQUAL_MASK;
 
+const char * device_addresses::INVALID_DEVICE_ADDRESS
+    = "<INVALID ADDRESS>";
+
 const char * device_addresses::to_string(int address) {
     switch (address) {
     case RESERVED_NULL          : return "RESERVED_NULL"          ;
@@ -62,7 +65,7 @@ const char * device_addresses::to_string(int address) {
     case READ_CONTROLLER        : return "READ_CONTROLLER"        ;
     case HALT_SIGNAL            : return "HALT_SIGNAL"            ;
     case BUS_ERROR              : return "BUS_ERROR"              ;
-    default: return "<INVALID ADDRESS>";
+    default                     : return INVALID_DEVICE_ADDRESS   ;
     }
 }
 
@@ -312,8 +315,8 @@ bool is_valid_value(Channel c) {
 bool is_valid_value(DutyCycleOption it) {
     using Dco = DutyCycleOption;
     switch (it) {
-    case Dco::ONE_HALF: case Dco::ONE_THIRD: case Dco::ONE_QUARTER:
-    case Dco::ONE_FIFTH: return true;
+    case Dco::FULL_WAVE: case Dco::ONE_HALF: case Dco::ONE_THIRD:
+    case Dco::ONE_QUARTER: return true;
     default: return false;
     }
 }

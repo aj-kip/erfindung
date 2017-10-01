@@ -54,7 +54,7 @@ public:
     // high-level functions
     // indicies now "hard coded"
     void upload_sprite(UInt32 address, UInt32 width, UInt32 height, UInt32 index);
-    //void unload_sprite(UInt32 index);
+
     void draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
     void screen_clear ();
 

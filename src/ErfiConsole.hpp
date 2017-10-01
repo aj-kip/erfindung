@@ -79,6 +79,7 @@ struct ConsolePack {
 
 void do_write(ConsolePack &, UInt32 address, UInt32 data);
 UInt32 do_read(ConsolePack &, UInt32 address);
+bool address_is_valid(const ConsolePack &, UInt32 address);
 
 /** @brief User level view of the entire "Erfindung console"
  *  The console has all the machine components built into it.
@@ -94,16 +95,18 @@ public:
     void press_restart();
 
     bool trying_to_shutdown() const;
-
+#   if 0
     void print_cpu_registers(std::ostream & out) const;
-
+#   endif
     template <typename Func>
-    void run_until_wait(Func && f);
+    void run_until_wait_with_post_frame(Func && f);
 
-    void run_until_wait() { run_until_wait([](){}); }
+    void run_until_wait() { run_until_wait_with_post_frame([](){}); }
 
     template <typename Func>
     void draw_pixels(Func && f);
+
+    void update_with_current_state(Debugger &) const;
 
     static void load_program_to_memory
         (const ProgramData & program, MemorySpace & memspace);
@@ -120,7 +123,7 @@ private:
 };
 
 template <typename Func>
-void Console::run_until_wait(Func && f) {
+void Console::run_until_wait_with_post_frame(Func && f) {
     pack.gpu->wait(*pack.ram);
     pack.apu->update();
     pack.dev->set_wait_time();

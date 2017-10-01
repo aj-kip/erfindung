@@ -31,6 +31,12 @@ namespace erfin {
 class Assembler;
 class AssemblerDebuggerAttorney;
 
+/** The Debugger is a special, programmer's device that you can hook up to
+ *  your console.
+ *  Features:
+ *  - Break points
+ *  - Convert machine's state into a human friendly report
+ */
 class Debugger {
 public:
     friend class AssemblerDebuggerAttorney;
@@ -53,16 +59,18 @@ public:
     std::size_t add_break_point(std::size_t line_number);
 
     bool remove_break_point(std::size_t line_number);
-
+#   if 1
     void update_internals(const RegisterPack &);
-
+#   endif
     const std::string & interpret_register(Reg, Interpretation);
-
+#   if 0
     const std::string & interpret_register
         (Reg, Interpretation, const MemorySpace &);
-
+#   endif
     const BreakPointsContainer & break_points() const noexcept
         { return m_break_points; }
+
+    std::string print_current_frame_to_string() const;
 
 private:
 
@@ -82,7 +90,7 @@ class AssemblerDebuggerAttorney {
     using InstToLineMap = DebuggerInstToLineMap;
 
     static void copy_line_inst_map_to_debugger
-        (InstToLineMap & map_, Debugger & debugger)
+        (const InstToLineMap & map_, Debugger & debugger)
     { debugger.m_inst_to_line_map = map_; }
 };
 

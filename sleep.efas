@@ -1,5 +1,6 @@
 assume io-throw-away
 set sp stack-start
+call ff-like
 call descent
 call something
 call something
@@ -23,6 +24,16 @@ io pulse one note  x 100 167 133 200
 io pulse two note  x 700 400 600 500 550 500 600 500
 io pulse two note  x 650 450 575 550 565 575 600 575
 pop pc
+
+:ff-like
+io pulse one tempo x 5
+io pulse one note  x 220 330 440 550 660 
+io pulse one note  x 770 880 990 880 770
+io pulse one note  x 660 550 440 330 220
+io pulse two tempo x 1
+io pulse two note  x 0 0 0
+pop pc
+
 
 :sleep
     comp a x    0

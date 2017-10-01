@@ -21,8 +21,11 @@
 
 #include "ErfiConsole.hpp"
 #include "FixedPointUtil.hpp"
+#include "Debugger.hpp"
 
 #include <SFML/Window/Event.hpp>
+
+#include <cassert>
 
 namespace {
 
@@ -31,7 +34,11 @@ using Error = std::runtime_error;
 erfin::GamePad::Button to_button(sf::Keyboard::Key k);
 
 erfin::UInt32 do_device_read(erfin::ConsolePack &, erfin::UInt32 address);
+
 void do_device_write(erfin::ConsolePack &, erfin::UInt32 address, erfin::UInt32 data);
+
+constexpr const char * ACCESS_VIOLATION_MESSAGE =
+    "Memory access violation (address is too high).";
 
 } // end of <anonymous> namespace
 
@@ -78,16 +85,30 @@ ConsolePack::ConsolePack():
 void do_write(ConsolePack & con, UInt32 address, UInt32 data) {
     if (int(address) & device_addresses::DEVICE_ADDRESS_MASK) {
         do_device_write(con, address, data);
-    } else {
+    } else if (address < con.ram->size()) {
         (*con.ram)[address] = data;
+    } else {
+        throw Error(ACCESS_VIOLATION_MESSAGE);
     }
 }
 
 UInt32 do_read(ConsolePack & con, UInt32 address) {
     if (int(address) & device_addresses::DEVICE_ADDRESS_MASK) {
         return do_device_read(con, address);
-    } else {
+    } else if (address < con.ram->size()) {
         return (*con.ram)[address];
+    } else {
+        throw Error(ACCESS_VIOLATION_MESSAGE);
+    }
+}
+
+bool address_is_valid(const ConsolePack & con, UInt32 address) {
+    using namespace device_addresses;
+    if (int(address) & device_addresses::DEVICE_ADDRESS_MASK) {
+        return to_string(int(address)) != INVALID_DEVICE_ADDRESS;
+    } else {
+        assert(con.ram);
+        return address < con.ram->size();
     }
 }
 
@@ -124,9 +145,13 @@ void Console::press_restart() {
 bool Console::trying_to_shutdown() const {
     return pack.dev->halt_requested();
 }
-
+#if 0
 void Console::print_cpu_registers(std::ostream & out) const {
     pack.cpu->print_registers(out);
+}
+#endif
+void Console::update_with_current_state(Debugger & debugger) const {
+    pack.cpu->update_debugger(debugger);
 }
 
 /* static */ void Console::load_program_to_memory
