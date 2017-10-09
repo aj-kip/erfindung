@@ -80,9 +80,12 @@ void ErfiCpu::reset() {
 }
 
 void ErfiCpu::run_cycle(ConsolePack & console) {
-    auto do_read = std::bind(::erfin::do_read, console, std::placeholders::_1);
-    auto inst = deserialize(do_read(m_registers[std::size_t(Reg::PC)]++));
-    run_cycle(inst, console);
+    auto & pc_reg = m_registers[std::size_t(Reg::PC)];
+    if (!address_is_valid(console, pc_reg)) {
+        throw ErfiCpuError(pc_reg, "Failed to decode instruction at invalid "
+                               "address. (Perhaps a bad SET pc instruction?)");
+    }
+    run_cycle(deserialize(do_read(console, pc_reg++)), console);
 }
 
 void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
@@ -116,12 +119,12 @@ void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     case O::SKIP: do_skip(inst         ); return;
     case O::CALL: do_call(inst, console); return;
     // "O"-types (0 bits for "pf") (odd-out types)
-    // CALL, NOT
+    // NOT
     case O::NOT: do_not(inst); return;
     default: throw_error(inst); // throws
     };
 }
-
+#if 0
 void ErfiCpu::print_registers(std::ostream & out) const {
     OstreamFormatSaver cfs(out); (void)cfs;
 
@@ -133,13 +136,16 @@ void ErfiCpu::print_registers(std::ostream & out) const {
         if (reg_name[1] == 0)
             out << " ";
         out << " | " << std::setw(9) << int(m_registers[std::size_t(i)]);
-        out << " | " << std::setw(12) << fixed_point_to_double(m_registers[std::size_t(i)]);
+        if (i != int(Reg::PC) && i != int(Reg::SP)) {
+            auto val = fixed_point_to_double(m_registers[std::size_t(i)]);
+            out << " | " << std::setw(12) << val;
+        }
         out << "\n";
     }
 
     out << std::flush;
 }
-
+#endif
 void ErfiCpu::update_debugger(Debugger & dbgr) const {
     dbgr.update_internals(m_registers);
 }
@@ -255,6 +261,7 @@ void try_program(const char * source_code, const int inst_limit_c) {
 }
 
 /* private */ void ErfiCpu::do_not(Inst inst) {
+    // prevent from accidently mutating register one
     UInt32 t   = reg1(inst);
     reg0(inst) = ~t;
 }
@@ -340,21 +347,21 @@ const char * op_code_to_string(erfin::Inst i) {
     using namespace erfin;
     using O = OpCode;
     switch (decode_op_code(i)) {
-    case O::PLUS       : return "plus";
-    case O::MINUS      : return "minus";
-    case O::TIMES      : return "times";
-    case O::DIVIDE     : return "div";
-    case O::MODULUS    : return "mod";
-    case O::AND        : return "and";
-    case O::XOR        : return "xor";
-    case O::OR         : return "or";
-    case O::NOT        : return "not";
-    case O::ROTATE     : return "rotate";
-    case O::COMP       : return "compare";
-    case O::SKIP       : return "skip";
-    case O::LOAD       : return "load";
-    case O::SAVE       : return "save";
-    case O::SET        : return "set";
+    case O::PLUS   : return "plus"   ;
+    case O::MINUS  : return "minus"  ;
+    case O::TIMES  : return "times"  ;
+    case O::DIVIDE : return "div"    ;
+    case O::MODULUS: return "mod"    ;
+    case O::AND    : return "and"    ;
+    case O::XOR    : return "xor"    ;
+    case O::OR     : return "or"     ;
+    case O::NOT    : return "not"    ;
+    case O::ROTATE : return "rotate" ;
+    case O::COMP   : return "compare";
+    case O::SKIP   : return "skip"   ;
+    case O::LOAD   : return "load"   ;
+    case O::SAVE   : return "save"   ;
+    case O::SET    : return "set"    ;
     default: return "<NOT ANY OPTCODE>";
     }
 }

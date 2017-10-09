@@ -6,8 +6,7 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 SOURCES += \
-	../src/main.cpp \
-    ../src/DrawRectangle.cpp \
+    ../src/main.cpp \
     ../src/ErfiGpu.cpp \
     ../src/Assembler.cpp \
     ../src/ErfiCpu.cpp \
@@ -19,10 +18,11 @@ SOURCES += \
     ../src/AssemblerPrivate/ProcessIoLine.cpp \
     ../src/Debugger.cpp \
     ../src/ErfiConsole.cpp \
-    ../src/ErfiApu.cpp
-    
+    ../src/ErfiApu.cpp \
+    ../src/tests.cpp \
+    ../src/parse_program_options.cpp
+
 HEADERS += \
-    ../src/DrawRectangle.hpp \
     ../src/FixedPointUtil.hpp \
     ../src/ErfiGpu.hpp \
     ../src/ErfiDefs.hpp \
@@ -38,7 +38,9 @@ HEADERS += \
     ../src/Debugger.hpp \
     ../src/ErfiGamePad.hpp \
     ../src/ErfiConsole.hpp \
-    ../src/ErfiApu.hpp
+    ../src/ErfiApu.hpp \
+    ../src/tests.hpp \
+    ../src/parse_program_options.hpp
 
 TARGET = erfindung
 
@@ -52,7 +54,9 @@ CONFIG (debug, debug|release) {
 
 CONFIG (release, debug|release) {
     DEFINES += linux NDEBUG MACRO_RELEASE
-    CONFIG -= debug import_qpa_plugin import_plugins testcase_targets qt qpa gcc file_copies warn_on release link_prl incremental shared c++11 console
+    CONFIG -= debug import_qpa_plugin import_plugins testcase_targets qt qpa \
+              gcc file_copies warn_on release link_prl incremental shared \
+              c++11 console
     QMAKE_CXXFLAGS_RELEASE -= -O2
     QMAKE_CXXFLAGS_RELEASE -= -pg
     QMAKE_LFLAGS_RELEASE   -= -O1

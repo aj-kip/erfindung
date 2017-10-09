@@ -26,7 +26,7 @@
 
 #include <vector>
 #include <queue>
-
+#include <random>
 #include <bitset>
 
 #include <cstdint>
@@ -37,6 +37,13 @@ namespace erfin {
 
 class SfmlAudioDevice;
 
+// Dev notes:
+// unimplemented: duty-cycles, noise channel
+// duty-cycles
+// - as multipliers?
+// - - one for "full-on" then
+// pulse channels are just straight square waves
+//
 class Apu {
 public:
     friend class ApuAttorney;
@@ -77,11 +84,10 @@ private:
     // "Hardware" fixed sample rate
     static constexpr const int SAMPLE_RATE = 11025;
 
-    using DutyCycleWindow = std::bitset<sizeof(int32_t)*8>;
+    using DutyCycleWindow  = std::bitset<sizeof(int32_t)*8>;
+    using InstructionQueue = std::queue<UInt32>;
 
     static const constexpr int ALL_POSSIBLE_SAMPLE_FRAMES = -1;
-
-    using InstructionQueue = std::queue<UInt32>;
 
     // channel stuff
     using Int16 = std::int16_t;
@@ -91,8 +97,6 @@ private:
     };
     using ChannelNoteInfo = std::vector<ChannelInfo>;
     using ChannelSamples = std::vector<std::vector<std::int16_t>>;
-
-    static constexpr const int INSTRUCTIONS_PER_THREAD_SYNC = 16;
 
     std::vector<Int16> & select_channel(Channel c)
         { return m_samples_per_channel[static_cast<std::size_t>(c)]; }
@@ -104,6 +108,7 @@ private:
         { return &m_channel_info[static_cast<std::size_t>(c)].dc_window; }
 
     void process_instructions();
+    void generate_note(Channel, int note);
 
     static void merge_samples(ChannelSamples &, std::vector<Int16> &,
                               int sample_count);
@@ -113,10 +118,8 @@ private:
 
     ChannelNoteInfo m_channel_info;
     ChannelSamples m_samples_per_channel;
-#   if 0
-    int m_sample_frames;
-#   endif
     SfmlAudioDevice * m_audio_device;
+    std::default_random_engine m_rng;
 };
 
 class ApuAttorney {

@@ -34,6 +34,7 @@
 #include <iostream>
 
 // <------------------------- Implementation Detail -------------------------->
+// <------------------- Public Interface is further below -------------------->
 
 template <typename IterType, typename RealType>
 using EnableStrToNumIter = typename std::enable_if<

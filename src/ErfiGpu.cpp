@@ -153,6 +153,10 @@ UInt32 ErfiGpu::read() const {
     return 0;
 }
 
+const ErfiGpu::VideoMemory & ErfiGpu::current_screen() const {
+    return m_cold->pixels;
+}
+
 /* static */ bool ErfiGpu::is_valid_sprite_index(UInt32 idx) {
 
     switch (SIZE_BITS_MASK & idx) {
@@ -170,7 +174,7 @@ UInt32 ErfiGpu::read() const {
     }
     return (idx >> 13) == 0;
 }
-
+#if 0
 /* private */ std::size_t ErfiGpu::next_set_pixel(std::size_t i) {
     while (i != m_cold->pixels.size()) {
         if (m_cold->pixels[i++])
@@ -178,7 +182,7 @@ UInt32 ErfiGpu::read() const {
     }
     return std::size_t(-1);
 }
-
+#endif
 /* private static */ void ErfiGpu::do_gpu_tasks
     (std::unique_ptr<GpuContext> & context, const UInt32 * memory, ThreadControl & tc)
 {
@@ -195,6 +199,14 @@ UInt32 ErfiGpu::read() const {
         tc.gpu_thread_ready = false;
 #       endif
         while (!context->command_buffer.empty()) {
+            // reason's for invalid gpu instructions:
+            // - forced waits
+            // - malformed programs
+            if (!is_valid_gpu_op_code(context->command_buffer.front())) {
+                context->command_buffer.pop();
+                continue;
+            }
+
             // stop instruction process if there isn't enough for the next
             // instruction
             if (!queue_has_enough_for_top_instruction(context.get())) break;
@@ -203,6 +215,7 @@ UInt32 ErfiGpu::read() const {
             case UPLOAD: ::upload_sprite(*context, memory); break;
             case DRAW  : ::draw_sprite  (*context); break;
             case CLEAR : ::clear_screen (*context); break;
+            default: break;
             }
         }
 #       if 0
@@ -308,11 +321,17 @@ void clear_screen(erfin::GpuContext & ctx) {
 bool queue_has_enough_for_top_instruction(const erfin::GpuContext * context) {
     using namespace erfin;
     auto code = static_cast<GpuOpCode>(context->command_buffer.front());
+    assert(is_valid_gpu_op_code(code));
     int left_after_code = int(context->command_buffer.size() - 1);
     return left_after_code >= parameters_per_instruction(code);
 }
 
 UInt32 compute_size_of_sprite(UInt32 index) {
+    // 0 -> mega
+    // 1 -> large
+    // 2 -> medium
+    // 3 -> small
+    // 4 -> mini
     // size mask, number of bits used to encode which "sprite" to use
     UInt32 bits_used = (SIZE_BITS_MASK & index) >> 10;
     if (bits_used > 4)

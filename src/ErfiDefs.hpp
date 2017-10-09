@@ -349,6 +349,9 @@ namespace device_addresses {
     constexpr const int READ_CONTROLLER         = -8 ;
     constexpr const int HALT_SIGNAL             = -9 ;
     constexpr const int BUS_ERROR               = -10;
+    // as runtime constant -> allows direct pointer comparison
+    extern const char * INVALID_DEVICE_ADDRESS;
+    //! @return returns INVALID_DEVICE_ADDRESS pointer if the address is invalid
     const char * to_string(int);
 
     constexpr const int DEVICE_ADDRESS_MASK     = int(0x80000000);
@@ -407,7 +410,8 @@ enum class ParamForm {
 //                # numbers seperated by whitespace
 //                ... ]
 using RegisterPack = std::array<UInt32, 8>;
-using MemorySpace  = std::array<UInt32, 65536/sizeof(UInt32)>;
+constexpr const unsigned MEMORY_CAPACITY = 65536;
+using MemorySpace  = std::array<UInt32, MEMORY_CAPACITY/sizeof(UInt32)>;
 
 // high level type alaises
 using DebuggerInstToLineMap = std::vector<std::size_t>;
@@ -642,10 +646,10 @@ enum class ApuInstructionType {
 };
 
 enum class DutyCycleOption {
+    FULL_WAVE,
     ONE_HALF,
     ONE_THIRD,
-    ONE_QUARTER,
-    ONE_FIFTH
+    ONE_QUARTER
 };
 
 bool is_valid_value(const ApuInstructionType it);
@@ -670,6 +674,11 @@ enum GpuOpCode_e {
 constexpr const int MINI_SPRITE_BIT_COUNT = 64; // 8x8
 
 using GpuOpCode = gpu_enum_types::GpuOpCode_e;
+
+bool is_valid_gpu_op_code(GpuOpCode) noexcept;
+
+inline bool is_valid_gpu_op_code(UInt32 code) noexcept
+    { return is_valid_gpu_op_code(static_cast<GpuOpCode>(code)); }
 
 int parameters_per_instruction(GpuOpCode code);
 

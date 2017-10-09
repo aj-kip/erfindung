@@ -1,28 +1,11 @@
 set sp stack-start
-set x 8
-set y 8
+###############################################################################
+#
+#   Entry Point
+#
+###############################################################################
+call upload-text
 
-set z 4096
-set a text-a
-
-# Alphabit:
-# 4096 4097 4098 4099 4100 4101 4102 4103 4104
-# a    b    c    d    e    f    g    h    i
-# 4105 4106 4107 4108 4109 4110 4111 4112 4113
-# j    k    l    m    n    o    p    q    r
-# 4114 4115 4116 4117 4118 4119 4120 4121 4122
-# s    t    u    v    w    x    y    z    " "
-
-: start-upload-loop
-io upload x y a z
-add z 1
-add a 2
-#jump loop-done
-comp c z    4123 # 4123
-skip c   ==
-    jump start-upload-loop
-
-: loop-done
 : draw-again
 set x 120
 set y 100
@@ -58,6 +41,70 @@ jump draw-again
 
 : quit-program
 io halt x
+
+###############################################################################
+# upload alphabet
+# no parameters, no returns
+# Alphabet:
+# 4096 4097 4098 4099 4100 4101 4102 4103 4104
+# a    b    c    d    e    f    g    h    i
+# 4105 4106 4107 4108 4109 4110 4111 4112 4113
+# j    k    l    m    n    o    p    q    r
+# 4114 4115 4116 4117 4118 4119 4120 4121 4122
+# s    t    u    v    w    x    y    z    " "
+###############################################################################
+: upload-text
+push x y z a
+set x 8
+set y 8
+
+set z 4096
+set a text-a
+
+: start-upload-loop
+io upload x y a z
+add z 1
+add a 2
+comp c z    4123 # 4123
+skip c   ==
+    jump start-upload-loop
+pop a z y x pc
+
+###############################################################################
+# parameters: x address of the string
+#             y is the length (in words)
+#             z          <- x position of the string
+#             (on stack) <- y position of the string
+###############################################################################
+: draw-text
+# unfortunately I haven't defined callee, caller saving convention...
+# callee should save x, y, z -> (the ones it modifies)
+# caller should save a, b, c -> (the ones it needs to keep)
+push z
+# grab y and push to stack (again)
+load z sp -1
+push z
+
+: draw-text-begin
+comp z y    0
+skip z   ==
+    jump draw-text-return
+
+load a x
+and  a 255
+mod  a 27
+set  b text-a
+mul  a 2 # <- two words per letter
+add  a b
+
+: draw-text-return
+pop z pc
+
+###############################################################################
+#
+# Data: alphabet
+#
+###############################################################################
 : text-a data [
 # 01234567
   ________   # 0

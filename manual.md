@@ -20,14 +20,10 @@ Erfindung Assembly Language
 Erfindung is designed to handle two different types of numbers:
  + unsigned 32 bit integers (also used for pointers)
  + two's complement 32 bit fixed point real numbers
-
-Positive integers may be used as pointers.
-
-Each instruction is strictly 32bits.
-There are 8 32bit registers.
-
-
-Erfindung has instructions that can handle fixed point math.
+ + Positive integers may be used as pointers.
+ + Each instruction is strictly 32bits.
+ + There are 8 32bit registers.
+ + Erfindung has instructions that can handle fixed point math.
 
 Erfindung assembly language: is a superset of the provided hardware
 instructions.
@@ -35,6 +31,45 @@ Terms:
  + Hardware instruction: an instruction defined by the ISA
  + pseudo instruction: an instruction NOT defined by the ISA, but can be
 formed from a combination of one or more hardware instructions.
+
+Sample programs are available in the project's root directory.
+
+### Instruction List
+
+These are the so called "real" instructions that directly correspond to byte code in the virtual machine. Note that some of these instructions have additional parameter forms than listed on this table. They will be covered in Pseudo-Instructions section.
+
+All the following instructions store their answer into the first register.
+
+| Mnemonic  | Parameters |Description                |
+|:----------|:---------------------------|            |
+| and       | Reg reg (reg/fp/int/label)          |  bitwise operations treat registers as a "bag of bits"                |
+| or        |  Reg reg (reg/fp/int/label)          | |
+| xor       | Reg reg (reg/fp/int/label)          | |
+| not       | Reg           | register has its bits flipped |
+| plus      | Reg reg (reg/fp/int/label)          |  covers both fixed point and integers|
+| minus     | Reg reg (reg/fp/int/label)          |  covers both fixed point and integers|
+| times-int | Reg reg (reg/int/label)           | integers only (as per suffix) |
+| times-fp  | Reg reg (reg/fp/label)           | fixed points only (as per suffix) |
+| div-int
+| div-fp
+| mod-int
+| mod-fp
+| comp-int | | The compare operation behaves very similarly to the other arithmetic operations. This operation produces a four-bit response of flags, where each denotes  |
+| comp-fp
+| skip
+| save
+| load
+| call
+
+### Pseudo-Instructions
++ times
++ div
++ mod
++ comp
++ jump
++ io
++ push
++ pop
 
 Complete Memory Map
 -------------------

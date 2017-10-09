@@ -52,7 +52,7 @@ public:
 
     static constexpr const std::size_t INVALID_LINE_NUMBER = std::size_t(-1);
 
-    Assembler() {}
+    Assembler() noexcept {}
 
     void assemble_from_file(const char * file);
 
@@ -64,7 +64,7 @@ public:
 
     const ProgramData & program_data() const;
 
-    void setup_debugger(Debugger & dbgr);
+    void setup_debugger(Debugger & dbgr) const;
 
     /**
      *  @note also clears error information

@@ -40,6 +40,7 @@ class ErfiGpu {
 public:
 
     using MiniSprite = std::bitset<MINI_SPRITE_BIT_COUNT>;
+    using VideoMemory = std::vector<bool>;
 
     ErfiGpu();
     ~ErfiGpu();
@@ -54,7 +55,7 @@ public:
     // high-level functions
     // indicies now "hard coded"
     void upload_sprite(UInt32 address, UInt32 width, UInt32 height, UInt32 index);
-    //void unload_sprite(UInt32 index);
+
     void draw_sprite  (UInt32 x, UInt32 y, UInt32 index);
     void screen_clear ();
 
@@ -67,9 +68,15 @@ public:
     // it can be hard-coded or handled by software
 
     // 0b --- sss ii,ii,ii,ii,ii
-
+#   if 0
     template <typename Func>
     void draw_pixels(Func f);
+
+    template <typename Func>
+    void for_each_pixel(Func && f) const;
+#   endif
+
+    const VideoMemory & current_screen() const;
 
     static const int SCREEN_WIDTH;
     static const int SCREEN_HEIGHT;
@@ -78,7 +85,7 @@ public:
 
 private:
 
-    using VideoMemory = std::vector<bool>;
+
     using CondVar = std::condition_variable;
     friend struct GpuContext;
 
@@ -93,8 +100,11 @@ private:
         bool gpu_thread_ready;
         bool command_buffer_swaped;
     };
-
+#   if 0
     std::size_t next_set_pixel(std::size_t i);
+#   endif
+
+
 
     static void do_gpu_tasks
         (std::unique_ptr<GpuContext> & context, const UInt32 * memory,
@@ -109,6 +119,7 @@ private:
     std::unique_ptr<GpuContext> m_hot ; // hot as in "touch it and get burned"
 };
 
+#if 0
 template <typename Func>
 void ErfiGpu::draw_pixels(Func f) {
     const std::size_t END = std::size_t(-1);
@@ -118,6 +129,17 @@ void ErfiGpu::draw_pixels(Func f) {
         f(x, y);
     }
 }
+
+template <typename Func>
+void ErfiGpu::for_each_pixel(Func && f) const {
+    for (auto & pix : m_cold.get)
+    {
+
+    }
+}
+#endif
+
+
 
 } // end of erfin namespace
 
