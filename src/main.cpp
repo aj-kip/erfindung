@@ -35,7 +35,6 @@
 
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
-#include "DrawRectangle.hpp"
 #include "Debugger.hpp"
 #include "StringUtil.hpp"
 #include "Assembler.hpp"
@@ -83,6 +82,9 @@ int main(int argc, char ** argv) {
         if (options.input_stream_ptr)
             assembler.assemble_from_stream(*options.input_stream_ptr);
         assembler.print_warnings(std::cout);
+        std::cout << "Program size: "
+                  << assembler.program_data().size()*sizeof(erfin::Inst)
+                  << "/" << erfin::MEMORY_CAPACITY << " bytes." << std::endl;
         options.assembler = &assembler;
         options.mode(options, assembler.program_data());
         return 0;
@@ -162,8 +164,14 @@ void watched_windowed_run
     ExecutionHistoryLogger exlogger(opts.watched_history_length);
     opts.assembler->setup_debugger(debugger);
     console.load_program(program);
-    for (auto bp : opts.break_points)
-        debugger.add_break_point(bp);
+    for (auto bp : opts.break_points) {
+        auto actual_line = debugger.add_break_point(bp);
+        if (bp != actual_line) {
+            std::cout << "Failed to add breakpoint to line: " << bp
+                      << " adding breakpoint to proximal line: " << actual_line
+                      << std::endl;
+        }
+    }
 
     sf::RenderWindow win;
     setup_window_view(win, opts);
@@ -184,7 +192,8 @@ void watched_windowed_run
         throw;
     }
 
-    std::cout << "Program finished without errors.\n" << exlogger.to_string();
+    std::cout << "Program finished without simulation errors.\n"
+              << exlogger.to_string();
 }
 
 namespace {
@@ -262,6 +271,10 @@ void print_help(const ProgramOptions &, const erfin::ProgramData &) {
          "\tScales the window by an integer factor.\n"
          "Each program \"command\" accepts parameters between each "
          "of these \"commands\" e.g.\n"
+         "-b --break-points\n"
+         "\tPrints current frame at the given line numbers to the terminal. "
+         "Lists registers and their values, and continues running the "
+         "program. Invalid line numbers are ignored.\n"
          "\n\t ./erfindung -i sample.efas -w 3 -c\n"
          "Erfindung is GPLv3 software, refer to COPYING on the terms "
          "and conditions for copying.\n"
@@ -283,6 +296,7 @@ void setup_window_view(sf::RenderWindow & window, const ProgramOptions & opts) {
     view.setCenter(float(ErfiGpu::SCREEN_WIDTH /2),
                    float(ErfiGpu::SCREEN_HEIGHT/2));
     view.setSize(float(ErfiGpu::SCREEN_WIDTH), float(ErfiGpu::SCREEN_HEIGHT));
+
     window.setVerticalSyncEnabled(true);
     window.setFramerateLimit(60);
     window.setView(view);
@@ -308,23 +322,62 @@ void process_events(erfin::Console & console, sf::Window & window) {
     }
 }
 
+class ForceWaitNotifier {
+public:
+    ForceWaitNotifier(): m_first_notice_given(false) {}
+    void issue_notice_once() {
+        if (m_first_notice_given) return;
+        throw Error("Wait was forced, the program may not "
+                    "render correctly!");
+#       if 0
+        std::cout << "Wait was forced, the program may not "
+                     "render correctly!" << std::endl;
+        m_first_notice_given = true;
+#       endif
+    }
+private:
+    bool m_first_notice_given;
+};
+
+
 template <typename Func>
 void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
                       Func && do_between_cycles)
 {
     using namespace erfin;
+    const auto SCREEN_WIDTH  = unsigned(ErfiGpu::SCREEN_WIDTH );
+    const auto SCREEN_HEIGHT = unsigned(ErfiGpu::SCREEN_HEIGHT);
     sf::Clock clk;
     int fps = 0;
     int frame_count = 0;
 
     sf::Texture screen_pixels;
-    std::vector<UInt32> pixel_array;
-    screen_pixels.create(unsigned(ErfiGpu::SCREEN_WIDTH),
-                         unsigned(ErfiGpu::SCREEN_HEIGHT));
-    pixel_array.resize(unsigned(ErfiGpu::SCREEN_HEIGHT*ErfiGpu::SCREEN_WIDTH), 0);
+    screen_pixels.create(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    std::vector<UInt32> pixel_array(SCREEN_HEIGHT*SCREEN_WIDTH, 0);
+    assert(pixel_array.size() == console.current_screen().size());
+
+    auto clks_elapsed_time = [&clk]()
+        { return double(clk.getElapsedTime().asSeconds()); };
+
+    auto map_screen_to_texture =
+        [](Console & console, std::vector<UInt32> & raw_pixels)
+    {
+        auto scr_itr = console.current_screen().begin();
+        for (auto & pix : raw_pixels) {
+            assert(scr_itr != console.current_screen().end());
+            pix = *scr_itr++ ? ~0u : 0;
+        }
+    };
+
+    ForceWaitNotifier force_wait_notifier;
+
+    sf::Sprite screen_sprite;
+    screen_sprite.setTexture(screen_pixels);
+    screen_sprite.setPosition(0.f, 0.f);
 
     while (window.isOpen()) {
-        if (double(clk.getElapsedTime().asSeconds()) >= 1.0) {
+        if (clks_elapsed_time() >= 1.0) {
             fps = frame_count;
             frame_count = 0;
             clk.restart();
@@ -335,23 +388,21 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
 
         window.clear();
 
-        console.run_until_wait_with_post_frame(do_between_cycles);
+        console.run_until_wait_with_post_frame([&]() {
+            //if (clks_elapsed_time() >= 0.1) {
+            //    console.force_wait_state();
+            //    force_wait_notifier.issue_notice_once();
+            //}
+            do_between_cycles();
+        });
         if (console.trying_to_shutdown())
             break;
 
-        std::fill(pixel_array.begin(), pixel_array.end(), 0);
-        console.draw_pixels([&window, &pixel_array](int x, int y) {
-            pixel_array[unsigned(x + erfin::ErfiGpu::SCREEN_WIDTH*y)] = ~0u;
-        });
+        map_screen_to_texture(console, pixel_array);
         screen_pixels.update(reinterpret_cast<UInt8 *>(&pixel_array.front()),
-                             unsigned(ErfiGpu::SCREEN_WIDTH),
-                             unsigned(ErfiGpu::SCREEN_HEIGHT),
-                             0, 0);
+                             SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0);
 
-        sf::Sprite spt;
-        spt.setTexture(screen_pixels);
-        spt.setPosition(0.f, 0.f);
-        window.draw(spt);
+        window.draw(screen_sprite);
 
         window.display();
     }

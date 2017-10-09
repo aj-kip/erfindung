@@ -410,7 +410,8 @@ enum class ParamForm {
 //                # numbers seperated by whitespace
 //                ... ]
 using RegisterPack = std::array<UInt32, 8>;
-using MemorySpace  = std::array<UInt32, 65536/sizeof(UInt32)>;
+constexpr const unsigned MEMORY_CAPACITY = 65536;
+using MemorySpace  = std::array<UInt32, MEMORY_CAPACITY/sizeof(UInt32)>;
 
 // high level type alaises
 using DebuggerInstToLineMap = std::vector<std::size_t>;
@@ -673,6 +674,11 @@ enum GpuOpCode_e {
 constexpr const int MINI_SPRITE_BIT_COUNT = 64; // 8x8
 
 using GpuOpCode = gpu_enum_types::GpuOpCode_e;
+
+bool is_valid_gpu_op_code(GpuOpCode) noexcept;
+
+inline bool is_valid_gpu_op_code(UInt32 code) noexcept
+    { return is_valid_gpu_op_code(static_cast<GpuOpCode>(code)); }
 
 int parameters_per_instruction(GpuOpCode code);
 

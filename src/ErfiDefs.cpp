@@ -323,13 +323,18 @@ bool is_valid_value(DutyCycleOption it) {
 
 // ---------------------- GPU Constants/utility functions ---------------------
 
+bool is_valid_gpu_op_code(GpuOpCode code) noexcept {
+    using namespace gpu_enum_types;
+    switch (code) {
+    case UPLOAD: case DRAW: case CLEAR: return true;
+    }
+    return false;
+}
+
 int parameters_per_instruction(GpuOpCode code) {
     using namespace gpu_enum_types;
     switch (code) {
     case UPLOAD: return 4;
-#   if 0
-    case UNLOAD: return 1;
-#   endif
     case DRAW  : return 3;
     case CLEAR : return 0;
     }

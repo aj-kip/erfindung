@@ -45,21 +45,21 @@ type to_dec_number(const char * str, T & out) {
     return string_to_number<const char *, T>(str, str + str_len(str), out, 10);
 }
 
-void select_input(OptionsPair & opts, char ** beg, char ** end);
+void select_input(OptionsPair &, char ** beg, char ** end);
 
-void select_cli(OptionsPair & opts, char **, char **);
+void select_cli(OptionsPair &, char **, char **);
 
-void select_help(OptionsPair & opts, char **, char **);
+void select_help(OptionsPair &, char **, char **);
 
-void select_watched_window(OptionsPair & opts, char ** beg, char ** end);
+void select_watched_window(OptionsPair &, char ** beg, char ** end);
 
-void add_break_points(OptionsPair & opts, char ** beg, char ** end);
+void add_break_points(OptionsPair &, char ** beg, char ** end);
 
-void select_tests(OptionsPair & opts, char**, char **);
+void select_tests(OptionsPair &, char**, char **);
 
-void select_stream_input(OptionsPair & opts, char**, char **);
+void select_stream_input(OptionsPair &, char**, char **);
 
-void select_window_scale(OptionsPair & opts, char ** beg, char ** end);
+void select_window_scale(OptionsPair &, char ** beg, char ** end);
 
 } // end of <anonymous> namespace
 
@@ -89,7 +89,7 @@ void ProgramOptions::swap(ProgramOptions & lhs) {
 }
 
 OptionsPair::OptionsPair():
-    mode(watched_windowed_run)
+    mode(normal_windowed_run)
 {}
 
 OptionsPair parse_program_options(int argc, char ** argv) {

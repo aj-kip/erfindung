@@ -63,7 +63,7 @@ bool Debugger::remove_break_point(std::size_t line_number) {
     m_break_points.erase(itr);
     return true;
 }
-#if 1
+
 void Debugger::update_internals(const RegisterPack & cpu_regs) {
     if (is_outside_program())
         return;
@@ -72,14 +72,10 @@ void Debugger::update_internals(const RegisterPack & cpu_regs) {
     m_at_break_point = (itr != m_break_points.end());
     m_regs = cpu_regs;
 }
-#endif
+
 const std::string & Debugger::interpret_register(Reg r, Interpretation intr)
     { return interpret_register(r, intr, nullptr); }
-#if 0
-const std::string & Debugger::interpret_register
-    (Reg r, Interpretation intr, const MemorySpace & memory)
-{ return interpret_register(r, intr, &memory); }
-#endif
+
 std::string Debugger::print_current_frame_to_string() const {
 
     std::stringstream out;

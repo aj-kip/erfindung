@@ -1,53 +1,183 @@
-            push x y a z
-            set a ship-sprite-data
-            set z 0b01111111111
-            set x 16
-            set y 16
-            io upload x y a z
-            jump end-ship-data
-            :ship-data data numbers [
-                160 # x
-                320 # y
-                3   # lives
-                0   # upgrade-level
-            ]
-            :end-ship-data
-            pop x y a z
+#!./erfindung
+set sp stack-start
+###################################################################
+# START SECTION: bullet init
+###################################################################
+
+jump bullet_data_end
+        : bullet_data data numbers [
+        0 # bullet index
         
+	0 # x bullet number 1
+	0 # y
+	0 # x bullet number 2
+	0 # y
+	0 # x bullet number 3
+	0 # y
+ ] # end bullet array
+        :bullet-sprite data binary [
+        # 0123
+          _XX_ # 0
+          X__X # 1
+          X__X # 2
+          X__X # 3
+          X__X # 4
+          _XX_ # 5
+          ____ # 6
+          ____ # 7
+        
+        ]
+        :bullet_data_end
+        set a bullet-sprite
+        set z 0b1001111111011
+        set x 4
+        set y 8
+        io upload x y a z
+
+        
+
+# END SECTION: bullet init
+###################################################################
+
+###################################################################
+# START SECTION: ship init
+###################################################################
+
+set a ship-sprite-data
+set z 0b01111111111
+set x 16
+set y 14
+io upload x y a z
+jump end-ship-data
+:ship-data data numbers [
+    160 # x
+    200 # y
+    3   # lives
+    0   # upgrade-level
+]
+:ship-sprite-data data [
+# 0123456789ABCDEF
+  _X__X______X__X_  # 0
+  _XXXX______XXXX_  # 1
+  _X__X______X__X_  # 2
+  _X__X______X__X_  # 3
+  _X__X_XXXX_X__X_  # 4
+  __X__X____X__X__  # 5
+  __X__________X__  # 6
+  __X____XX____X__  # 7
+  ___X________X___  # 8
+  __X____XX____X__  # 9
+  __X___X__X___X__  # A
+  __XXXXX__XXXXX__  # B
+  __X___X__X___X__  # C
+  __X___X__X___X__  # D
+  
+  ] # end
+:end-ship-data
+        
+
+# END SECTION: ship init
+###################################################################
+
 :main-loop
-        :draw-ship        
-        push x y z
-                # just load positions from memory
-        set z ship-data
-        load x z 0
-        load y z 1 
-        set z 0b01111111111        
-        sub x 8
-        sub y 8
-        io draw x y z
-        jump ship-sprite-end
-        :ship-sprite-data data [
-        # 0123456789ABCDEF
-          ________________  # 0
-          ________________  # 1
-          _X__X______X__X_  # 2
-          _XXXX______XXXX_  # 3
-          _X__X______X__X_  # 4
-          _X__X_XXXX_X__X_  # 5
-          __X__X____X__X__  # 6
-          __X__________X__  # 7 
-          __X____XX____X__  # 8
-          ___X________X___  # 9
-          __X___X__X___X__  # A
-          __XXXXX__XXXXX__  # B
-          __X___X__X___X__  # C
-          __X___X__X___X__  # D
-          ________________  # E
-          ________________  # F
-          ] # end
-        :ship-sprite-end pop z y x
-        
+call bullet_update
+call ship_update
 io wait  x
 io clear x
 jump main-loop
 
+###################################################################
+# START SECTION: bullet update
+###################################################################
+
+#
+    # Note that this is a proper function, and therefore should not be
+    # inlined
+    :bullet_update#
+    push x y z
+    #io read controller z
+    #and  z    16
+    #comp z    16
+    #skip z ==
+        #jump skip-fire-bullet#
+    # fire bullet
+    # load bullet index adjust to position in (words?)
+    load z bullet_data#
+    mul  z 2#
+    # offset for initial data
+    add  z 1#
+    # offset for memory address
+    add  z bullet_data#
+    load x z 0
+    load y z 1
+    sub  y 10
+    save x z 0
+    save y z 1
+    load z bullet_data#
+    add  z 1
+    mod  z 3#
+    save z bullet_data#
+    :skip-fire-bullet#
+    pop z y x pc
+
+# END SECTION: bullet update
+###################################################################
+
+###################################################################
+# START SECTION: ship update
+###################################################################
+
+#
+:ship_update#
+    push x y z
+     
+    # just load positions from memory
+    set z ship-data
+    load x z 0
+    load y z 1 
+    io read controller z
+    and  z    3
+    comp z    1
+    skip z ==  # up is pressed
+       jump skip-press-up
+    add y -1
+    jump skip-press-down
+: skip-press-up
+    io read controller z
+    and  z    3
+    comp z    2
+    skip z ==  # down is pressed
+       set pc skip-press-down
+    add y 1
+: skip-press-down
+    io read controller z
+    and  z   12
+    comp z    4 # left is pressed
+    skip z ==
+       set pc skip-press-left
+    add x -1
+    jump do-ship-update
+: skip-press-left
+    io read controller z
+    and  z   12
+    comp z    8 # right is pressed
+    skip z ==
+       set pc do-ship-update
+    add x 1
+: do-ship-update
+    # save it back
+    set  z ship-data
+    save x z 0
+    save y z 1
+    # draw the ship
+    set z 0b01111111111
+    sub x 8
+    sub y 8
+    io draw x y z
+    pop z y x pc
+    
+
+# END SECTION: ship update
+###################################################################
+
+:stack-start data numbers [0]

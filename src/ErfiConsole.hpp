@@ -40,6 +40,7 @@ namespace erfin {
 
 class UtilityDevices {
 public:
+
     UtilityDevices();
 
     // read actions
@@ -86,6 +87,8 @@ bool address_is_valid(const ConsolePack &, UInt32 address);
  */
 class Console {
 public:
+    using VideoMemory = ErfiGpu::VideoMemory;
+
     Console();
 
     void load_program(const ProgramData & program);
@@ -102,11 +105,15 @@ public:
     void run_until_wait_with_post_frame(Func && f);
 
     void run_until_wait() { run_until_wait_with_post_frame([](){}); }
-
+#   if 0
     template <typename Func>
     void draw_pixels(Func && f);
-
+#   endif
     void update_with_current_state(Debugger &) const;
+
+    void force_wait_state();
+
+    const VideoMemory & current_screen() const;
 
     static void load_program_to_memory
         (const ProgramData & program, MemorySpace & memspace);
@@ -132,12 +139,12 @@ void Console::run_until_wait_with_post_frame(Func && f) {
         f();
     }
 }
-
+#if 0
 template <typename Func>
 void Console::draw_pixels(Func && f) {
     pack.gpu->draw_pixels(std::move(f));
 }
-
+#endif
 } // end of erfin namespace
 
 #endif

@@ -154,6 +154,14 @@ void Console::update_with_current_state(Debugger & debugger) const {
     pack.cpu->update_debugger(debugger);
 }
 
+void Console::force_wait_state() {
+    pack.dev->wait(~0u);
+}
+
+const Console::VideoMemory & Console::current_screen() const {
+    return pack.gpu->current_screen();
+}
+
 /* static */ void Console::load_program_to_memory
     (const ProgramData & program, MemorySpace & memspace)
 {

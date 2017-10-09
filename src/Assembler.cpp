@@ -97,8 +97,8 @@ void Assembler::setup_debugger(Debugger & dbgr) const {
     m_program.clear();
     convert_to_lower_case(source);
     std::vector<std::string> line_list = seperate_into_lines(source);
-    for (std::string & str : line_list)
-        remove_comments_from(str);
+    for (std::string & line : line_list)
+        remove_comments_from(line);
     // I need some means to sync line numbers with the source code
     std::vector<std::string> tokens = tokenize(line_list);
 

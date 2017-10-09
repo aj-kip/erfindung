@@ -119,7 +119,7 @@ void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     case O::SKIP: do_skip(inst         ); return;
     case O::CALL: do_call(inst, console); return;
     // "O"-types (0 bits for "pf") (odd-out types)
-    // CALL, NOT
+    // NOT
     case O::NOT: do_not(inst); return;
     default: throw_error(inst); // throws
     };
@@ -347,21 +347,21 @@ const char * op_code_to_string(erfin::Inst i) {
     using namespace erfin;
     using O = OpCode;
     switch (decode_op_code(i)) {
-    case O::PLUS       : return "plus";
-    case O::MINUS      : return "minus";
-    case O::TIMES      : return "times";
-    case O::DIVIDE     : return "div";
-    case O::MODULUS    : return "mod";
-    case O::AND        : return "and";
-    case O::XOR        : return "xor";
-    case O::OR         : return "or";
-    case O::NOT        : return "not";
-    case O::ROTATE     : return "rotate";
-    case O::COMP       : return "compare";
-    case O::SKIP       : return "skip";
-    case O::LOAD       : return "load";
-    case O::SAVE       : return "save";
-    case O::SET        : return "set";
+    case O::PLUS   : return "plus"   ;
+    case O::MINUS  : return "minus"  ;
+    case O::TIMES  : return "times"  ;
+    case O::DIVIDE : return "div"    ;
+    case O::MODULUS: return "mod"    ;
+    case O::AND    : return "and"    ;
+    case O::XOR    : return "xor"    ;
+    case O::OR     : return "or"     ;
+    case O::NOT    : return "not"    ;
+    case O::ROTATE : return "rotate" ;
+    case O::COMP   : return "compare";
+    case O::SKIP   : return "skip"   ;
+    case O::LOAD   : return "load"   ;
+    case O::SAVE   : return "save"   ;
+    case O::SET    : return "set"    ;
     default: return "<NOT ANY OPTCODE>";
     }
 }

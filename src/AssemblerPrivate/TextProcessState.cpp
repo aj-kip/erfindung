@@ -403,7 +403,7 @@ StringCIter process_numbers
         case DECIMAL: data.push_back(to_fixed_point(npi.floating_point)); break;
         case NOT_NUMERIC:
             throw state.make_error(": all entries in the data sequence must be"
-                                   "  numeric");
+                                   " numeric. (perhaps missing \"]\"?)");
         default: assert(false); break;
         }
     }
