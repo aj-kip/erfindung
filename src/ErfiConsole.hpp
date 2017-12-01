@@ -59,6 +59,7 @@ public:
 
     void set_bus_error(bool v) { m_bus_error = v; }
     bool bus_error_present() const { return m_bus_error; }
+
 private:
     std::default_random_engine m_rng;
     TimePoint m_prev_time;
@@ -98,17 +99,12 @@ public:
     void press_restart();
 
     bool trying_to_shutdown() const;
-#   if 0
-    void print_cpu_registers(std::ostream & out) const;
-#   endif
+
     template <typename Func>
     void run_until_wait_with_post_frame(Func && f);
 
     void run_until_wait() { run_until_wait_with_post_frame([](){}); }
-#   if 0
-    template <typename Func>
-    void draw_pixels(Func && f);
-#   endif
+
     void update_with_current_state(Debugger &) const;
 
     void force_wait_state();
@@ -139,12 +135,7 @@ void Console::run_until_wait_with_post_frame(Func && f) {
         f();
     }
 }
-#if 0
-template <typename Func>
-void Console::draw_pixels(Func && f) {
-    pack.gpu->draw_pixels(std::move(f));
-}
-#endif
+
 } // end of erfin namespace
 
 #endif

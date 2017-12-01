@@ -70,7 +70,6 @@ public:
     std::string print_current_frame_to_string() const;
 
 private:
-
     const std::string & interpret_register
         (Reg, Interpretation, const MemorySpace *);
 

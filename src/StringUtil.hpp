@@ -145,6 +145,7 @@ typename EnableStrToNum<IterType, RealType>::type
         case CharType('A'): case CharType('B'): case CharType('C'):
         case CharType('D'): case CharType('E'): case CharType('F'):
             adder = RealType(*end - 'A' + 10);
+            break;
         default: return false;
         }
         if (adder >= base_c)

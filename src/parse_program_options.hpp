@@ -46,7 +46,6 @@ namespace erfin {
 class Assembler;
 
 struct ProgramOptions {
-
     static constexpr const std::size_t DEFAULT_FRAME_LIMIT = 3;
 
     ProgramOptions();

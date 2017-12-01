@@ -158,7 +158,6 @@ const ErfiGpu::VideoMemory & ErfiGpu::current_screen() const {
 }
 
 /* static */ bool ErfiGpu::is_valid_sprite_index(UInt32 idx) {
-
     switch (SIZE_BITS_MASK & idx) {
     case 0 << 10: case 1 << 10: case 2 << 10: case 3 << 10: case 4 << 10:
         break;
@@ -174,15 +173,7 @@ const ErfiGpu::VideoMemory & ErfiGpu::current_screen() const {
     }
     return (idx >> 13) == 0;
 }
-#if 0
-/* private */ std::size_t ErfiGpu::next_set_pixel(std::size_t i) {
-    while (i != m_cold->pixels.size()) {
-        if (m_cold->pixels[i++])
-            return i;
-    }
-    return std::size_t(-1);
-}
-#endif
+
 /* private static */ void ErfiGpu::do_gpu_tasks
     (std::unique_ptr<GpuContext> & context, const UInt32 * memory, ThreadControl & tc)
 {
