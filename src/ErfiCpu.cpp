@@ -89,10 +89,7 @@ void ErfiCpu::run_cycle(ConsolePack & console) {
 }
 
 void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
-    // 2+3+2 | r0 | r1 | r2
-    //       | r0 | r1 | immd
-    //       | r0 |    | immd
-
+    // ------------------- This is inside a HOT LOOP --------------------------
     using O = OpCode;
     switch (decode_op_code(inst)) {
     // R-type type indifferent split by pf (1-bit) (integer only)
@@ -124,28 +121,7 @@ void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     default: throw_error(inst); // throws
     };
 }
-#if 0
-void ErfiCpu::print_registers(std::ostream & out) const {
-    OstreamFormatSaver cfs(out); (void)cfs;
 
-    out.precision(5);
-    out << std::dec << std::fixed;
-    for (int i = 0; i != int(Reg::COUNT); ++i) {
-        const char * reg_name = register_to_string(Reg(i));
-        out << reg_name;
-        if (reg_name[1] == 0)
-            out << " ";
-        out << " | " << std::setw(9) << int(m_registers[std::size_t(i)]);
-        if (i != int(Reg::PC) && i != int(Reg::SP)) {
-            auto val = fixed_point_to_double(m_registers[std::size_t(i)]);
-            out << " | " << std::setw(12) << val;
-        }
-        out << "\n";
-    }
-
-    out << std::flush;
-}
-#endif
 void ErfiCpu::update_debugger(Debugger & dbgr) const {
     dbgr.update_internals(m_registers);
 }

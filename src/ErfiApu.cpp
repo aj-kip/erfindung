@@ -81,12 +81,15 @@ public:
 class SfmlAudioDevice final : private sf::SoundStream {
 public:
     SfmlAudioDevice();
-    void upload_samples(const std::vector<Int16> &);
-    ~SfmlAudioDevice() { stop(); }
-private:
-    bool onGetData(Chunk & data) override final;
 
-    void onSeek(sf::Time) override final {}
+    void upload_samples(const std::vector<Int16> &);
+
+    ~SfmlAudioDevice() { stop(); }
+
+private:
+    bool onGetData(Chunk & data) override;
+
+    void onSeek(sf::Time) override {}
 
     std::vector<Int16> m_samples;
     std::vector<Int16> m_samples_hot;
@@ -230,12 +233,14 @@ using DutyCycleFunction = Int16(*)(Int16);
 
 class DutyCycleIterator {
 public:
-
     static constexpr const int BITS_PER_DUTY_CYCLE_FUNCTION = 2;
 
     DutyCycleIterator(const DutyCycleWindow &);
+
     void operator ++ ();
+
     DutyCycleFunction duty_cycle_function() const;
+
 private:
     int m_position;
     const DutyCycleWindow * m_duty_cycle_window;
@@ -319,7 +324,6 @@ void SfmlAudioDevice::upload_samples(const std::vector<Int16> & samples_) {
     m_samples.insert(m_samples.end(), samples_.begin(), samples_.end());
     if (!m_samples.empty() && getStatus() == Stopped)
         play();
-
 }
 
 /* private override final */ bool SfmlAudioDevice::onGetData(Chunk & data) {

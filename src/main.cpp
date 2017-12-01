@@ -77,7 +77,6 @@ private:
 } // end of <anonymous> namespace
 
 int main(int argc, char ** argv) {
-
     erfin::Assembler assembler;
     try {
         auto options = erfin::parse_program_options(argc, argv);
@@ -231,7 +230,7 @@ void print_frame(const erfin::Console & console) {
 
 } // end of <anonymous> namespace
 
-void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {    
+void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
     using namespace erfin;
     using MicroSeconds = std::chrono::duration<int, std::micro>;
     Console console;
@@ -324,7 +323,6 @@ void setup_window_view(sf::RenderWindow & window, const ProgramOptions & opts) {
     window.setVerticalSyncEnabled(true);
     window.setFramerateLimit(60);
     window.setView(view);
-
 }
 
 void process_events(erfin::Console & console, sf::Window & window) {

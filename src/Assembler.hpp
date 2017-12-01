@@ -37,7 +37,6 @@ class Debugger;
 
 class Assembler {
 public:
-
     enum Assumption {
         // -int, -fp must be set explicitly
         NO_ASSUMPTIONS = 0,
@@ -80,7 +79,6 @@ public:
     static void run_tests();
 
 private:
-
     void assemble_from_work_string(std::string & source);
 
     ProgramData m_program;
