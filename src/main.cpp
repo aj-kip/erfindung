@@ -30,8 +30,11 @@
 #include <queue>
 #include <algorithm>
 #include <fstream>
+#include <thread>
 
-#include <SFML/Graphics.hpp>
+#ifndef MACRO_BUILD_STL_ONLY
+#   include <SFML/Graphics.hpp>
+#endif
 
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
@@ -78,7 +81,10 @@ int main(int argc, char ** argv) {
     erfin::Assembler assembler;
     try {
         auto options = erfin::parse_program_options(argc, argv);
-        if (options.run_tests) run_tests();
+        if (options.run_tests) {
+            run_tests();
+            return 0;
+        }
         if (options.input_stream_ptr)
             assembler.assemble_from_stream(*options.input_stream_ptr);
         assembler.print_warnings(std::cout);
@@ -132,6 +138,8 @@ std::string ExecutionHistoryLogger::to_string() const {
 
 // ----------------------------------------------------------------------------
 
+#ifndef MACRO_BUILD_STL_ONLY
+
 void setup_window_view(sf::RenderWindow & window, const ProgramOptions &);
 
 void process_events(erfin::Console & console, sf::Window & window);
@@ -140,7 +148,11 @@ template <typename Func>
 void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
                       Func && do_between_cycles);
 
+#endif
+
 } // end of <anonymous> namespace
+
+#ifndef MACRO_BUILD_STL_ONLY
 
 void normal_windowed_run
     (const ProgramOptions & opts, const erfin::ProgramData & program)
@@ -196,6 +208,8 @@ void watched_windowed_run
               << exlogger.to_string();
 }
 
+#endif // ifndef MACRO_BUILD_STL_ONLY
+
 namespace {
 
 #ifdef MACRO_PLATFORM_LINUX
@@ -219,6 +233,7 @@ void print_frame(const erfin::Console & console) {
 
 void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {    
     using namespace erfin;
+    using MicroSeconds = std::chrono::duration<int, std::micro>;
     Console console;
 
 #   ifdef MACRO_PLATFORM_LINUX
@@ -235,7 +250,7 @@ void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
     console.load_program(program);
     while (!console.trying_to_shutdown()) {
         console.run_until_wait();
-        sf::sleep(sf::microseconds(16667));
+        std::this_thread::sleep_for(MicroSeconds(16667));
     }
     print_frame(console);
 
@@ -249,6 +264,9 @@ void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
 void print_help(const ProgramOptions &, const erfin::ProgramData &) {
     std::cout <<
          "Erfindung command line options\n"
+#        ifdef MACRO_BUILD_STL_ONLY
+         "NOTE: This is a STL Only / Test build intended for unit testing.\n"
+#        endif
          "If the entire text does not show, you can always stream the "
          "output to a file or use \"less\" on *nix machines.\n\n"
          "-i / --input\n"
@@ -256,10 +274,12 @@ void print_help(const ProgramOptions &, const erfin::ProgramData &) {
           "option\n"
          "-h / --help\n"
          "\tShow this help text.\n"
+#        ifndef MACRO_BUILD_STL_ONLY
          "-c / --command-line\n"
          "\tCauses the program to not open a window, the program will "
           "finsih once and only when the halt signal is sent (you "
           "can still cancel the program with ctrl-c as usual)\n"
+#        endif
          "-t / --run-tests\n"
          "\tRun developer tests (for debugging purposes only). If you "
           "run this and the program doesn't crash, that means it "
@@ -267,10 +287,12 @@ void print_help(const ProgramOptions &, const erfin::ProgramData &) {
          "-s / --stream-input\n"
          "\tThe program will accept stdin as a source \"file\" this "
           "option is not compatible with -i.\n"
+#        ifndef MACRO_BUILD_STL_ONLY
          "-w / --window-scale\n"
          "\tScales the window by an integer factor.\n"
          "Each program \"command\" accepts parameters between each "
          "of these \"commands\" e.g.\n"
+#        endif
          "-b --break-points\n"
          "\tPrints current frame at the given line numbers to the terminal. "
          "Lists registers and their values, and continues running the "
@@ -284,6 +306,8 @@ void print_help(const ProgramOptions &, const erfin::ProgramData &) {
 }
 
 namespace {
+
+#ifndef MACRO_BUILD_STL_ONLY
 
 void setup_window_view(sf::RenderWindow & window, const ProgramOptions & opts) {
     using namespace erfin;
@@ -322,6 +346,8 @@ void process_events(erfin::Console & console, sf::Window & window) {
     }
 }
 
+#endif // ifndef MACRO_BUILD_STL_ONLY
+
 class ForceWaitNotifier {
 public:
     ForceWaitNotifier(): m_first_notice_given(false) {}
@@ -339,6 +365,7 @@ private:
     bool m_first_notice_given;
 };
 
+#ifndef MACRO_BUILD_STL_ONLY
 
 template <typename Func>
 void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
@@ -408,5 +435,7 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
     }
     std::cout << "Last reported fps " << fps << std::endl;
 }
+
+#endif // ifndef MACRO_BUILD_STL_ONLY
 
 } // end of <anonymous> namespace

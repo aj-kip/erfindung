@@ -7,7 +7,6 @@ CONFIG -= qt
 
 SOURCES += \
     ../src/main.cpp \
-    ../src/DrawRectangle.cpp \
     ../src/ErfiGpu.cpp \
     ../src/Assembler.cpp \
     ../src/ErfiCpu.cpp \
@@ -16,12 +15,14 @@ SOURCES += \
     ../src/AssemblerPrivate/TextProcessState.cpp \
     ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \
     ../src/AssemblerPrivate/LineParsingHelpers.cpp \
+    ../src/AssemblerPrivate/ProcessIoLine.cpp \
     ../src/Debugger.cpp \
     ../src/ErfiConsole.cpp \
-    ../src/ErfiApu.cpp
-    
+    ../src/ErfiApu.cpp \
+    ../src/tests.cpp \
+    ../src/parse_program_options.cpp
+
 HEADERS += \
-    ../src/DrawRectangle.hpp \
     ../src/FixedPointUtil.hpp \
     ../src/ErfiGpu.hpp \
     ../src/ErfiDefs.hpp \
@@ -33,10 +34,13 @@ HEADERS += \
     ../src/AssemblerPrivate/GetLineProcessingFunction.hpp \
     ../src/AssemblerPrivate/LineParsingHelpers.hpp \
     ../src/AssemblerPrivate/CommonDefinitions.hpp \
+    ../src/AssemblerPrivate/ProcessIoLine.hpp \
     ../src/Debugger.hpp \
     ../src/ErfiGamePad.hpp \
     ../src/ErfiConsole.hpp \
-    ../src/ErfiApu.hpp
+    ../src/ErfiApu.hpp \
+    ../src/tests.hpp \
+    ../src/parse_program_options.hpp
 
 TARGET = erfindung
 
@@ -45,7 +49,7 @@ QMAKE_LFLAGS   += -pthread
 
 CONFIG (debug, debug|release) {
     DEFINES += MACRO_DEBUG linux
-    QMAKE_CXXFLAGS += -O0
+    QMAKE_CXXFLAGS += -O0 #-DMACRO_BUILD_STL_ONLY
 }
 
 CONFIG (release, debug|release) {
@@ -73,8 +77,8 @@ INCLUDEPATH += \
 QMAKE_CXXFLAGS += -std=c++11 -Wall -pedantic -Werror
 
 LIBS += -L/media/data/dev/c++/lib/g++/GnuLinux64/ \
-	-L/usr/lib/ \
-    -lsfml-system \
-	-lsfml-graphics \
-	-lsfml-window \
-    -lsfml-audio
+        -L/usr/lib/ \
+        -lsfml-system \
+        -lsfml-graphics \
+        -lsfml-window \
+        -lsfml-audio

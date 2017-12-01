@@ -32,6 +32,13 @@ namespace {
 using Error       = std::runtime_error;
 using OptionsPair = erfin::OptionsPair;
 
+constexpr const auto default_run_selection =
+#ifdef MACRO_BUILD_STL_ONLY
+    cli_run;
+#else
+    normal_windowed_run;
+#endif
+
 constexpr const char * const ONLY_ONE_INPUT_MSG =
     "Only one input option permitted.";
 
@@ -47,11 +54,15 @@ type to_dec_number(const char * str, T & out) {
 
 void select_input(OptionsPair &, char ** beg, char ** end);
 
+#ifndef MACRO_BUILD_STL_ONLY
 void select_cli(OptionsPair &, char **, char **);
+#endif
 
 void select_help(OptionsPair &, char **, char **);
 
+#ifndef MACRO_BUILD_STL_ONLY
 void select_watched_window(OptionsPair &, char ** beg, char ** end);
+#endif
 
 void add_break_points(OptionsPair &, char ** beg, char ** end);
 
@@ -59,7 +70,9 @@ void select_tests(OptionsPair &, char**, char **);
 
 void select_stream_input(OptionsPair &, char**, char **);
 
+#ifndef MACRO_BUILD_STL_ONLY
 void select_window_scale(OptionsPair &, char ** beg, char ** end);
+#endif
 
 } // end of <anonymous> namespace
 
@@ -89,7 +102,7 @@ void ProgramOptions::swap(ProgramOptions & lhs) {
 }
 
 OptionsPair::OptionsPair():
-    mode(normal_windowed_run)
+    mode(default_run_selection)
 {}
 
 OptionsPair parse_program_options(int argc, char ** argv) {
@@ -102,11 +115,15 @@ OptionsPair parse_program_options(int argc, char ** argv) {
     } options_table[] = {
         { 'i', "input"        , select_input          },
         { 'h', "help"         , select_help           },
+#       ifndef MACRO_BUILD_STL_ONLY
         { 'c', "command-line" , select_cli            },
+#       endif
         { 't', "run-tests"    , select_tests          },
         { 's', "stream-input" , select_stream_input   },
+#       ifndef MACRO_BUILD_STL_ONLY
         { 'w', "window-scale" , select_window_scale   },
         { 'p', "prefail-watch", select_watched_window },
+#       endif
         { 'b', "break-points" , add_break_points      }
     };
 
@@ -186,12 +203,15 @@ void select_input(OptionsPair & opts, char ** beg, char ** end) {
     opts.input_stream_ptr->unsetf(std::ios_base::skipws);
 }
 
+#ifndef MACRO_BUILD_STL_ONLY
 void select_cli(OptionsPair & opts, char **, char **)
     { opts.mode = cli_run; }
+#endif
 
 void select_help(OptionsPair & opts, char **, char **)
     { opts.mode = print_help; }
 
+#ifndef MACRO_BUILD_STL_ONLY
 void select_watched_window(OptionsPair & opts, char ** beg, char ** end) {
     opts.mode = watched_windowed_run;
     if (end - beg == 0) return;
@@ -202,6 +222,7 @@ void select_watched_window(OptionsPair & opts, char ** beg, char ** end) {
                      "number." << std::endl;
     }
 }
+#endif
 
 void add_break_points(OptionsPair & opts, char ** beg, char ** end) {
     std::size_t out = erfin::Assembler::INVALID_LINE_NUMBER;
@@ -225,7 +246,7 @@ void select_stream_input(OptionsPair & opts, char**, char **) {
     opts.input_stream_ptr = &std::cin;
     std::cin.unsetf(std::ios_base::skipws);
 }
-
+#ifndef MACRO_BUILD_STL_ONLY
 void select_window_scale(OptionsPair & opts, char ** beg, char ** end) {
     if (end - beg != 1)
         throw Error("Window scale expects exactly one argument.");
@@ -238,5 +259,5 @@ void select_window_scale(OptionsPair & opts, char ** beg, char ** end) {
         throw Error(NUM_ERR_MSG);
     if (opts.window_scale <= 0) throw Error(NUM_ERR_MSG);
 }
-
+#endif
 } // end of <anonymous> namespace
