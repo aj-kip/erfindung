@@ -22,16 +22,18 @@
 #include "ErfiConsole.hpp"
 #include "FixedPointUtil.hpp"
 #include "Debugger.hpp"
-
-#include <SFML/Window/Event.hpp>
-
+#ifndef MACRO_BUILD_NO_SFML
+#   include <SFML/Window/Event.hpp>
+#endif
 #include <cassert>
 
 namespace {
 
 using Error = std::runtime_error;
 
+#ifndef MACRO_BUILD_STL_ONLY
 erfin::GamePad::Button to_button(sf::Keyboard::Key k);
+#endif
 
 erfin::UInt32 do_device_read(erfin::ConsolePack &, erfin::UInt32 address);
 
@@ -46,6 +48,7 @@ namespace erfin {
 
 UtilityDevices::UtilityDevices():
     m_rng(std::random_device()()),
+    m_prev_time(std::chrono::steady_clock::now()),
     m_wait(false),
     m_halt_flag(false),
     m_bus_error(false)
@@ -66,9 +69,10 @@ bool UtilityDevices::wait_requested() const { return m_wait; }
 bool UtilityDevices::halt_requested() const { return m_halt_flag; }
 
 void UtilityDevices::set_wait_time() {
-    double et = double(m_clock.getElapsedTime().asSeconds());
-    m_clock.restart();
-
+    using namespace std::chrono;
+    auto duration = duration_cast<milliseconds>(steady_clock::now() - m_prev_time);
+    m_prev_time = steady_clock::now();
+    double et = double(duration.count()) / 1000.0;
     m_wait      = false;
     m_wait_time = to_fixed_point(et);
 }
@@ -127,6 +131,7 @@ void Console::load_program(const ProgramData & program) {
 }
 
 void Console::process_event(const sf::Event & event) {
+#   ifndef MACRO_BUILD_STL_ONLY
     switch (event.type) {
     case sf::Event::KeyPressed :
         pack.pad->update(to_button(event.key.code), GamePad::PRESSED);
@@ -136,6 +141,9 @@ void Console::process_event(const sf::Event & event) {
         break;
     default: break;
     }
+#   else
+    (void)event;
+#   endif
 }
 
 void Console::press_restart() {
@@ -176,7 +184,7 @@ const Console::VideoMemory & Console::current_screen() const {
 } // end of erfin namespace
 
 namespace {
-
+#ifndef MACRO_BUILD_STL_ONLY
 erfin::GamePad::Button to_button(sf::Keyboard::Key k) {
     using Key = sf::Keyboard::Key;
     using Gp  = erfin::GamePad;
@@ -191,7 +199,7 @@ erfin::GamePad::Button to_button(sf::Keyboard::Key k) {
     default: return Gp::BUTTON_COUNT;
     }
 }
-
+#endif
 erfin::UInt32 do_device_read(erfin::ConsolePack & con, erfin::UInt32 address) {
     using namespace erfin;
     using namespace device_addresses;

@@ -21,7 +21,9 @@
 
 #include "ErfiApu.hpp"
 
-#include <SFML/Audio/SoundStream.hpp>
+#ifndef MACRO_BUILD_STL_ONLY
+#   include <SFML/Audio/SoundStream.hpp>
+#endif
 
 #include <bitset>
 #include <iostream>
@@ -70,7 +72,13 @@ void generate_note_full(std::vector<Int16> & samples,
 
 namespace erfin {
 
-class SfmlAudioDevice : private sf::SoundStream {
+#ifdef MACRO_BUILD_STL_ONLY
+class SfmlAudioDevice {
+public:
+    void upload_samples(const std::vector<Int16> &) {}
+};
+#else
+class SfmlAudioDevice final : private sf::SoundStream {
 public:
     SfmlAudioDevice();
     void upload_samples(const std::vector<Int16> &);
@@ -84,7 +92,7 @@ private:
     std::vector<Int16> m_samples_hot;
     std::mutex m_samples_mutex;
 };
-
+#endif
 Apu::Apu():
     m_channel_info       (static_cast<std::size_t>(Channel::COUNT)),
     m_samples_per_channel(static_cast<std::size_t>(Channel::COUNT)),
@@ -188,6 +196,7 @@ void Apu::io_write(UInt32 data) { m_insts.push(data); }
         break;
     case Channel::NOISE:
         generate_note_full(chan, noise, note, tempo, dc_window);
+        break;
     default: break;
     }
 }
@@ -298,6 +307,8 @@ void remove_first(Container & c, std::size_t num) {
 
 namespace erfin {
 
+#ifndef MACRO_BUILD_STL_ONLY
+
 SfmlAudioDevice::SfmlAudioDevice() {
     initialize(unsigned(Channel::COUNT), ApuAttorney::SAMPLE_RATE);
 }
@@ -331,6 +342,8 @@ void SfmlAudioDevice::upload_samples(const std::vector<Int16> & samples_) {
 
     return true;
 }
+
+#endif // ifndef MACRO_BUILD_STL_ONLY
 
 } // end of erfin namespace
 
