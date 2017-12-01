@@ -78,7 +78,6 @@ public:
     void io_write(UInt32);
 
 private:
-
     // ------------------------------------------------------------------------
 
     // "Hardware" fixed sample rate

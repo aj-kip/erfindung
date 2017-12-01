@@ -153,11 +153,7 @@ void Console::press_restart() {
 bool Console::trying_to_shutdown() const {
     return pack.dev->halt_requested();
 }
-#if 0
-void Console::print_cpu_registers(std::ostream & out) const {
-    pack.cpu->print_registers(out);
-}
-#endif
+
 void Console::update_with_current_state(Debugger & debugger) const {
     pack.cpu->update_debugger(debugger);
 }

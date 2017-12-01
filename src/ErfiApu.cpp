@@ -161,7 +161,6 @@ void Apu::io_write(UInt32 data) { m_insts.push(data); }
 }
 
 /* private */ void Apu::generate_note(Channel channel, int note) {
-
     static constexpr const Int16 MAX = std::numeric_limits<Int16>::max();
 
     static const auto triangle_wave_function = [](Int16 t) -> Int16 {

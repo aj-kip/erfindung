@@ -496,6 +496,7 @@ private:
 class RegParamPack {
 public:
     RegParamPack(): v(0) {}
+
 private:
     constexpr static const int REG0_POS = 22;
     constexpr static const int REG1_POS = 18;

@@ -77,7 +77,6 @@ const std::string & Debugger::interpret_register(Reg r, Interpretation intr)
     { return interpret_register(r, intr, nullptr); }
 
 std::string Debugger::print_current_frame_to_string() const {
-
     std::stringstream out;
     out.precision(5);
     out << std::dec << std::fixed;
