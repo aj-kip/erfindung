@@ -29,8 +29,7 @@
 #include "ErfiGpu.hpp"
 #include "ErfiGamePad.hpp"
 
-#include <SFML/System/Clock.hpp>
-
+#include <chrono>
 #include <utility>
 #include <iosfwd>
 
@@ -40,6 +39,7 @@ namespace erfin {
 
 class UtilityDevices {
 public:
+    using TimePoint = std::chrono::steady_clock::time_point;
 
     UtilityDevices();
 
@@ -61,7 +61,7 @@ public:
     bool bus_error_present() const { return m_bus_error; }
 private:
     std::default_random_engine m_rng;
-    sf::Clock m_clock;
+    TimePoint m_prev_time;
     bool m_wait ;
     bool m_halt_flag;
     UInt32 m_wait_time;

@@ -1,0 +1,5 @@
+langange: cpp
+compiler: gcc
+dist: trusty
+os: linux
+script: make

@@ -32,9 +32,10 @@ struct ProgramOptions;
 }
 
 // ----------- Program Driver Functions - implemented in main.cpp -------------
-
+#ifndef MACRO_BUILD_STL_ONLY
 void normal_windowed_run (const erfin::ProgramOptions &, const erfin::ProgramData &);
 void watched_windowed_run(const erfin::ProgramOptions &, const erfin::ProgramData &);
+#endif
 void cli_run             (const erfin::ProgramOptions &, const erfin::ProgramData &);
 void print_help          (const erfin::ProgramOptions &, const erfin::ProgramData &);
 

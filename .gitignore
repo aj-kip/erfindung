@@ -5,3 +5,4 @@
 *.filters
 *.opendb
 *.pro.user*
+!.travis.yml
