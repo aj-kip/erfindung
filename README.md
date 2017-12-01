@@ -4,6 +4,8 @@ Erfindung
 Fictitious ISA/ASM-like Interpreter
 -----------------------------------
 
+![Travis CI Build Status](https://travis-ci.org/aj-kip/erfindung.svg?branch=master)
+
 Erfindung (or &quot;Invention&quot; in German), is a ASM-like, GameBoy-esque 
 virtual machine and interpreter.
 It is intended to be a toy assembly language/virtual console.
