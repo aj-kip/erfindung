@@ -22,7 +22,7 @@
 #include "ErfiConsole.hpp"
 #include "FixedPointUtil.hpp"
 #include "Debugger.hpp"
-#ifndef MACRO_BUILD_NO_SFML
+#ifndef MACRO_BUILD_STL_ONLY
 #   include <SFML/Window/Event.hpp>
 #endif
 #include <cassert>
