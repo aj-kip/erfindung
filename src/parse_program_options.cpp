@@ -31,6 +31,7 @@ namespace {
 
 using Error       = std::runtime_error;
 using OptionsPair = erfin::OptionsPair;
+    using ProcessOptionFunc = void (*)(OptionsPair &, char **, char **);
 
 constexpr const auto default_run_selection =
 #ifdef MACRO_BUILD_STL_ONLY
@@ -74,6 +75,25 @@ void select_stream_input(OptionsPair &, char**, char **);
 void select_window_scale(OptionsPair &, char ** beg, char ** end);
 #endif
 
+static const struct {
+    char identity;
+    const char * longform;
+    ProcessOptionFunc process;
+} options_table_c[] = {
+    { 'i', "input"        , select_input          },
+    { 'h', "help"         , select_help           },
+#   ifndef MACRO_BUILD_STL_ONLY
+    { 'c', "command-line" , select_cli            },
+#   endif
+    { 't', "run-tests"    , select_tests          },
+    { 's', "stream-input" , select_stream_input   },
+#   ifndef MACRO_BUILD_STL_ONLY
+    { 'w', "window-scale" , select_window_scale   },
+    { 'p', "prefail-watch", select_watched_window },
+#   endif
+    { 'b', "break-points" , add_break_points      }
+};
+
 } // end of <anonymous> namespace
 
 namespace erfin {
@@ -107,37 +127,14 @@ OptionsPair::OptionsPair():
 
 OptionsPair parse_program_options(int argc, char ** argv) {
     OptionsPair opts;
-
-    static const struct {
-        char identity;
-        const char * longform;
-        void (*process)(OptionsPair &, char **, char **);
-    } options_table[] = {
-        { 'i', "input"        , select_input          },
-        { 'h', "help"         , select_help           },
-#       ifndef MACRO_BUILD_STL_ONLY
-        { 'c', "command-line" , select_cli            },
-#       endif
-        { 't', "run-tests"    , select_tests          },
-        { 's', "stream-input" , select_stream_input   },
-#       ifndef MACRO_BUILD_STL_ONLY
-        { 'w', "window-scale" , select_window_scale   },
-        { 'p', "prefail-watch", select_watched_window },
-#       endif
-        { 'b', "break-points" , add_break_points      }
-    };
-
-    auto unrecogized_option = [](const char * opt) {
-        std::cout << "Unrecognized option: \"" << opt << "\"." << std::endl;
-    };
-
     int last = 1;
-    void (*process_options)(OptionsPair &, char **, char **) = select_input;
+    ProcessOptionFunc process_options = select_input;
+
     auto process_step = [&](int end_index, const char * opt) {
         if (process_options)
             process_options(opts, argv + last, argv + end_index);
         else
-            unrecogized_option(opt);
+            std::cout << "Unrecognized option: \"" << opt << "\"." << std::endl;
     };
 
     for (int i = 1; i != argc; ++i) {
@@ -147,7 +144,7 @@ OptionsPair parse_program_options(int argc, char ** argv) {
         last = i + 1;
         if (argv[i][1] == '-') {
             process_options = nullptr;
-            for (const auto & entry : options_table) {
+            for (const auto & entry : options_table_c) {
                 if (str_eq(argv[i] + 2, entry.longform)) {
                     process_options = entry.process;
                     break;
@@ -157,7 +154,7 @@ OptionsPair parse_program_options(int argc, char ** argv) {
             // shortform (or series of shortforms)
             decltype (process_options) process = nullptr;
             for (char * c = argv[i] + 1; *c; ++c) {
-                for (const auto & entry : options_table) {
+                for (const auto & entry : options_table_c) {
                     if (entry.identity != *c) continue;
                     if (process)
                         process(opts, nullptr, nullptr);

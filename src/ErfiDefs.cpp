@@ -27,17 +27,27 @@
 
 #include <cassert>
 
+using UInt32    = erfin::UInt32   ;
+using Inst      = erfin::Inst     ;
+using ParamForm = erfin::ParamForm;
+
 namespace {
 
 using Error = std::runtime_error;
 
-constexpr const int OP_CODE_POS = 27;
-constexpr const int R_TYPE_PF_POS = 25;
+constexpr const int OP_CODE_POS     = 27;
+constexpr const int R_TYPE_PF_POS   = 25;
 constexpr const int SET_TYPE_PF_POS = R_TYPE_PF_POS;
 constexpr const int M_TYPE_PF_POS   = R_TYPE_PF_POS;
 constexpr const int J_TYPE_PF_POS   = R_TYPE_PF_POS;
 
 constexpr const unsigned IS_FIXED_POINT_MASK = 0x4000000u;
+
+Inst encode_r_type(UInt32 op_code_only, ParamForm pf);
+Inst encode_set(UInt32 op_only, ParamForm pf);
+Inst encode_m_type(UInt32 op_only, ParamForm pf);
+Inst encode_skip(UInt32 op_only, ParamForm pf);
+Inst encode_call(UInt32 op_only, ParamForm pf);
 
 } // end of <anonymous> namespace
 
@@ -69,57 +79,26 @@ const char * device_addresses::to_string(int address) {
     }
 }
 
-
 Inst encode_op_with_pf(OpCode op, ParamForm pf) {
     using O  = OpCode;
     using Pf = ParamForm;
     UInt32 rv = UInt32(op) << OP_CODE_POS;
     switch (op) {
-    case O::PLUS  : case O::MINUS : case O::AND    :
-    case O::XOR   : case O::OR    :
+    case O::PLUS  : case O::MINUS : case O::AND: case O::XOR: case O::OR:
     case O::ROTATE: // R type indifferent
     case O::TIMES : case O::DIVIDE: case O::MODULUS:
     case O::COMP  : // end of R types
-        switch (pf) {
-        case Pf::REG_REG_REG : return deserialize(rv);
-        case Pf::REG_REG_IMMD:
-            return deserialize(rv | (1 << R_TYPE_PF_POS));
-        default: throw Error("Parameter form invalid for R-type");
-        }
+        return encode_r_type(rv, pf);
     case O::SET: // "set" type, very special
-        switch (pf) {
-        case Pf::REG_REG : return deserialize(rv);
-        case Pf::REG_IMMD: return deserialize(rv | (1 << SET_TYPE_PF_POS));
-        default:
-            throw Error("Parameter form invalid for \"Set\" type");
-        }
-    case O::SAVE:
-    case O::LOAD: // M-Types
-        switch (pf) {
-        case Pf::REG_REG_IMMD: return deserialize(rv);
-        case Pf::REG_REG:
-            return deserialize(rv | (1 << M_TYPE_PF_POS));
-        case Pf::REG_IMMD:
-            return deserialize(rv | (2 << M_TYPE_PF_POS));
-        default: throw Error("Parameter form invalid for M type");
-        }
-    case O::SKIP:
-        switch (pf) {
-        case Pf::REG     : return deserialize(rv);
-        case Pf::REG_IMMD: return deserialize(rv | (1 << J_TYPE_PF_POS));
-        default: throw Error("Parameter form invalid for Skip");
-        }
-    case O::CALL:
-        switch (pf) {
-        case Pf::REG : return deserialize(rv);
-        case Pf::IMMD: return deserialize(rv | (1 << J_TYPE_PF_POS));
-        default: throw Error("Parameter form invalid for Call");
-        }
+        return encode_set(rv, pf);
+    case O::SAVE: case O::LOAD: // M-Types
+        return encode_m_type(rv, pf);
+    case O::SKIP: return encode_skip(rv, pf);
+    case O::CALL: return encode_call(rv, pf);
     case O::NOT:
         switch (pf) {
         case Pf::REG_REG: return deserialize(rv);
-        default:
-            throw Error("Parameter form invalid for Not");
+        default: throw Error("Parameter form invalid for Not");
         }
     default: break;
     }
@@ -343,3 +322,58 @@ int parameters_per_instruction(GpuOpCode code) {
 }
 
 } // end of erfin namespace
+
+namespace {
+
+Inst encode_r_type(UInt32 op_code_only, ParamForm pf) {
+    using Pf = ParamForm;
+    using namespace erfin;
+    switch (pf) {
+    case Pf::REG_REG_REG : return deserialize(op_code_only);
+    case Pf::REG_REG_IMMD: return deserialize(op_code_only | (1 << R_TYPE_PF_POS));
+    default: throw Error("Parameter form is invalid for R-type.");
+    }
+}
+
+Inst encode_set(UInt32 op_only, ParamForm pf) {
+    using Pf = ParamForm;
+    using namespace erfin;
+    switch (pf) {
+    case Pf::REG_REG : return deserialize(op_only);
+    case Pf::REG_IMMD: return deserialize(op_only | (1 << SET_TYPE_PF_POS));
+    default: throw Error("Parameter form is invalid for Set type.");
+    }
+}
+
+Inst encode_m_type(UInt32 op_only, ParamForm pf) {
+    using Pf = ParamForm;
+    using namespace erfin;
+    switch (pf) {
+    case Pf::REG_REG_IMMD: return deserialize(op_only);
+    case Pf::REG_REG : return deserialize(op_only | (1 << M_TYPE_PF_POS));
+    case Pf::REG_IMMD: return deserialize(op_only | (2 << M_TYPE_PF_POS));
+    default: throw Error("Parameter form invalid for M type");
+    }
+}
+
+Inst encode_skip(UInt32 op_only, ParamForm pf) {
+    using Pf = ParamForm;
+    using namespace erfin;
+    switch (pf) {
+    case Pf::REG     : return deserialize(op_only);
+    case Pf::REG_IMMD: return deserialize(op_only | (1 << J_TYPE_PF_POS));
+    default: throw Error("Parameter form invalid for Skip");
+    }
+}
+
+Inst encode_call(UInt32 op_only, ParamForm pf) {
+    using Pf = ParamForm;
+    using namespace erfin;
+    switch (pf) {
+    case Pf::REG : return deserialize(op_only);
+    case Pf::IMMD: return deserialize(op_only | (1 << J_TYPE_PF_POS));
+    default: throw Error("Parameter form invalid for Call");
+    }
+}
+
+}

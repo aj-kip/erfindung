@@ -26,7 +26,7 @@
 
 namespace erfin {
 
-class ErfiCpuError : public std::exception {
+class ErfiCpuError final : public std::exception {
 public:
     ErfiCpuError(std::size_t program_location_, const std::string && msg);
     ErfiCpuError(std::size_t program_location_, const char * msg);

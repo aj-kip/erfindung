@@ -46,14 +46,14 @@ using EnableStrToNumIter = typename std::enable_if<
 
 template <typename IterType, typename RealType>
 using EnableStrToNumPtr = typename std::enable_if<
-    std::is_pointer<IterType>::value &&
+    std::is_pointer<IterType>::value and
     std::is_arithmetic<RealType>::value,
     bool
 >;
 
 template <typename IterType, typename RealType>
 using EnableStrToNum = typename std::enable_if <
-    (std::is_pointer<IterType>::value ||
+    (std::is_pointer<IterType>::value or
      std::is_base_of<std::forward_iterator_tag,
                      typename std::iterator_traits<IterType>::iterator_category>::value)
     && std::is_arithmetic<RealType>::value,
@@ -92,27 +92,26 @@ typename EnableStrToNum<IterType, RealType>::type
 /* bool */ string_to_number
     (IterType start, IterType end, RealType & out, const RealType base_c)
 {
-    using CharType = decltype(*start);
-    if (base_c < RealType(2) || base_c > RealType(16)) {
+    if (base_c < RealType(2) or base_c > RealType(16)) {
         throw std::runtime_error("bool string_to_number(...): "
                                  "This function supports only bases 2 to 16.");
     }
 
+    using CharType = decltype(*start);
     static constexpr bool IS_SIGNED  = std::is_signed<RealType>::value;
     static constexpr bool IS_INTEGER = !std::is_floating_point<RealType>::value;
-    const bool IS_NEGATIVE = (*start) == CharType('-');
+    const bool is_negative_c = (*start) == CharType('-');
 
     // negative numbers cannot be parsed into an unsigned type
-    if (!IS_SIGNED && IS_NEGATIVE)
+    if (!IS_SIGNED and is_negative_c)
         return false;
 
-    if (IS_NEGATIVE) ++start;
+    if (is_negative_c) ++start;
 
-    RealType working = RealType(0), multi = RealType(1);
-
+    auto working = RealType(0);
+    auto multi   = RealType(1);
     // the adder is a one digit number that corresponds to a character
-    RealType adder = RealType(0);
-
+    auto adder     = RealType(0);
     bool found_dot = false;
 
     // main digit reading loop, iterates characters in the selection in reverse
@@ -122,8 +121,8 @@ typename EnableStrToNum<IterType, RealType>::type
             if (found_dot) return false;
             found_dot = true;
             if (IS_INTEGER) {
-                if (adder >= base_c/RealType(2))
-                    working = RealType(1);
+                if (adder <= -base_c / RealType(2))
+                    working = -RealType(1);
                 else
                     working = RealType(0);
             } else {
@@ -136,39 +135,34 @@ typename EnableStrToNum<IterType, RealType>::type
         case CharType('3'): case CharType('4'): case CharType('5'):
         case CharType('6'): case CharType('7'): case CharType('8'):
         case CharType('9'):
-            adder = RealType(*end - CharType('0'));
+            adder = -RealType(*end - CharType('0'));
             break;
         case CharType('a'): case CharType('b'): case CharType('c'):
         case CharType('d'): case CharType('e'): case CharType('f'):
-            adder = RealType(*end - 'a' + 10);
+            adder = -RealType(*end - 'a' + 10);
             break;
         case CharType('A'): case CharType('B'): case CharType('C'):
         case CharType('D'): case CharType('E'): case CharType('F'):
-            adder = RealType(*end - 'A' + 10);
+            adder = -RealType(*end - 'A' + 10);
             break;
         default: return false;
         }
-        if (adder >= base_c)
-            return false;
         // detect overflow
         RealType temp = working + adder*multi;
-        if (temp < working) {
-            // attempt a recovery... (edge case, min int)
-            const RealType MIN_INT = std::numeric_limits<RealType>::min();
-            if (IS_NEGATIVE && -working - adder*multi == MIN_INT) {
-                out = MIN_INT;
-                return true;
-            }
-            return false;
-        }
-        multi *= RealType(base_c);
+        if (temp > working) return false;
+        multi *= base_c;
         working = temp;
     }
     while (end != start);
 
     // we've produced a positive integer, so make the adjustment if needed
-    if (IS_NEGATIVE)
+    if (!is_negative_c) {
+        // edge case, cannot flip the sign for minimum value int
+        if (IS_INTEGER and working == std::numeric_limits<RealType>::min()) {
+            return false;
+        }
         working *= RealType(-1);
+    }
 
     // write to parameter
     out = working;

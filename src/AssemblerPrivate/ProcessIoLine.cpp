@@ -117,7 +117,6 @@ StringCIter make_sysio
 }
 
 void run_make_sysio_tests() {
-#   ifdef MACRO_DEBUG
     {
     constexpr const char * const with_io_throw_away =
         "assume io-throw-away\n"
@@ -158,7 +157,6 @@ void run_make_sysio_tests() {
     Assembler asr;
     asr.assemble_from_string(all_io_expressions);
     }
-#   endif
 }
 
 } // end of erfin namespace

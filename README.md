@@ -13,9 +13,11 @@ It is intended to be a toy assembly language/virtual console.
 
 Development Progress
 --------------------
-Design-wise: Design is looking pretty good!
-
-Implementation-wise: just the noise channel, proper documentation, and testing!
+This project is mostly finished, which is not to say it cannot be extended in the future.
+Here's what remains:
++ more comprehensive unit testing (APU, GPU)
++ cleaner / more documentation
++ demo programs
 
 My motivation for this project comes from several sources:
 --------------------------------------------------------------------
@@ -32,13 +34,3 @@ Primary Features of this &quot;ISA&quot;:
   + No weird &quot;super low level&quot; instructions
   + describe notes, pitches of notes, which channel directly for the APU
   + describe sprite data, positions, sizes, off-screen video memory for the GPU
-
-This project's design is still in development for a large part.
-------------------------
-There are only a few things in the project which are &quot;stable&quot;.
-
-
-+ Most of the Erfindung Assembly Language
-  + The design of I/O may change
-  + All R-types and J-types
-+ C++ Abstractions for the GPU, CPU, fixed point math and the Assembler
