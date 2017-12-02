@@ -26,10 +26,14 @@
 
 #include "StringUtil.hpp"
 
+#include <cstring>
+#include <cassert>
+
 namespace {
 
 void run_numeric_encoding_tests();
 void test_string_processing();
+void test_string_to_number();
 
 }
 
@@ -38,6 +42,7 @@ void run_tests() {
 
     OstreamFormatSaver osfs(std::cout); (void)osfs;
 
+    test_string_to_number();
     run_encode_decode_tests();
     run_numeric_encoding_tests();
     Assembler::run_tests();
@@ -116,7 +121,86 @@ void run_numeric_encoding_tests() {
     test_fp_divide( 2.0, 0.5);
     test_fp_divide( 0.5, 2.0);
     test_fp_divide( 1.1, 1.1);
-    //test_fp_divide(-9.0, 1.1);
+}
+
+template <typename T>
+void test_on(const char * const str, T num, int base) {
+    auto mag = [](T x) { return x > T(0) ? x : -x; };
+    T res = -1;
+    assert(string_to_number(str, str + ::strlen(str), res, T(base)));
+    double res_diff = double(mag(num - res));
+    assert(res_diff < 0.0005);
+}
+
+void test_string_to_number() {
+    // integers
+    // "normal" inputs test
+    using Int32 = std::int32_t;
+    auto string_to_number_ = [](const char * const str, Int32 & out) -> bool
+        { return string_to_number(str, str + ::strlen(str), out, 10); };
+    {
+    test_on<int>("0", 0, 10);
+    test_on<int>("-1586", -1586, 10);
+    test_on<int>("1234", 1234, 10);
+    }
+    // min-max value edge cases
+    // these types must strictly be 32bits
+    {
+    const Int32 max_c = std::numeric_limits<Int32>::max();
+    const Int32 min_c = std::numeric_limits<Int32>::min();
+    const char * const max_dec_str =  "2147483647";
+    const char * const min_dec_str = "-2147483648";
+    Int32 res = -1;
+    assert(string_to_number_(max_dec_str, res));
+    assert(res == max_c);
+    assert(string_to_number_(min_dec_str, res));
+    assert(res == min_c);
+    }
+    // hexidecimal
+    {
+    test_on<int>("92AB" ,  0x92AB, 16);
+    test_on<int>("-D98E", -0xD98E, 16);
+    }
+    // binary
+    {
+    test_on<int>("1001110",  78, 2);
+    test_on<int>("-111011", -59, 2);
+    }
+    // octal
+    {
+    test_on<int>( "273",  187, 8);
+    test_on<int>("-713", -459, 8);
+    }
+    // base 13
+    {
+    test_on<int>( "B86", 1969, 13);
+    test_on<int>("-13A", -218, 13);
+    }
+    // floating-points
+    {
+    test_on<double>("132.987" , 132.987 , 10);
+    test_on<double>("-762.168", -762.168, 10);
+    test_on<double>("A.A",10.0 + 10.0/12.0, 12);
+    test_on<double>(".1", .1, 10);
+    test_on<double>("1.", 1., 10);
+    }
+    // rounding
+    {
+    test_on<int>("-573.5", -574, 10);
+    test_on<int>("-573.4", -573, 10);
+    test_on<int>("342.6" ,  343, 10);
+    test_on<int>("342.2" ,  342, 10);
+    }
+    // negative tests, cases where functionality is supposed to "fail"
+    {
+    std::int32_t res = -1;
+    // edge failure case
+    assert(!string_to_number_("2147483648", res));
+    // regular overflow
+    assert(!string_to_number_("2147483649", res));
+    assert(!string_to_number_("-8-12" , res));
+    assert(!string_to_number_("1.21.2", res));
+    }
 }
 
 // ----------------------------------------------------------------------------
