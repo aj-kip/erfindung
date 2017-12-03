@@ -29,6 +29,7 @@ io draw x y z
 
 add y 8
 call do-print
+call do-array-print
 
 io wait  a
 io clear a
@@ -466,5 +467,39 @@ set z 4115
 io draw x y z
 
 pop pc
+
+################################################################################
+
+assume int
+:string data numbers [
+1 2 3 4 5 6 7 8 9
+]
+:string-end
+
+################################################################################
+
+:do-array-print
+push x y z
+set x  20
+set y 220
+set a string
+
+:do-array-print-loop1-start
+set b string-end
+comp c a    b
+skip c   ==
+    jump do-array-print-loop1-end
+
+load z a
+add  z 4096
+io draw x y z
+add  x 8
+add  a 1
+jump do-array-print-loop1-start
+:do-array-print-loop1-end
+io halt x
+pop z y x pc
+
+################################################################################
 
 : stack-start data numbers [0]

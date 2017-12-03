@@ -1,4 +1,4 @@
-#message($$CONFIG)
+
 TEMPLATE = app
 
 CONFIG += console
@@ -49,7 +49,7 @@ QMAKE_LFLAGS   += -pthread
 
 CONFIG (debug, debug|release) {
     DEFINES += MACRO_DEBUG linux
-    QMAKE_CXXFLAGS += -O0 #-DMACRO_BUILD_STL_ONLY
+    QMAKE_CXXFLAGS += -O0
 }
 
 CONFIG (release, debug|release) {
@@ -64,20 +64,16 @@ CONFIG (release, debug|release) {
 }
 
 linux-g++ {
-    DEFINES += MACRO_COMPILER_GCC
+    DEFINES += MACRO_COMPILER_GCC MACRO_PLATFORM_LINUX
 }
 
 linux-clang {
-    DEFINES += MACRO_COMPILER_CLANG
+    DEFINES += MACRO_COMPILER_CLANG MACRO_PLATFORM_LINUX
 }
-
-INCLUDEPATH += \
-    /media/data/dev/c++/inc
 
 QMAKE_CXXFLAGS += -std=c++11 -Wall -pedantic -Werror
 
-LIBS += -L/media/data/dev/c++/lib/g++/GnuLinux64/ \
-        -L/usr/lib/ \
+LIBS += -L/usr/lib/ \
         -lsfml-system \
         -lsfml-graphics \
         -lsfml-window \

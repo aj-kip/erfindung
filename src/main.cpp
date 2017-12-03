@@ -77,19 +77,19 @@ private:
 } // end of <anonymous> namespace
 
 int main(int argc, char ** argv) {
+    using std::cout;
+    using std::cerr;
+    using std::endl;
     erfin::Assembler assembler;
     try {
         auto options = erfin::parse_program_options(argc, argv);
-        if (options.run_tests) {
-            run_tests();
-            return 0;
-        }
-        if (options.input_stream_ptr)
+        if (options.input_stream_ptr) {
             assembler.assemble_from_stream(*options.input_stream_ptr);
-        assembler.print_warnings(std::cout);
-        std::cout << "Program size: "
-                  << assembler.program_data().size()*sizeof(erfin::Inst)
-                  << "/" << erfin::MEMORY_CAPACITY << " bytes." << std::endl;
+            assembler.print_warnings(cout);
+            cout << "Program size: "
+                 << assembler.program_data().size()*sizeof(erfin::Inst)
+                 << "/" << erfin::MEMORY_CAPACITY << " bytes." << endl;
+        }
         options.assembler = &assembler;
         options.mode(options, assembler.program_data());
         return 0;
@@ -98,17 +98,17 @@ int main(int argc, char ** argv) {
         constexpr const char * const NO_LINE_NUM_MSG =
             "<no source line associated with this program location>";
         auto line_num = assembler.translate_to_line_number(exp.program_location());
-        std::cerr << "A problem has occured on source line: ";
+        cerr << "A problem has occured on source line: ";
         if (line_num == Assembler::INVALID_LINE_NUMBER)
-            std::cerr << NO_LINE_NUM_MSG;
+            cerr << NO_LINE_NUM_MSG;
         else
-            std::cerr << line_num;
-        std::cerr << "\n(At address " << exp.program_location() << ")\n";
-        std::cerr << exp.what() << std::endl;
+            cerr << line_num;
+        cerr << "\n(At address " << exp.program_location() << ")\n";
+        cerr << exp.what() << endl;
     } catch (std::exception & exp) {
-        std::cerr << exp.what() << std::endl;
+        cerr << exp.what() << endl;
     } catch (...) {
-        std::cerr << "An unknown exception was thrown." << std::endl;
+        cerr << "An unknown exception was thrown." << endl;
     }
     return ~0;
 }
@@ -211,100 +211,100 @@ void watched_windowed_run
 
 namespace {
 
-#ifdef MACRO_PLATFORM_LINUX
 template <typename Func>
-void global_console_pointer_access(Func && f) {
-    static std::mutex access_mtx;
-    static erfin::Console * g_console_ptr = nullptr;
-    access_mtx.lock();
-    f(std::ref(g_console_ptr));
-    access_mtx.unlock();
-}
-#endif
-
-void print_frame(const erfin::Console & console) {
-    erfin::Debugger debugger;
-    console.update_with_current_state(debugger);
-    std::cout << debugger.print_current_frame_to_string() << std::endl;
-}
+void cli_run_with_between_cycles
+    (const ProgramOptions &, const erfin::ProgramData & program, Func && f);
 
 } // end of <anonymous> namespace
 
-void cli_run(const ProgramOptions &, const erfin::ProgramData & program) {
+void cli_run(const ProgramOptions & options, const erfin::ProgramData & program)
+{
+    using erfin::Console;
+    cli_run_with_between_cycles(options, program, [](const Console &){});
+}
+
+void watched_cli_run
+    (const erfin::ProgramOptions & options, const erfin::ProgramData & program)
+{
     using namespace erfin;
-    using MicroSeconds = std::chrono::duration<int, std::micro>;
-    Console console;
-
-#   ifdef MACRO_PLATFORM_LINUX
-    global_console_pointer_access([&console](Console *& c_ptr) {
-        c_ptr = &console;
-    });
-    signal(SIGPROF, [/* must not capture */](int) {
-        global_console_pointer_access([](Console *& c_ptr) {
-            print_frame(*c_ptr);
+    Debugger debugger;
+    ExecutionHistoryLogger exlogger(options.watched_history_length);
+    options.assembler->setup_debugger(debugger);
+    try {
+        cli_run_with_between_cycles(options, program, [&](const Console & console) {
+            console.update_with_current_state(debugger);
+            exlogger.push_frame(debugger);
+            if (debugger.at_break_point()) {
+                std::cout << debugger.print_current_frame_to_string() << std::endl;
+            }
         });
-    });
-#   endif
-
-    console.load_program(program);
-    while (!console.trying_to_shutdown()) {
-        console.run_until_wait();
-        std::this_thread::sleep_for(MicroSeconds(16667));
+    } catch (std::exception & exp) {
+        throw Error(std::string(exp.what()) +
+                    "\nAdditionally the prefail frames are as follows:\n" +
+                    exlogger.to_string()                                   );
+    } catch (...) {
+        throw;
     }
-    print_frame(console);
-
-#   ifdef MACRO_PLATFORM_LINUX
-    global_console_pointer_access([&console](Console *& c_ptr) {
-        c_ptr = nullptr;
-    });
-#   endif
 }
 
 void print_help(const ProgramOptions &, const erfin::ProgramData &) {
     std::cout <<
-         "Erfindung command line options\n"
-#        ifdef MACRO_BUILD_STL_ONLY
-         "NOTE: This is a STL Only / Test build intended for unit testing.\n"
-#        endif
-         "If the entire text does not show, you can always stream the "
-         "output to a file or use \"less\" on *nix machines.\n\n"
-         "-i / --input\n"
-         "\tSpecify input file, not compatible with --stream-input "
-          "option\n"
-         "-h / --help\n"
-         "\tShow this help text.\n"
-#        ifndef MACRO_BUILD_STL_ONLY
-         "-c / --command-line\n"
-         "\tCauses the program to not open a window, the program will "
-          "finsih once and only when the halt signal is sent (you "
-          "can still cancel the program with ctrl-c as usual)\n"
-#        endif
-         "-t / --run-tests\n"
-         "\tRun developer tests (for debugging purposes only). If you "
-          "run this and the program doesn't crash, that means it "
-          "works!\n"
-         "-s / --stream-input\n"
-         "\tThe program will accept stdin as a source \"file\" this "
-          "option is not compatible with -i.\n"
-#        ifndef MACRO_BUILD_STL_ONLY
-         "-w / --window-scale\n"
-         "\tScales the window by an integer factor.\n"
-         "Each program \"command\" accepts parameters between each "
-         "of these \"commands\" e.g.\n"
-#        endif
-         "-b --break-points\n"
-         "\tPrints current frame at the given line numbers to the terminal. "
-         "Lists registers and their values, and continues running the "
-         "program. Invalid line numbers are ignored.\n"
-         "\n\t ./erfindung -i sample.efas -w 3 -c\n"
-         "Erfindung is GPLv3 software, refer to COPYING on the terms "
-         "and conditions for copying.\n"
-         "There is a software manual that should be present with "
-         "your distrobution that you can refer to on how to use the "
-         "software." << std::endl;
+    "Erfindung command line options:\n\n"
+#   ifdef MACRO_BUILD_STL_ONLY
+    "NOTE: This is a STL Only / Test build intended for unit testing.\n"
+    "this also means that windowed mode will not be available.\n"
+#   endif
+    "If the entire text does not show, you can always stream the\n"
+    "output to a file or use \"less\" on *nix machines.\n\n"
+    "-i / --input\n"
+    "Specify input file, not compatible with --stream-input option\n"
+    "-h / --help\n"
+    "Show this help text.\n"
+#   ifndef MACRO_BUILD_STL_ONLY
+    "-c / --command-line\n"
+    "Causes the program to not open a window, the program will "
+    "finsih once and only when the halt signal is sent (you "
+    "can still cancel the program with ctrl-c as usual)\n"
+#   endif
+    "-t / --run-tests\n"
+    "Run developer tests (for debugging purposes only). If you\n"
+    "run this and the program doesn't crash, that means it\n"
+    "works!\n"
+    "-r / --stream-input\n"
+    "The program will accept stdin as a source \"file\" this\n"
+    "option is not compatible with -i.\n"
+#   ifndef MACRO_BUILD_STL_ONLY
+    "-s / --window-scale\n"
+    "Scales the window by an integer factor.\n"
+    "Each program \"command\" accepts parameters between each \n"
+    "of these \"commands\" e.g.\n"
+#   endif
+    "-b --break-points\n"
+    "Prints current frame at the given line numbers to the terminal. "
+    "Lists registers and their values, and continues running the "
+    "program. Invalid line numbers are ignored.\n"
+    "-w -watch\n"
+    "Implicitly enabled with breakpoints. Watch mode accepts one numeric\n"
+    "argument n, for the number of frames to keep in run history. Run \n"
+    "history is printed out if Erfindung runs into a problem with program\n"
+    "execution, or is halted."
+    "Example:\n"
+    "\n\t ./erfindung -i sample.efas -w 3 -c\n"
+    "Erfindung is GPLv3 software, refer to COPYING on the terms and \n"
+    "conditions for copying.\n"
+    "There is a software manual that should be present with your\n"
+    "distrobution that you can refer to on how to use the software."
+    << std::endl;
 }
 
 namespace {
+
+#ifdef MACRO_PLATFORM_LINUX
+template <typename Func>
+void global_console_pointer_access(Func && f);
+#endif
+
+void print_frame(const erfin::Console & console);
 
 #ifndef MACRO_BUILD_STL_ONLY
 
@@ -344,26 +344,7 @@ void process_events(erfin::Console & console, sf::Window & window) {
     }
 }
 
-#endif // ifndef MACRO_BUILD_STL_ONLY
-
-class ForceWaitNotifier {
-public:
-    ForceWaitNotifier(): m_first_notice_given(false) {}
-    void issue_notice_once() {
-        if (m_first_notice_given) return;
-        throw Error("Wait was forced, the program may not "
-                    "render correctly!");
-#       if 0
-        std::cout << "Wait was forced, the program may not "
-                     "render correctly!" << std::endl;
-        m_first_notice_given = true;
-#       endif
-    }
-private:
-    bool m_first_notice_given;
-};
-
-#ifndef MACRO_BUILD_STL_ONLY
+// in ifndef MACRO_BUILD_STL_ONLY
 
 template <typename Func>
 void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
@@ -395,8 +376,6 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
         }
     };
 
-    ForceWaitNotifier force_wait_notifier;
-
     sf::Sprite screen_sprite;
     screen_sprite.setTexture(screen_pixels);
     screen_sprite.setPosition(0.f, 0.f);
@@ -414,10 +393,6 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
         window.clear();
 
         console.run_until_wait_with_post_frame([&]() {
-            //if (clks_elapsed_time() >= 0.1) {
-            //    console.force_wait_state();
-            //    force_wait_notifier.issue_notice_once();
-            //}
             do_between_cycles();
         });
         if (console.trying_to_shutdown())
@@ -435,5 +410,62 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
 }
 
 #endif // ifndef MACRO_BUILD_STL_ONLY
+
+template <typename Func>
+void cli_run_with_between_cycles
+    (const ProgramOptions &, const erfin::ProgramData & program, Func && f)
+{
+    using namespace erfin;
+    using MicroSeconds = std::chrono::duration<int, std::micro>;
+    Console console;
+
+#   ifdef MACRO_PLATFORM_LINUX
+    global_console_pointer_access([&console](Console *& c_ptr) {
+        c_ptr = &console;
+    });
+    signal(SIGPROF, [/* must not capture */](int) {
+        global_console_pointer_access([](Console *& c_ptr) {
+            print_frame(*c_ptr);
+        });
+    });
+#   endif
+
+    console.load_program(program);
+    while (!console.trying_to_shutdown()) {
+        console.run_until_wait_with_post_frame(
+            [&f, &console](){ f(std::cref(console)); });
+        std::this_thread::sleep_for(MicroSeconds(16667));
+    }
+    print_frame(console);
+
+#   ifdef MACRO_PLATFORM_LINUX
+    global_console_pointer_access([&console](Console *& c_ptr) {
+        c_ptr = nullptr;
+    });
+#   endif
+}
+
+} // end of <anonymous> namespace
+
+// ----------------------------------------------------------------------------
+
+namespace {
+
+#ifdef MACRO_PLATFORM_LINUX
+template <typename Func>
+void global_console_pointer_access(Func && f) {
+    static std::mutex access_mtx;
+    static erfin::Console * g_console_ptr = nullptr;
+    access_mtx.lock();
+    f(std::ref(g_console_ptr));
+    access_mtx.unlock();
+}
+#endif
+
+void print_frame(const erfin::Console & console) {
+    erfin::Debugger debugger;
+    console.update_with_current_state(debugger);
+    std::cout << debugger.print_current_frame_to_string() << std::endl;
+}
 
 } // end of <anonymous> namespace

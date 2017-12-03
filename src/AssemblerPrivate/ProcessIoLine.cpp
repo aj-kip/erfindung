@@ -125,7 +125,7 @@ void run_make_sysio_tests() {
     constexpr const char * const without_io_throw_away =
         "io triangle tempo x 4\n"
         "io triangle note x 400 500 300";
-    std::size_t throw_away_size;
+    std::size_t throw_away_size = 0;
     {
     Assembler asr;
     asr.assemble_from_string(with_io_throw_away);
@@ -134,6 +134,7 @@ void run_make_sysio_tests() {
     Assembler asr;
     asr.assemble_from_string(without_io_throw_away);
     assert(throw_away_size < asr.program_data().size());
+    (void)throw_away_size;
     }
     {
     constexpr const char * const all_io_expressions =
