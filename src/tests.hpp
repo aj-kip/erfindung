@@ -22,6 +22,12 @@
 #ifndef MACRO_HEADER_GUARD_TESTS_HPP
 #define MACRO_HEADER_GUARD_TESTS_HPP
 
-void run_tests();
+#include "ErfiDefs.hpp"
+
+namespace erfin {
+    struct ProgramOptions;
+}
+
+void run_tests(const erfin::ProgramOptions &, const erfin::ProgramData &);
 
 #endif

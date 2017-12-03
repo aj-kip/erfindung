@@ -1,7 +1,7 @@
 PROG = erfindung-cli
 CXX = g++
 LD = g++
-CXXFLAGS = -pthread -O1 -std=c++11 -Wall -pedantic -Werror -DMACRO_BUILD_STL_ONLY -DMACRO_COMPILER_GCC -Wno-maybe-uninitialized
+CXXFLAGS = -pthread -Ofast -std=c++11 -Wall -pedantic -Werror -DMACRO_BUILD_STL_ONLY -DMACRO_COMPILER_GCC -Wno-maybe-uninitialized
 LFLAGS = -pthread
 OBJECTS_DIR = .make_objects
 
@@ -37,3 +37,7 @@ $(PROG): $(OBJS)
 
 test: $(PROG)
 	./$(PROG) -t
+	./$(PROG)    > help-text-implicit.txt
+	./$(PROG) -h > help-text-explicit.txt
+	diff help-text-implicit.txt help-text-explicit.txt
+	rm help-text-implicit.txt help-text-explicit.txt

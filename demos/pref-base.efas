@@ -1,0 +1,12 @@
+set sp stack-start
+assume int
+:back
+io read random x
+add c 1
+set  z 1000
+mul  z 10000
+comp z c    z
+skip z   ==
+    jump back
+io halt x
+:stack-start data numbers [0]

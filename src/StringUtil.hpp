@@ -100,6 +100,7 @@ typename EnableStrToNum<IterType, RealType>::type
     using CharType = decltype(*start);
     static constexpr bool IS_SIGNED  = std::is_signed<RealType>::value;
     static constexpr bool IS_INTEGER = !std::is_floating_point<RealType>::value;
+    static constexpr RealType SIGN_FIX = IS_SIGNED ? -1 : 1;
     const bool is_negative_c = (*start) == CharType('-');
 
     // negative numbers cannot be parsed into an unsigned type
@@ -135,28 +136,29 @@ typename EnableStrToNum<IterType, RealType>::type
         case CharType('3'): case CharType('4'): case CharType('5'):
         case CharType('6'): case CharType('7'): case CharType('8'):
         case CharType('9'):
-            adder = -RealType(*end - CharType('0'));
+            adder = SIGN_FIX*RealType(*end - CharType('0'));
             break;
         case CharType('a'): case CharType('b'): case CharType('c'):
         case CharType('d'): case CharType('e'): case CharType('f'):
-            adder = -RealType(*end - 'a' + 10);
+            adder = SIGN_FIX*RealType(*end - 'a' + 10);
             break;
         case CharType('A'): case CharType('B'): case CharType('C'):
         case CharType('D'): case CharType('E'): case CharType('F'):
-            adder = -RealType(*end - 'A' + 10);
+            adder = SIGN_FIX*RealType(*end - 'A' + 10);
             break;
         default: return false;
         }
         // detect overflow
         RealType temp = working + adder*multi;
-        if (temp > working) return false;
+        if ( IS_SIGNED and temp > working) return false;
+        if (!IS_SIGNED and temp < working) return false;
         multi *= base_c;
         working = temp;
     }
     while (end != start);
 
     // we've produced a positive integer, so make the adjustment if needed
-    if (!is_negative_c) {
+    if (!is_negative_c and IS_SIGNED) {
         // edge case, cannot flip the sign for minimum value int
         if (IS_INTEGER and working == std::numeric_limits<RealType>::min()) {
             return false;

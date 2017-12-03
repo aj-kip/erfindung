@@ -100,7 +100,7 @@ mul  z 10000
 comp z c    z
 skip z   ==
     jump back
-save pc -9
+io halt x
 :abs
 push x
 comp a x    0

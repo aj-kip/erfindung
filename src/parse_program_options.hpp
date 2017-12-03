@@ -1,4 +1,4 @@
-/****************************************************************************
+﻿/****************************************************************************
 
     File: parse_program_options.hpp
     Author: Andrew Janke
@@ -37,7 +37,9 @@ void normal_windowed_run (const erfin::ProgramOptions &, const erfin::ProgramDat
 void watched_windowed_run(const erfin::ProgramOptions &, const erfin::ProgramData &);
 #endif
 void cli_run             (const erfin::ProgramOptions &, const erfin::ProgramData &);
+void watched_cli_run     (const erfin::ProgramOptions &, const erfin::ProgramData &);
 void print_help          (const erfin::ProgramOptions &, const erfin::ProgramData &);
+void run_tests           (const erfin::ProgramOptions &, const erfin::ProgramData &);
 
 // ----------- Options Parsing - implemented in respective source -------------
 
@@ -57,7 +59,6 @@ struct ProgramOptions {
 
     void swap(ProgramOptions &);
 
-    bool run_tests;
     int window_scale;
     int watched_history_length;
     std::vector<std::size_t> break_points;
@@ -65,7 +66,7 @@ struct ProgramOptions {
     std::istream * input_stream_ptr;
 };
 
-struct OptionsPair : ProgramOptions {
+struct OptionsPair final : ProgramOptions {
     OptionsPair();
     void (*mode)(const ProgramOptions &, const ProgramData &);
 };

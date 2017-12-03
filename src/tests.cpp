@@ -37,7 +37,7 @@ void test_string_to_number();
 
 }
 
-void run_tests() {
+void run_tests(const erfin::ProgramOptions &, const erfin::ProgramData &) {
     using namespace erfin;
 
     OstreamFormatSaver osfs(std::cout); (void)osfs;
@@ -123,13 +123,19 @@ void run_numeric_encoding_tests() {
     test_fp_divide( 1.1, 1.1);
 }
 
+std::runtime_error make_failed_string_to_number() {
+    return std::runtime_error("test_string_to_number: tests fail.");
+}
+
 template <typename T>
 void test_on(const char * const str, T num, int base) {
     auto mag = [](T x) { return x > T(0) ? x : -x; };
     T res = -1;
-    assert(string_to_number(str, str + ::strlen(str), res, T(base)));
+    if (!string_to_number(str, str + ::strlen(str), res, T(base)))
+        throw make_failed_string_to_number();
     double res_diff = double(mag(num - res));
-    assert(res_diff < 0.0005);
+    if (res_diff >= 0.0005)
+        throw make_failed_string_to_number();
 }
 
 void test_string_to_number() {
@@ -151,10 +157,14 @@ void test_string_to_number() {
     const char * const max_dec_str =  "2147483647";
     const char * const min_dec_str = "-2147483648";
     Int32 res = -1;
-    assert(string_to_number_(max_dec_str, res));
-    assert(res == max_c);
-    assert(string_to_number_(min_dec_str, res));
-    assert(res == min_c);
+    if (!string_to_number_(max_dec_str, res))
+        throw make_failed_string_to_number();
+    if (res != max_c)
+        throw make_failed_string_to_number();
+    if (!string_to_number_(min_dec_str, res))
+        throw make_failed_string_to_number();
+    if (res != min_c)
+        throw make_failed_string_to_number();
     }
     // hexidecimal
     {
@@ -195,11 +205,25 @@ void test_string_to_number() {
     {
     std::int32_t res = -1;
     // edge failure case
-    assert(!string_to_number_("2147483648", res));
+    if (string_to_number_("2147483648", res))
+        throw make_failed_string_to_number();
     // regular overflow
-    assert(!string_to_number_("2147483649", res));
-    assert(!string_to_number_("-8-12" , res));
-    assert(!string_to_number_("1.21.2", res));
+    if (string_to_number_("2147483649", res))
+        throw make_failed_string_to_number();
+    if (string_to_number_("-8-12" , res))
+        throw make_failed_string_to_number();
+    if (string_to_number_("1.21.2", res))
+        throw make_failed_string_to_number();
+    }
+    // test on unsigneds
+    {
+    const auto max = std::numeric_limits<std::uint32_t>::max();
+    const char * const max_str = "4294967295";
+    std::uint32_t res = 0;
+    if (!string_to_number(max_str, max_str + ::strlen(max_str), res, 10u))
+        throw make_failed_string_to_number();
+    if (max != res)
+        throw make_failed_string_to_number();
     }
 }
 

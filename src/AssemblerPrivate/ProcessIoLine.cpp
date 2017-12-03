@@ -125,7 +125,7 @@ void run_make_sysio_tests() {
     constexpr const char * const without_io_throw_away =
         "io triangle tempo x 4\n"
         "io triangle note x 400 500 300";
-    std::size_t throw_away_size;
+    std::size_t throw_away_size = 0;
     {
     Assembler asr;
     asr.assemble_from_string(with_io_throw_away);
@@ -134,6 +134,7 @@ void run_make_sysio_tests() {
     Assembler asr;
     asr.assemble_from_string(without_io_throw_away);
     assert(throw_away_size < asr.program_data().size());
+    (void)throw_away_size;
     }
     {
     constexpr const char * const all_io_expressions =
@@ -165,6 +166,10 @@ namespace {
 
 void emit_set_aside_register_instructions
     (TextProcessState & state, int device_address, int command_identity, Reg scape_goat_reg);
+
+void emit_ait_prelude(TextProcessState & state, Reg reg, Channel channel, ApuInstructionType ait);
+
+ApuInstructionType iterator_to_apu_inst_type(TextProcessState & state, StringCIter itr);
 
 StringCIter make_io_read
     (TextProcessState & state, StringCIter beg, StringCIter end)
@@ -203,15 +208,6 @@ StringCIter make_io_apu_inst
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
     using namespace erfin;
-
-    auto emit_ait_prelude = [](TextProcessState & state, Reg reg, Channel channel, ApuInstructionType ait) {
-        const auto apu_strm_address = encode_immd_int(device_addresses::APU_INPUT_STREAM);
-        state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(channel))));
-        state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
-        state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(ait))));
-        state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
-    };
-
     auto eol = get_eol(beg, end);
     Channel channel;
     if (*beg == "triangle") {
@@ -232,17 +228,7 @@ StringCIter make_io_apu_inst
         throw state.make_error(": \"" + *beg + "\" is not a valid channel.");
     }
     ++beg;
-    ApuInstructionType ait;
-    if (*beg == "note") {
-        ait = ApuInstructionType::NOTE;
-    } else if (*beg == "tempo") {
-        ait = ApuInstructionType::TEMPO;
-    } else if (*beg == "duty-cycle-window") {
-        ait = ApuInstructionType::DUTY_CYCLE_WINDOW;
-    } else {
-        throw state.make_error(": channel 'command' \"" + *beg +
-                               "\" is not recognized."          );
-    }
+    ApuInstructionType ait = iterator_to_apu_inst_type(state, beg);
     ++beg;
     // next we expect a register
     Reg reg = string_to_register_or_throw(state, *beg++);
@@ -428,6 +414,29 @@ void emit_set_aside_register_instructions
     state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_int(device_address  )));
     state.add_instruction(encode(OpCode::LOAD, reg, Reg::SP));
     state.add_instruction(encode(OpCode::MINUS, Reg::SP, Reg::SP, encode_immd_int(1)));
+}
+
+void emit_ait_prelude(TextProcessState & state, Reg reg, Channel channel, ApuInstructionType ait) {
+    const auto apu_strm_address = encode_immd_int(device_addresses::APU_INPUT_STREAM);
+    state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(channel))));
+    state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
+    state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(ait))));
+    state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
+}
+
+ApuInstructionType iterator_to_apu_inst_type
+    (TextProcessState & state, StringCIter itr)
+{
+    if (*itr == "note") {
+        return ApuInstructionType::NOTE;
+    } else if (*itr == "tempo") {
+        return ApuInstructionType::TEMPO;
+    } else if (*itr == "duty-cycle-window") {
+        return ApuInstructionType::DUTY_CYCLE_WINDOW;
+    } else {
+        throw state.make_error(": channel 'command' \"" + *itr +
+                               "\" is not recognized."          );
+    }
 }
 
 } // end of <anonymous> namespace
