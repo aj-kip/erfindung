@@ -82,6 +82,7 @@ void UtilityDevices::set_wait_time() {
     double et = double(duration.count()) / 1000.0;
     m_wait      = false;
     m_wait_time = to_fixed_point(et);
+    update_no_stop_signal();
 }
 
 /* private */ void UtilityDevices::update_no_stop_signal()
