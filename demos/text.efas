@@ -497,7 +497,7 @@ add  x 8
 add  a 1
 jump do-array-print-loop1-start
 :do-array-print-loop1-end
-io halt x
+#io halt x
 pop z y x pc
 
 ################################################################################

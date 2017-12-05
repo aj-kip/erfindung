@@ -1,32 +1,26 @@
 set sp stack-start
 :back
 assume integer
-set x l00
-set y l01
+set x l00 # inst 1
+set y l01 # inst 2
 sub z y x # z -> one part of the jump table
 
-#save pc -9
+io read random x # inst 4
+call abs         # inst 5
+set  x 0         # inst 6
+mod  a a 22      # 0x16 -> 22
+set  b a         # inst 8
+mul  a z         # inst 9
+add  a l00       # inst 10
+set  x 100       # inst 11
+set  y 200       # inst 12
 
-#set y end
-#sub y y x # y -> length of table
-#div x y z # x -> number of table cells
-
-io read random x
-call abs
-set  x 0
-mod  a a 22 # 0x16 -> 22
-set  b a
-mul  a z
-add  a l00
-set  x 100
-set  y 200
-
-add c 1
-jump a
+add c 1 # inst 13
+jump a  # inst 14
 
 : l00
-    add  z x y 
-    jump end
+    add  z x y # inst 15
+    jump end   # inst 16
 : l01 
     sub  z x y
     jump end
@@ -95,11 +89,11 @@ assume fp
 :end
 assume int
 
-set  z 1000
-mul  z 10000
-comp z c    z
-skip z   ==
-    jump back
+set  z 1000   # inst 17
+mul  z 10000  # inst 18
+comp z c    z # inst 19
+skip z   ==   # inst 20
+    jump back # inst 21
 io halt x
 :abs
 push x

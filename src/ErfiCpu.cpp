@@ -76,16 +76,22 @@ ErfiCpu::ErfiCpu()
 
 void ErfiCpu::reset() {
     // std::array does not initialize values
+    // note: g++ on ARM64 -Ofast, produces broken executable
+    // attempting to find issue
+    // failed guess -> std::fill here fails to write zeros
     std::fill(m_registers.begin(), m_registers.end(), 0);
 }
 
 void ErfiCpu::run_cycle(ConsolePack & console) {
     auto & pc_reg = m_registers[std::size_t(Reg::PC)];
-    if (!address_is_valid(console, pc_reg)) {
-        throw ErfiCpuError(pc_reg, "Failed to decode instruction at invalid "
-                               "address. (Perhaps a bad SET pc instruction?)");
+    if (pc_reg >= console.ram->size()) {
+        throw ErfiCpuError(pc_reg,
+            "Failed to decode instruction at invalid address. Note that the "
+            "PC cannot load instructions from devices. (Perhaps a bad SET pc "
+            "instruction?)");
     }
-    run_cycle(deserialize(do_read(console, pc_reg++)), console);
+
+    run_cycle(deserialize((*console.ram)[pc_reg++]), console);
 }
 
 void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
@@ -197,13 +203,6 @@ void try_program(const char * source_code, const int inst_limit_c) {
     }
 }
 
-/* private */ UInt32 & ErfiCpu::reg0(Inst inst)
-    { return m_registers[std::size_t(decode_reg0(inst))]; }
-/* private */ UInt32 & ErfiCpu::reg1(Inst inst)
-    { return m_registers[std::size_t(decode_reg1(inst))]; }
-/* private */ UInt32 & ErfiCpu::reg2(Inst inst)
-    { return m_registers[std::size_t(decode_reg2(inst))]; }
-
 /* private */ void ErfiCpu::do_set(Inst inst) {
     using Pf = SetTypeParamForm;
     UInt32 & r0 = reg0(inst);
@@ -244,11 +243,11 @@ void try_program(const char * source_code, const int inst_limit_c) {
 
 /* private */ UInt32 ErfiCpu::get_move_op_address(Inst inst) {
     using Pf = MTypeParamForm;
-    static constexpr const auto giimd = decode_immd_as_int;
+    static constexpr const auto gaimd = decode_immd_as_addr;
     switch (decode_m_type_pf(inst)) {
-    case Pf::_2R_INT : return UInt32(giimd(inst)) + reg1(inst);
-    case Pf::_2R     : return                       reg1(inst);
-    case Pf::_1R_INT : return UInt32(giimd(inst))             ;
+    case Pf::_2R_INT : return gaimd(inst) + reg1(inst);
+    case Pf::_2R     : return               reg1(inst);
+    case Pf::_1R_INT : return gaimd(inst)            ;
     case Pf::_INVALID: return 0;
     }
     std::terminate();
@@ -273,7 +272,7 @@ void try_program(const char * source_code, const int inst_limit_c) {
 namespace {
 
 UInt32 rotate(UInt32 x, UInt32 y) {
-    int rint = int(y);
+    auto rint = erfin::Int32(y);
     if (rint < 0) { // left
         rint = (rint*-1) % 32;
         return (x << rint) | (x >> (32 - rint));

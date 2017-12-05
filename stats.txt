@@ -1,0 +1,32 @@
+run_cycle(deserialize(do_read(console, pc_reg++), console));
+// The average instructions per second was 1385283.2615253 with a standard deviation of 8279.984102149
+run_cycle(deserialize((*console.ram)[pc_reg++]), console);
+// The average instructions per second was 1433297.8915041 with a standard deviation of 4953.140782054
+
+// The average instructions per second was 1610899.9947625 with a standard deviation of 11023.940573861
+bool UtilityDevices::no_stop_signal() const { return m_no_stop; }
+// The average instructions per second was 1811677.867612 with a standard deviation of 12270.16085202
+
+// old
+/* private */ void ErfiCpu::do_skip(Inst inst) {
+    using Pf = JTypeParamForm;
+    UInt32 & pc = m_registers[std::size_t(Reg::PC)];
+    switch (decode_j_type_pf(inst)) {
+    case Pf::_1R             : if (reg0(inst)) ++pc; return;
+    case Pf::_1R_INT_FOR_JUMP:
+        if (reg0(inst) & UInt32(decode_immd_as_int(inst))) ++pc;
+        return;
+    }
+}
+// new
+/* private */ void ErfiCpu::do_skip(Inst inst) {
+    using Pf = JTypeParamForm;
+    UInt32 & pc = m_registers[std::size_t(Reg::PC)];
+    switch (decode_j_type_pf(inst)) {
+    case Pf::_1R             : pc += bool(reg0(inst)); return;
+    case Pf::_1R_INT_FOR_JUMP:
+        pc += bool(reg0(inst) & UInt32(decode_immd_as_int(inst)));
+        return;
+    }
+}
+// The average instructions per second was 1789268.1231603 with a standard deviation of 12846.730791756

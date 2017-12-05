@@ -63,7 +63,7 @@ constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_OR_EQUAL_MASK;
 const char * device_addresses::INVALID_DEVICE_ADDRESS
     = "<INVALID ADDRESS>";
 
-const char * device_addresses::to_string(int address) {
+const char * device_addresses::to_string(UInt32 address) {
     switch (address) {
     case RESERVED_NULL          : return "RESERVED_NULL"          ;
     case GPU_INPUT_STREAM       : return "GPU_INPUT_STREAM"       ;
@@ -115,8 +115,18 @@ RegParamPack encode_reg_reg(Reg r0, Reg r1)
 RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2)
     { return RegParamPack(r0, r1, r2); }
 
+Immd encode_immd_addr(UInt32 addr) {
+    bool last_bit_set = addr & 0x80000000;
+    UInt32 first_bits = addr & 0x7FFFFFFF;
+    if (first_bits > std::numeric_limits<int16_t>::max()) {
+        throw Error("Cannot store address \"" + std::to_string(addr) +
+                    "\" in an immediate.");
+    }
+    return Immd((last_bit_set ? 0x8000u : 0u) | first_bits);
+}
+
 Immd encode_immd_int(int i) {
-    if (i > std::numeric_limits<int16_t>::max() ||
+    if (i > std::numeric_limits<int16_t>::max() or
         i < std::numeric_limits<int16_t>::min())
     {
         throw Error("Cannot store number \"" + std::to_string(i) +
@@ -172,10 +182,16 @@ JTypeParamForm decode_j_type_pf(Inst i) {
     return JTypeParamForm((serialize(i) >> J_TYPE_PF_POS) & 0x1);
 }
 
-int decode_immd_as_int(Inst inst) {
+Int32 decode_immd_as_int(Inst inst) {
     auto bits = serialize(inst) & 0xFFFF;
     auto is_neg = bits & 0x8000;
-    return (is_neg ? -1 : 1)*int(bits & 0x7FFF) + (is_neg ? -1 : 0);
+    return (is_neg ? -1 : 1)*Int32(bits & 0x7FFF) + (is_neg ? -1 : 0);
+}
+
+UInt32 decode_immd_as_addr(Inst inst) {
+    auto bits    = serialize(inst);
+    auto msb_set = bits & 0x8000u;
+    return (msb_set ? 0x80000000u : 0) | (bits & 0x7FFF);
 }
 
 UInt32 decode_immd_as_fp(Inst inst) {
@@ -204,12 +220,13 @@ const char * register_to_string(Reg r) {
 
 void run_encode_decode_tests() {
     using namespace device_addresses;
-    for (int i :{ RESERVED_NULL, GPU_INPUT_STREAM, GPU_RESPONSE,
-                  APU_INPUT_STREAM, TIMER_WAIT_AND_SYNC, TIMER_QUERY_SYNC_ET,
-                  RANDOM_NUMBER_GENERATOR, READ_CONTROLLER, HALT_SIGNAL,
-                  BUS_ERROR                                                   })
-    {
-        int product = decode_immd_as_int(Inst(encode_immd_int(i)));
+    static constexpr auto dev_list = {
+        RESERVED_NULL, GPU_INPUT_STREAM, GPU_RESPONSE,
+        APU_INPUT_STREAM, TIMER_WAIT_AND_SYNC, TIMER_QUERY_SYNC_ET,
+        RANDOM_NUMBER_GENERATOR, READ_CONTROLLER, HALT_SIGNAL,
+        BUS_ERROR                                                   };
+    for (UInt32 i : dev_list) {
+        auto product = decode_immd_as_addr(Inst(encode_immd_addr(i)));
         if (i == product) continue;
         throw Error(std::string("Failed to encode \"") + to_string(i)   +
                     "\" expected: " + std::to_string(i) + " produced: " +

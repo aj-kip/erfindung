@@ -47,22 +47,29 @@ constexpr const char * ACCESS_VIOLATION_MESSAGE =
 namespace erfin {
 
 UtilityDevices::UtilityDevices():
-    m_rng(std::random_device()()),
-    m_prev_time(std::chrono::steady_clock::now()),
+    m_no_stop(true),
     m_wait(false),
     m_halt_flag(false),
-    m_bus_error(false)
+    m_bus_error(false),
+    m_rng(std::random_device()()),
+    m_prev_time(std::chrono::steady_clock::now())
 {}
 
 // read actions
 UInt32 UtilityDevices::generate_random_number()
-    { return std::uniform_int_distribution<UInt32>()(m_rng); }
+    { return m_distro(m_rng); }
 
 UInt32 UtilityDevices::query_elapsed_time() const { return m_wait_time; }
 
-void UtilityDevices::power(UInt32 p) { m_halt_flag = (p != 0); }
+void UtilityDevices::power(UInt32 p) {
+    m_halt_flag = (p != 0);
+    update_no_stop_signal();
+}
 
-void UtilityDevices::wait (UInt32 w) { m_wait = (w != 0); }
+void UtilityDevices::wait (UInt32 w) {
+    m_wait = (w != 0);
+    update_no_stop_signal();
+}
 
 bool UtilityDevices::wait_requested() const { return m_wait; }
 
@@ -77,6 +84,9 @@ void UtilityDevices::set_wait_time() {
     m_wait_time = to_fixed_point(et);
 }
 
+/* private */ void UtilityDevices::update_no_stop_signal()
+    { m_no_stop = !m_halt_flag and !m_wait; }
+
 ConsolePack::ConsolePack():
     ram(nullptr),
     cpu(nullptr),
@@ -87,7 +97,7 @@ ConsolePack::ConsolePack():
 {}
 
 void do_write(ConsolePack & con, UInt32 address, UInt32 data) {
-    if (int(address) & device_addresses::DEVICE_ADDRESS_MASK) {
+    if (address & device_addresses::DEVICE_ADDRESS_MASK) {
         do_device_write(con, address, data);
     } else if (address < con.ram->size()) {
         (*con.ram)[address] = data;
@@ -97,7 +107,7 @@ void do_write(ConsolePack & con, UInt32 address, UInt32 data) {
 }
 
 UInt32 do_read(ConsolePack & con, UInt32 address) {
-    if (int(address) & device_addresses::DEVICE_ADDRESS_MASK) {
+    if (address & device_addresses::DEVICE_ADDRESS_MASK) {
         return do_device_read(con, address);
     } else if (address < con.ram->size()) {
         return (*con.ram)[address];
@@ -108,8 +118,8 @@ UInt32 do_read(ConsolePack & con, UInt32 address) {
 
 bool address_is_valid(const ConsolePack & con, UInt32 address) {
     using namespace device_addresses;
-    if (int(address) & device_addresses::DEVICE_ADDRESS_MASK) {
-        return to_string(int(address)) != INVALID_DEVICE_ADDRESS;
+    if (address & device_addresses::DEVICE_ADDRESS_MASK) {
+        return to_string(address) != INVALID_DEVICE_ADDRESS;
     } else {
         assert(con.ram);
         return address < con.ram->size();
@@ -203,7 +213,7 @@ erfin::UInt32 do_device_read(erfin::ConsolePack & con, erfin::UInt32 address) {
     auto bus_error = [&con] () -> UInt32
         { con.dev->set_bus_error(true); return 0; };
 
-    switch (int(address)) {
+    switch (address) {
     case RESERVED_NULL          :
     case GPU_INPUT_STREAM       : return bus_error();
     case GPU_RESPONSE           : return con.gpu->read();
@@ -227,7 +237,7 @@ void do_device_write
     con.dev->set_bus_error(false);
     auto bus_error = [&con] () { con.dev->set_bus_error(true); };
 
-    switch (int(address)) {
+    switch (address) {
     case RESERVED_NULL          : bus_error(); return;
     case GPU_INPUT_STREAM       : con.gpu->io_write(data); return;
     case GPU_RESPONSE           : bus_error(); return;

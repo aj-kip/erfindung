@@ -165,7 +165,7 @@ void run_make_sysio_tests() {
 namespace {
 
 void emit_set_aside_register_instructions
-    (TextProcessState & state, int device_address, int command_identity, Reg scape_goat_reg);
+    (TextProcessState & state, UInt32 device_address, int command_identity, Reg scape_goat_reg);
 
 void emit_ait_prelude(TextProcessState & state, Reg reg, Channel channel, ApuInstructionType ait);
 
@@ -183,7 +183,7 @@ StringCIter make_io_read
     // io read bus-error  x # <- check if a bus error occured
 
     auto eol = get_eol(++beg, end);
-    int source_address = 0;
+    UInt32 source_address = 0;
     /**/ if (*beg == "controller") source_address = READ_CONTROLLER        ;
     else if (*beg == "timer"     ) source_address = TIMER_QUERY_SYNC_ET    ;
     else if (*beg == "random"    ) source_address = RANDOM_NUMBER_GENERATOR;
@@ -199,7 +199,7 @@ StringCIter make_io_read
     for (; beg != eol; ++beg) {
         auto reg = string_to_register_or_throw(state, *beg);
         state.add_instruction(encode(OpCode::LOAD, reg              ,
-                                     encode_immd_int(source_address)) );
+                                     encode_immd_addr(source_address)) );
     }
     return eol;
 }
@@ -233,7 +233,7 @@ StringCIter make_io_apu_inst
     // next we expect a register
     Reg reg = string_to_register_or_throw(state, *beg++);
 
-    const auto apu_strm_address = encode_immd_int(device_addresses::APU_INPUT_STREAM);
+    const auto apu_strm_address = encode_immd_addr(device_addresses::APU_INPUT_STREAM);
 
     // hit last argument?
     if (beg == eol) {
@@ -296,13 +296,14 @@ StringCIter make_io_upload
     }
     assert(beg == eol);
     // what does push do to the SP?
-    static constexpr const int GPU_INPUT_STREAM = device_addresses::GPU_INPUT_STREAM;
+    static constexpr const auto GPU_INPUT_STREAM =
+        device_addresses::GPU_INPUT_STREAM;
     emit_set_aside_register_instructions(state, GPU_INPUT_STREAM,
                                          gpu_enum_types::UPLOAD, args[0]);
 
     for (const Reg & arg : args) {
         state.add_instruction( encode(OpCode::SAVE,                arg,
-                                      encode_immd_int(GPU_INPUT_STREAM)) );
+                                      encode_immd_addr(GPU_INPUT_STREAM)) );
     }
     return eol;
 }
@@ -339,13 +340,13 @@ StringCIter make_io_draw
     }
     assert(beg == eol);
     // what does push do to the SP?
-    static constexpr const int GPU_INPUT_STREAM = device_addresses::GPU_INPUT_STREAM;
+    static constexpr const auto GPU_INPUT_STREAM = device_addresses::GPU_INPUT_STREAM;
     emit_set_aside_register_instructions
         (state, GPU_INPUT_STREAM, gpu_enum_types::DRAW, args[0]);
 
     for (const Reg & arg : args) {
         state.add_instruction( encode(OpCode::SAVE,                arg,
-                                      encode_immd_int(GPU_INPUT_STREAM)) );
+                                      encode_immd_addr(GPU_INPUT_STREAM)) );
     }
     return eol;
 }
@@ -362,7 +363,7 @@ StringCIter make_io_halt
     }
     auto reg = string_to_register_or_throw(state, *beg);
     state.add_instruction(encode(OpCode::SET , reg, encode_immd_int(1)));
-    state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_int(HALT_SIGNAL)));
+    state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_addr(HALT_SIGNAL)));
     return eol;
 }
 
@@ -377,7 +378,7 @@ StringCIter make_io_wait
                                "register argument.");
     }
     auto reg = string_to_register_or_throw(state, *beg);
-    state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_int(TIMER_WAIT_AND_SYNC)));
+    state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_addr(TIMER_WAIT_AND_SYNC)));
     return eol;
 }
 
@@ -404,20 +405,20 @@ SaveRestoreRegRAII::~SaveRestoreRegRAII() {
 // ----------------------------------------------------------------------------
 
 void emit_set_aside_register_instructions
-    (TextProcessState & state, int device_address, int command_identity, Reg scape_goat_reg)
+    (TextProcessState & state, UInt32 device_address, int command_identity, Reg scape_goat_reg)
 {
     using namespace erfin;
     auto reg = scape_goat_reg;
     state.add_instruction(encode(OpCode::PLUS, Reg::SP, Reg::SP, encode_immd_int(1)));
     state.add_instruction(encode(OpCode::SAVE, reg, Reg::SP));
-    state.add_instruction(encode(OpCode::SET , reg, encode_immd_int(command_identity)));
-    state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_int(device_address  )));
+    state.add_instruction(encode(OpCode::SET , reg, encode_immd_int (command_identity)));
+    state.add_instruction(encode(OpCode::SAVE, reg, encode_immd_addr(device_address  )));
     state.add_instruction(encode(OpCode::LOAD, reg, Reg::SP));
     state.add_instruction(encode(OpCode::MINUS, Reg::SP, Reg::SP, encode_immd_int(1)));
 }
 
 void emit_ait_prelude(TextProcessState & state, Reg reg, Channel channel, ApuInstructionType ait) {
-    const auto apu_strm_address = encode_immd_int(device_addresses::APU_INPUT_STREAM);
+    const auto apu_strm_address = encode_immd_addr(device_addresses::APU_INPUT_STREAM);
     state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(channel))));
     state.add_instruction(encode(OpCode::SAVE, reg, apu_strm_address));
     state.add_instruction(encode(OpCode::SET, reg, encode_immd_int(static_cast<int>(ait))));

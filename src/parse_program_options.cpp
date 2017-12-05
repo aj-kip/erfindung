@@ -99,7 +99,6 @@ static const struct {
     { 's', "window-scale" , select_window_scale },
     { 't', "run-tests"    , select_tests        },
     { 'w', "watch"        , select_watched      }
-
 };
 
 } // end of <anonymous> namespace
