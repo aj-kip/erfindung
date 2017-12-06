@@ -58,15 +58,17 @@ local function get_stats_on(stats, name)
     print('The average '..name..' was '..avg..' with a '..
           'standard deviation of '..stddev)
 end
---[[
-local inst_per_sec = {}
-do_benchmark(function(benchmark_res)
-    for line in benchmark_res:lines() do
-        local et = tonumber(line)
-        inst_per_sec[#inst_per_sec + 1] = (10000000) / et
-    end
-end)
-get_stats_on(inst_per_sec, 'instructions per second')
-]]--
-do_profile()
 
+local function do_benchmark_runs()
+	local inst_per_sec = {}
+	do_benchmark(function(benchmark_res)
+	    for line in benchmark_res:lines() do
+	        local et = tonumber(line)
+	        inst_per_sec[#inst_per_sec + 1] = ((10000000) / et)*21
+	    end
+	end)
+	get_stats_on(inst_per_sec, 'instructions per second')
+end
+
+do_benchmark_runs()
+--do_profile()

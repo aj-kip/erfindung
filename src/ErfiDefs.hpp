@@ -354,12 +354,11 @@ namespace device_addresses {
     constexpr const UInt32 READ_CONTROLLER         = 0x80000007;
     constexpr const UInt32 HALT_SIGNAL             = 0x80000008;
     constexpr const UInt32 BUS_ERROR               = 0x80000009;
-    // as runtime constant -> allows direct pointer comparison
-    extern const char * INVALID_DEVICE_ADDRESS;
+    constexpr const UInt32 DEVICE_ADDRESS_MASK     = 0x80000000;
+
     //! @return returns INVALID_DEVICE_ADDRESS pointer if the address is invalid
     const char * to_string(UInt32);
-
-    constexpr const UInt32 DEVICE_ADDRESS_MASK     = 0x80000000;
+    bool is_device_address(UInt32);
 
 } // end of device_addresses namespace
 

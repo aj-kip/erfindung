@@ -124,6 +124,7 @@ void ProgramOptions::swap(ProgramOptions & lhs) {
     std::swap(window_scale          , lhs.window_scale          );
     std::swap(watched_history_length, lhs.watched_history_length);
     std::swap(input_stream_ptr      , lhs.input_stream_ptr      );
+    std::swap(break_points          , lhs.break_points          );
 }
 
 OptionsPair::OptionsPair():
@@ -248,11 +249,11 @@ void select_help(TempOptions & opts, char **, char **)
     { opts.should_help = true; }
 
 void select_watched(TempOptions & opts, char ** beg, char ** end) {
+    opts.should_watch = true;
     if (end - beg == 0) return;
     if (end - beg > 1)
         throw Error("Watch option expects at most one argument");
     if (!to_dec_number(*beg, opts.watched_history_length)) {
-        opts.should_watch = true;
         std::cout << "Warning: history length is not a valid decimal "
                      "number." << std::endl;
     }

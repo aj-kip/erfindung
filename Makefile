@@ -2,7 +2,7 @@ PROG = erfindung-cli
 CXX = g++
 LD = g++
 CXXFLAGS = -pthread -Ofast -std=c++11 -Wall -pedantic -Werror -DMACRO_BUILD_STL_ONLY -DMACRO_COMPILER_GCC -Wno-maybe-uninitialized
-LFLAGS = -pthread 
+LFLAGS = -pthread
 OBJECTS_DIR = .make_objects
 
 default: $(PROG)

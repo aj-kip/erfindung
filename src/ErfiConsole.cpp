@@ -22,6 +22,7 @@
 #include "ErfiConsole.hpp"
 #include "FixedPointUtil.hpp"
 #include "Debugger.hpp"
+#include <iostream>
 #ifndef MACRO_BUILD_STL_ONLY
 #   include <SFML/Window/Event.hpp>
 #endif
@@ -78,10 +79,10 @@ bool UtilityDevices::halt_requested() const { return m_halt_flag; }
 void UtilityDevices::set_wait_time() {
     using namespace std::chrono;
     auto duration = duration_cast<milliseconds>(steady_clock::now() - m_prev_time);
-    m_prev_time = steady_clock::now();
-    double et = double(duration.count()) / 1000.0;
-    m_wait      = false;
-    m_wait_time = to_fixed_point(et);
+    auto et       = double(duration.count()) / 1000.0;
+    m_prev_time   = steady_clock::now();
+    m_wait        = false;
+    m_wait_time   = to_fixed_point(et);
     update_no_stop_signal();
 }
 
@@ -111,7 +112,8 @@ UInt32 do_read(ConsolePack & con, UInt32 address) {
     if (address & device_addresses::DEVICE_ADDRESS_MASK) {
         return do_device_read(con, address);
     } else if (address < con.ram->size()) {
-        return (*con.ram)[address];
+        volatile auto * mptr = con.ram->data();
+        return mptr[address];
     } else {
         throw Error(ACCESS_VIOLATION_MESSAGE);
     }
@@ -120,7 +122,7 @@ UInt32 do_read(ConsolePack & con, UInt32 address) {
 bool address_is_valid(const ConsolePack & con, UInt32 address) {
     using namespace device_addresses;
     if (address & device_addresses::DEVICE_ADDRESS_MASK) {
-        return to_string(address) != INVALID_DEVICE_ADDRESS;
+        return is_device_address(address);
     } else {
         assert(con.ram);
         return address < con.ram->size();

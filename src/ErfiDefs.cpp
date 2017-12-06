@@ -60,9 +60,6 @@ constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_LESS_THAN_OR_EQUAL_MASK;
 constexpr /* static */ const Immd ImmdConst::COMP_GREATER_THAN_OR_EQUAL_MASK;
 
-const char * device_addresses::INVALID_DEVICE_ADDRESS
-    = "<INVALID ADDRESS>";
-
 const char * device_addresses::to_string(UInt32 address) {
     switch (address) {
     case RESERVED_NULL          : return "RESERVED_NULL"          ;
@@ -75,9 +72,12 @@ const char * device_addresses::to_string(UInt32 address) {
     case READ_CONTROLLER        : return "READ_CONTROLLER"        ;
     case HALT_SIGNAL            : return "HALT_SIGNAL"            ;
     case BUS_ERROR              : return "BUS_ERROR"              ;
-    default                     : return INVALID_DEVICE_ADDRESS   ;
+    default                     : return "<INVALID ADDRESS>"      ;
     }
 }
+
+bool device_addresses::is_device_address(UInt32 address)
+    { return address >= RESERVED_NULL and address <= BUS_ERROR; }
 
 Inst encode_op_with_pf(OpCode op, ParamForm pf) {
     using O  = OpCode;
@@ -156,6 +156,7 @@ FixedPointFlag encode_set_is_fixed_point_flag()
     { return FixedPointFlag(IS_FIXED_POINT_MASK); }
 
 // helpers for vm/testing the assembler
+
 Reg decode_reg0(Inst inst)
     { return Reg((serialize(inst) >> RegParamPack::REG0_POS) & 0x7); }
 Reg decode_reg1(Inst inst)

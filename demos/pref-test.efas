@@ -21,7 +21,7 @@ jump a  # inst 14
 : l00
     add  z x y # inst 15
     jump end   # inst 16
-: l01 
+: l01
     sub  z x y
     jump end
 : l02
@@ -42,48 +42,48 @@ jump a  # inst 14
 : l07
     div  z x y
     jump end
-: l08 
+: l08
     mod  z x y
     jump end
-: l09 
+: l09
     comp z x y
     jump end
 assume fp
-: l0A 
+: l0A
     add  z x y
     jump end
-: l0B 
+: l0B
     sub  z x y
     jump end
-: l0C 
+: l0C
     and  z x y
     jump end
-: l0D 
+: l0D
     xor  z x y
     jump end
-: l0E  
+: l0E
     or   z x y
     jump end
-: l0F 
+: l0F
     mul  z x y
     jump end
-: l10 
+: l10
     div  z x y
     jump end
-: l11 
+: l11
     mod  z x y
     jump end
-: l12 
+: l12
     comp z x y
     jump end
 # neither integer nor fp specific
-: l13 
+: l13
     set z x
     jump end
-: l14 
+: l14
     save z save-spot
     jump end
-: l15 
+: l15
     load z save-spot
     jump end
 :end

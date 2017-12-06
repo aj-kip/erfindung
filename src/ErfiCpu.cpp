@@ -243,11 +243,10 @@ void try_program(const char * source_code, const int inst_limit_c) {
 
 /* private */ UInt32 ErfiCpu::get_move_op_address(Inst inst) {
     using Pf = MTypeParamForm;
-    static constexpr const auto gaimd = decode_immd_as_addr;
     switch (decode_m_type_pf(inst)) {
-    case Pf::_2R_INT : return gaimd(inst) + reg1(inst);
-    case Pf::_2R     : return               reg1(inst);
-    case Pf::_1R_INT : return gaimd(inst)            ;
+    case Pf::_2R_INT : return plus(UInt32(decode_immd_as_int(inst)), reg1(inst));
+    case Pf::_2R     : return reg1(inst);
+    case Pf::_1R_INT : return decode_immd_as_addr(inst);
     case Pf::_INVALID: return 0;
     }
     std::terminate();
@@ -310,7 +309,7 @@ UInt32 mod_int (UInt32 x, UInt32 y) {
 UInt32 comp_int(UInt32 x, UInt32 y) {
     using namespace erfin;
     UInt32 temp = 0;
-    int x_ = int(x), y_ = int(y);
+    auto x_ = Int32(x), y_ = Int32(y);
     if (x_ <  y_) temp |= COMP_LESS_THAN_MASK   ;
     if (x_ >  y_) temp |= COMP_GREATER_THAN_MASK;
     if (x_ == y_) temp |= COMP_EQUAL_MASK       ;
