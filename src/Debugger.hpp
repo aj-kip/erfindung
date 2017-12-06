@@ -30,6 +30,7 @@ namespace erfin {
 
 class Assembler;
 class AssemblerDebuggerAttorney;
+class DebuggerFrame;
 
 /** The Debugger is a special, programmer's device that you can hook up to
  *  your console.
@@ -50,7 +51,7 @@ public:
 
     static constexpr const std::size_t NO_LINE = std::size_t(-1);
 
-    Debugger(): m_at_break_point(false) {}
+    Debugger();
 
     bool at_break_point() const noexcept;
 
@@ -69,7 +70,14 @@ public:
 
     std::string print_current_frame_to_string() const;
 
+    std::string print_frame_to_string(const DebuggerFrame &) const;
+
+    DebuggerFrame current_frame() const;
+
 private:
+
+    std::string print_pack_to_string(const RegisterPack &) const;
+
     const std::string & interpret_register
         (Reg, Interpretation, const MemorySpace *);
 
@@ -88,6 +96,24 @@ class AssemblerDebuggerAttorney {
     static void copy_line_inst_map_to_debugger
         (const InstToLineMap & map_, Debugger & debugger)
     { debugger.m_inst_to_line_map = map_; }
+};
+
+/**
+ * @note Purpose: turns out building string for frames is really expensive
+ *       (to the point where my patience is lost.
+ */
+class DebuggerFrame {
+public:
+    friend class Debugger;
+
+    DebuggerFrame();
+    explicit DebuggerFrame(const RegisterPack &);
+    DebuggerFrame(const DebuggerFrame &);
+
+    DebuggerFrame & operator = (const DebuggerFrame &);
+
+private:
+    RegisterPack m_regs;
 };
 
 } // end of erfin namespace

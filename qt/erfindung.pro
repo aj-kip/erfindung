@@ -1,4 +1,4 @@
-#message($$CONFIG)
+
 TEMPLATE = app
 
 CONFIG += console
@@ -75,16 +75,13 @@ linux-clang {
     QMAKE_CXXFLAGS_DEBUG -= -Wno-uninitialized
 }
 
-#message($$DEFINES)
-
 INCLUDEPATH += \
     /media/data/dev/c++/inc
 
 QMAKE_CXXFLAGS += -std=c++11 -Wall -pedantic -Werror
 
-LIBS += -L/media/data/dev/c++/lib/g++/GnuLinux64/ \
-    -L/usr/lib/     \
-    -lsfml-system   \
-    -lsfml-graphics \
-    -lsfml-window   \
-    -lsfml-audio
+LIBS += -L/usr/lib/ \
+        -lsfml-system \
+        -lsfml-graphics \
+        -lsfml-window \
+        -lsfml-audio

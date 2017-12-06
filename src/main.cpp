@@ -66,12 +66,11 @@ public:
     ExecutionHistoryLogger & operator = (const ExecutionHistoryLogger &) = delete;
 
     void push_frame(const erfin::Debugger & debugger);
-    std::string to_string() const;
+    std::string to_string(const erfin::Debugger & debugger) const;
 
 private:
     int m_frame_limit;
-
-    std::vector<std::string> m_frames;
+    std::vector<erfin::DebuggerFrame> m_frames;
 };
 
 } // end of <anonymous> namespace
@@ -122,16 +121,19 @@ ExecutionHistoryLogger::ExecutionHistoryLogger(int frame_limit) noexcept:
 {}
 
 void ExecutionHistoryLogger::push_frame(const erfin::Debugger & debugger) {
+    if (m_frame_limit == 0) return;
     if (unsigned(m_frame_limit) == m_frames.size()) {
         m_frames.erase(m_frames.begin(), m_frames.begin() + 1);
     }
-    m_frames.push_back(debugger.print_current_frame_to_string());
+    m_frames.push_back(debugger.current_frame());
 }
 
-std::string ExecutionHistoryLogger::to_string() const {
+std::string ExecutionHistoryLogger::to_string
+    (const erfin::Debugger & debugger) const
+{
     std::string rv;
-    for (auto & str : m_frames)
-        rv += str;
+    for (const auto & frame : m_frames)
+        rv += debugger.print_frame_to_string(frame);
     return rv;
 }
 
@@ -198,13 +200,13 @@ void watched_windowed_run
     } catch (std::exception & exp) {
         throw Error(std::string(exp.what()) +
                     "\nAdditionally the prefail frames are as follows:\n" +
-                    exlogger.to_string()                                   );
+                    exlogger.to_string(debugger)                           );
     } catch (...) {
         throw;
     }
 
     std::cout << "Program finished without simulation errors.\n"
-              << exlogger.to_string();
+              << exlogger.to_string(debugger);
 }
 
 #endif // ifndef MACRO_BUILD_STL_ONLY
@@ -241,7 +243,7 @@ void watched_cli_run
     } catch (std::exception & exp) {
         throw Error(std::string(exp.what()) +
                     "\nAdditionally the prefail frames are as follows:\n" +
-                    exlogger.to_string()                                   );
+                    exlogger.to_string(debugger)                           );
     } catch (...) {
         throw;
     }
@@ -392,9 +394,7 @@ void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
 
         window.clear();
 
-        console.run_until_wait_with_post_frame([&]() {
-            do_between_cycles();
-        });
+        console.run_until_wait_with_post_frame(std::move(do_between_cycles));
         if (console.trying_to_shutdown())
             break;
 

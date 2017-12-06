@@ -55,18 +55,26 @@ public:
     bool wait_requested() const;
 
     bool halt_requested() const;
+
+    bool no_stop_signal() const { return m_no_stop; }
+
     void set_wait_time();
 
     void set_bus_error(bool v) { m_bus_error = v; }
+
     bool bus_error_present() const { return m_bus_error; }
 
 private:
-    std::default_random_engine m_rng;
-    TimePoint m_prev_time;
+    void update_no_stop_signal();
+
+    bool m_no_stop;
     bool m_wait ;
     bool m_halt_flag;
-    UInt32 m_wait_time;
     bool m_bus_error;
+    std::mt19937 m_rng;
+    std::uniform_int_distribution<UInt32> m_distro;
+    TimePoint m_prev_time;
+    UInt32 m_wait_time;
 };
 
 struct ConsolePack {
@@ -130,7 +138,7 @@ void Console::run_until_wait_with_post_frame(Func && f) {
     pack.gpu->wait(*pack.ram);
     pack.apu->update();
     pack.dev->set_wait_time();
-    while (!pack.dev->wait_requested() && !pack.dev->halt_requested()) {
+    while (pack.dev->no_stop_signal()) {
         pack.cpu->run_cycle(pack);
         f();
     }

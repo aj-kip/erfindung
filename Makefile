@@ -35,6 +35,10 @@ OBJS = $(SRCS:%.cpp=%.o)
 $(PROG): $(OBJS)
 	$(LD) $(LFLAGS) $(OBJS) -o $(PROG)
 
+profile: CXXFLAGS += -pg 
+profile: LFLAGS += -pg
+profile: $(PROG)
+
 test: $(PROG)
 	./$(PROG) -t
 	./$(PROG)    > help-text-implicit.txt

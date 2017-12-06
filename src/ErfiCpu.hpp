@@ -86,6 +86,13 @@ template <UInt32(*FuncFp)(UInt32, UInt32), UInt32(*FuncInt)(UInt32, UInt32)>
     }
 }
 
+/* private */ inline UInt32 & ErfiCpu::reg0(Inst inst)
+    { return m_registers.data()[std::size_t(decode_reg0(inst))]; }
+/* private */ inline UInt32 & ErfiCpu::reg1(Inst inst)
+    { return m_registers.data()[std::size_t(decode_reg1(inst))]; }
+/* private */ inline UInt32 & ErfiCpu::reg2(Inst inst)
+    { return m_registers.data()[std::size_t(decode_reg2(inst))]; }
+
 } // end of erfin namespace
 
 #endif

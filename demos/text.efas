@@ -1,3 +1,4 @@
+#!./erfindung
 set sp stack-start
 ###############################################################################
 #
@@ -28,7 +29,7 @@ set z 4110
 io draw x y z
 
 add y 8
-call do-print
+#call do-print
 call do-array-print
 
 io wait  a
@@ -472,22 +473,24 @@ pop pc
 
 assume int
 :string data numbers [
-1 2 3 4 5 6 7 8 9
+7 4 11 11 4 8 6 2 20 4 16 8 7 22 1 2 8 2 0 4 8 9
 ]
 :string-end
 
 ################################################################################
 
+################################################################################
+
 :do-array-print
 push x y z
-set x  20
-set y 220
+set x 100
+set y  20
 set a string
 
 :do-array-print-loop1-start
 set b string-end
 comp c a    b
-skip c   ==
+skip c   !=
     jump do-array-print-loop1-end
 
 load z a
@@ -497,7 +500,7 @@ add  x 8
 add  a 1
 jump do-array-print-loop1-start
 :do-array-print-loop1-end
-io halt x
+#io halt x
 pop z y x pc
 
 ################################################################################

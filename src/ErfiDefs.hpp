@@ -169,6 +169,7 @@ namespace erfin {
 using UInt8  = uint8_t ;
 using UInt16 = uint16_t;
 using UInt64 = uint64_t;
+using  Int32 =  int32_t;
 using UInt32 = uint32_t;
 
 // program memory layout
@@ -338,23 +339,26 @@ constexpr const int COMP_GREATER_THAN_MASK = (1 << 2);
 constexpr const int COMP_NOT_EQUAL_MASK    = (1 << 3);
 
 namespace device_addresses {
-    // these are all conviently negative n.-
-    constexpr const int RESERVED_NULL           = -1 ;
-    constexpr const int GPU_INPUT_STREAM        = -2 ;
-    constexpr const int GPU_RESPONSE            = -3 ;
-    constexpr const int APU_INPUT_STREAM        = -4 ;
-    constexpr const int TIMER_WAIT_AND_SYNC     = -5 ;
-    constexpr const int TIMER_QUERY_SYNC_ET     = -6 ;
-    constexpr const int RANDOM_NUMBER_GENERATOR = -7 ;
-    constexpr const int READ_CONTROLLER         = -8 ;
-    constexpr const int HALT_SIGNAL             = -9 ;
-    constexpr const int BUS_ERROR               = -10;
-    // as runtime constant -> allows direct pointer comparison
-    extern const char * INVALID_DEVICE_ADDRESS;
-    //! @return returns INVALID_DEVICE_ADDRESS pointer if the address is invalid
-    const char * to_string(int);
+    // register data is stored internally as UInt32, bit masking signed
+    // integers, I'm not sure if that's problematic
+    // perhaps it would be safe to make them unsigned
 
-    constexpr const int DEVICE_ADDRESS_MASK     = int(0x80000000);
+    // these are all conviently negative n.-
+    constexpr const UInt32 RESERVED_NULL           = 0x80000000;
+    constexpr const UInt32 GPU_INPUT_STREAM        = 0x80000001;
+    constexpr const UInt32 GPU_RESPONSE            = 0x80000002;
+    constexpr const UInt32 APU_INPUT_STREAM        = 0x80000003;
+    constexpr const UInt32 TIMER_WAIT_AND_SYNC     = 0x80000004;
+    constexpr const UInt32 TIMER_QUERY_SYNC_ET     = 0x80000005;
+    constexpr const UInt32 RANDOM_NUMBER_GENERATOR = 0x80000006;
+    constexpr const UInt32 READ_CONTROLLER         = 0x80000007;
+    constexpr const UInt32 HALT_SIGNAL             = 0x80000008;
+    constexpr const UInt32 BUS_ERROR               = 0x80000009;
+    constexpr const UInt32 DEVICE_ADDRESS_MASK     = 0x80000000;
+
+    //! @return returns INVALID_DEVICE_ADDRESS pointer if the address is invalid
+    const char * to_string(UInt32);
+    bool is_device_address(UInt32);
 
 } // end of device_addresses namespace
 
@@ -488,6 +492,7 @@ private:
     friend struct ImmdConst;
     friend Immd encode_immd_int(int immd);
     friend Immd encode_immd_fp(double d);
+    friend Immd encode_immd_addr(UInt32 addr);
 
     constexpr explicit Immd(UInt32 v): v(v) {}
     UInt32 v;
@@ -602,6 +607,8 @@ RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2);
 
 Immd encode_immd_int(int immd);
 
+Immd encode_immd_addr(UInt32 addr);
+
 Immd encode_immd_fp(double d);
 
 FixedPointFlag encode_set_is_fixed_point_flag();
@@ -618,7 +625,9 @@ MTypeParamForm   decode_m_type_pf(Inst i);
 SetTypeParamForm decode_s_type_pf(Inst i);
 JTypeParamForm   decode_j_type_pf(Inst i);
 
-int decode_immd_as_int(Inst inst);
+Int32 decode_immd_as_int(Inst inst);
+
+UInt32 decode_immd_as_addr(Inst inst);
 
 UInt32 decode_immd_as_fp(Inst inst);
 

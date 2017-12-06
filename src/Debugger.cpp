@@ -38,6 +38,10 @@ LineNumIter find_closest_value
 
 namespace erfin {
 
+Debugger::Debugger(): m_at_break_point(false) {
+    std::fill(m_regs.begin(), m_regs.end(), 0);
+}
+
 bool Debugger::at_break_point() const noexcept
     { return m_at_break_point; }
 
@@ -65,18 +69,29 @@ bool Debugger::remove_break_point(std::size_t line_number) {
 }
 
 void Debugger::update_internals(const RegisterPack & cpu_regs) {
+    m_regs = cpu_regs;
     if (is_outside_program())
         return;
     constexpr auto pc_idx = std::size_t(Reg::PC);
     auto itr = m_break_points.find(m_inst_to_line_map[m_regs[pc_idx]]);
     m_at_break_point = (itr != m_break_points.end());
-    m_regs = cpu_regs;
 }
 
 const std::string & Debugger::interpret_register(Reg r, Interpretation intr)
     { return interpret_register(r, intr, nullptr); }
 
-std::string Debugger::print_current_frame_to_string() const {
+std::string Debugger::print_current_frame_to_string() const
+    { return print_pack_to_string(m_regs); }
+
+std::string Debugger::print_frame_to_string(const DebuggerFrame & frame) const
+    { return print_pack_to_string(frame.m_regs); }
+
+DebuggerFrame Debugger::current_frame() const
+    { return DebuggerFrame(m_regs); }
+
+/* private */ std::string Debugger::print_pack_to_string
+    (const RegisterPack & reg_pack) const
+{
     std::stringstream out;
     out.precision(5);
     out << std::dec << std::fixed;
@@ -84,7 +99,7 @@ std::string Debugger::print_current_frame_to_string() const {
     out << "Line Number: ";
     if (m_inst_to_line_map.empty()) {
         out << "<Cannot map program counter to line numbers!>\n";
-    } else if (m_regs[std::size_t(Reg::PC)] < m_inst_to_line_map.size()) {
+    } else if (reg_pack[std::size_t(Reg::PC)] < m_inst_to_line_map.size()) {
         out << m_inst_to_line_map[m_regs[std::size_t(Reg::PC)]] << "\n";
     } else {
         out << "<PC is outside the original program!>\n";
@@ -94,9 +109,9 @@ std::string Debugger::print_current_frame_to_string() const {
         out << reg_name;
         if (reg_name[1] == 0)
             out << " ";
-        out << " | " << std::setw(9) << int(m_regs[std::size_t(i)]);
+        out << " | " << std::setw(9) << int(reg_pack[std::size_t(i)]);
         if (i != int(Reg::PC) && i != int(Reg::SP)) {
-            auto val = fixed_point_to_double(m_regs[std::size_t(i)]);
+            auto val = fixed_point_to_double(reg_pack[std::size_t(i)]);
             out << " | " << std::setw(12) << val;
         }
         out << "\n";
@@ -128,6 +143,27 @@ std::string Debugger::print_current_frame_to_string() const {
     }
 
     return m_reg_int_cache;
+}
+
+// ----------------------------------------------------------------------------
+
+DebuggerFrame::DebuggerFrame() {
+    std::fill(m_regs.begin(), m_regs.end(), 0);
+}
+
+DebuggerFrame::DebuggerFrame(const RegisterPack & rhs):
+    m_regs(rhs)
+{}
+
+DebuggerFrame::DebuggerFrame(const DebuggerFrame & rhs):
+    m_regs(rhs.m_regs)
+{}
+
+DebuggerFrame & DebuggerFrame::operator = (const DebuggerFrame & rhs) {
+    if (this != &rhs) {
+        m_regs = rhs.m_regs;
+    }
+    return *this;
 }
 
 } // end of erfin namespace
