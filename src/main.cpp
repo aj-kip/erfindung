@@ -20,33 +20,19 @@
 *****************************************************************************/
 
 #include <iostream>
-#include <cstdint>
-#include <array>
-#include <map>
-#include <cmath>
 #include <cassert>
-#include <iomanip>
-#include <sstream>
-#include <queue>
-#include <algorithm>
-#include <fstream>
-#include <thread>
 
 #ifndef MACRO_BUILD_STL_ONLY
 #   include <SFML/Graphics.hpp>
 #endif
 
 #include "ErfiDefs.hpp"
-#include "FixedPointUtil.hpp"
 #include "Debugger.hpp"
-#include "StringUtil.hpp"
 #include "Assembler.hpp"
 #include "ErfiConsole.hpp"
 
 #include "tests.hpp"
 #include "parse_program_options.hpp"
-
-#include <cstring>
 
 #ifdef MACRO_PLATFORM_LINUX
 #   include <signal.h>
@@ -136,7 +122,7 @@ int main(int argc, char ** argv) {
             assembler.print_warnings(cout);
             cout << "Program size: "
                  << assembler.program_data().size()*sizeof(erfin::Inst)
-                 << "/" << erfin::MEMORY_CAPACITY << " bytes." << endl;
+                 << " / " << erfin::MEMORY_CAPACITY << " bytes." << endl;
         }
         options.assembler = &assembler;
         options.mode(options, assembler.program_data());
