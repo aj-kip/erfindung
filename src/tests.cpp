@@ -26,6 +26,7 @@
 
 #include "StringUtil.hpp"
 #include "FixedPointUtil.hpp"
+#include "parse_program_options.hpp"
 
 #include <cstring>
 #include <cassert>
@@ -48,6 +49,7 @@ void run_tests(const erfin::ProgramOptions &, const erfin::ProgramData &) {
     Assembler::run_tests();
     ErfiCpu::run_tests();
     test_string_processing();
+    ProgramOptions::run_parse_tests();
 
     std::cout << "All Internal Tests passed sucessfully." << std::endl;
 }
