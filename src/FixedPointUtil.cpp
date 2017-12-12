@@ -22,46 +22,30 @@
 #include "FixedPointUtil.hpp"
 
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 
 #include <cassert>
 #include <cmath>
 
 namespace {
 
+using Error = std::runtime_error;
+
 const constexpr erfin::UInt32 SIGN_BIT_MASK = 0x80000000;
+
+template <typename T>
+typename std::enable_if<std::is_signed<T>::value, T>::type
+    mag(T t) { return t < T(0) ? -t : t; }
+
+void run_numeric_encoding_tests();
 
 } // end of <anonymous> namespace
 
 namespace erfin {
 
-UInt32 reverse_bits(UInt32 num) {
-
-    // this implementation uses a 256 byte table, which may not work well
-    // with caching if I'm not calling this often
-
-    // we'll have to measure it later vs. a linear implementation
-    static const uint8_t BIT_REVERSE_TABLE[256] = {
-#       if defined(R2) || defined(R4) || defined(R6)
-#           error "Need R2, R4, R6 for macro values"
-#       endif
-#       define R2(n)    n,     n + 2*64,     n + 1*64,     n + 3*64
-#       define R4(n) R2(n), R2(n + 2*16), R2(n + 1*16), R2(n + 3*16)
-#       define R6(n) R4(n), R4(n + 2*4 ), R4(n + 1*4 ), R4(n + 3*4 )
-        R6(0), R6(2), R6(1), R6(3)
-#       undef R6
-#       undef R4
-#       undef R2
-    };
-
-    UInt32 c; // c will get num reversed
-
-    const uint8_t * p = reinterpret_cast<uint8_t *>(&num);
-    uint8_t * q = reinterpret_cast<uint8_t *>(&c);
-    q[3] = BIT_REVERSE_TABLE[p[0]];
-    q[2] = BIT_REVERSE_TABLE[p[1]];
-    q[1] = BIT_REVERSE_TABLE[p[2]];
-    q[0] = BIT_REVERSE_TABLE[p[3]];
-    return c;
+void run_fixed_point_tests() {
+    run_numeric_encoding_tests();
 }
 
 UInt32 fp_multiply(UInt32 a, UInt32 b) {
@@ -71,7 +55,7 @@ UInt32 fp_multiply(UInt32 a, UInt32 b) {
     UInt64 a_bg = UInt64(~SIGN_BIT_MASK & a);
     UInt64 b_bg = UInt64(~SIGN_BIT_MASK & b);
     UInt64 large = (a_bg*b_bg + 0x8000) >> 16; // mul, bias, shift
-    return sign | (large & ~SIGN_BIT_MASK);
+    return sign | UInt32(large & UInt64(~SIGN_BIT_MASK));
 }
 
 UInt32 fp_inverse(UInt32 a) {
@@ -120,7 +104,7 @@ UInt32 fp_compare(UInt32 a, UInt32 b) {
         if (is_neg(b))
             return COMP_GREATER_THAN_MASK | COMP_NOT_EQUAL_MASK; // a > b
     }
-    std::cerr << "Wut?" << std::endl;
+    std::cerr << "fp_compare: \"Impossible\" branch taken." << std::endl;
     std::terminate();
 }
 
@@ -142,3 +126,109 @@ double fixed_point_to_double(UInt32 fp) {
 }
 
 } // end of erfin namespace
+
+namespace {
+
+void test_fp_multiply(double a, double b);
+
+void test_fp_divide(double a, double b);
+
+void test_fixed_point(double value);
+
+
+void run_numeric_encoding_tests() {
+    test_fp_multiply(-1.0, 1.0);
+    test_fixed_point(  2.0);
+    test_fixed_point( -1.0);
+    test_fixed_point( 10.0);
+    test_fixed_point(  0.1);
+    test_fixed_point(-10.0);
+    test_fixed_point( -0.1);
+
+    test_fixed_point( 32767.0);
+    test_fixed_point(-32767.0);
+
+    // minumum value
+    test_fixed_point( 0.00001525878);
+    test_fixed_point(-0.00001525878);
+    // maximum value
+    /* (1/2)+(1/4)+(1/8)+(1/16)+(1/32)+(1/64)+(1/128)+(1/256)
+       +(1/512)+(1/1024)+(1/2048)+(1/4096)
+       +(1/8192)+(1/16384)+(1/32768)+(1/65536) */
+    test_fixed_point( 32767.9999923706);
+    test_fixed_point(-32767.9999923706);
+
+    test_fp_multiply(2.0, 2.0);
+    test_fp_multiply(-1.0, 1.0);
+    test_fp_multiply(10.0, 10.0);
+    test_fp_multiply(100.0, 100.0);
+    test_fp_multiply(0.5, 0.5);
+    test_fp_multiply(1.1, 1.1);
+    test_fp_multiply(200.0, 0.015625);
+
+    test_fp_divide( 2.0, 1.0);
+    test_fp_divide( 2.0, 4.0);
+    test_fp_divide(10.0, 3.0);
+    test_fp_divide( 2.0, 0.5);
+    test_fp_divide( 0.5, 2.0);
+    test_fp_divide( 1.1, 1.1);
+}
+
+// ----------------------------------------------------------------------------
+
+double mul(double a, double b) { return a*b; }
+double div(double a, double b) { return a/b; }
+
+using UInt32 = erfin::UInt32;
+
+template <UInt32(*FixedPtFunc)(UInt32, UInt32), double(*DoubleFunc)(double, double)>
+void test_fp_operation(double a, double b, char op_char);
+
+void test_fp_multiply(double a, double b) {
+    test_fp_operation<erfin::fp_multiply, mul>(a, b, 'x');
+}
+
+void test_fp_divide(double a, double b) {
+    test_fp_operation<erfin::fp_divide, div>(a, b, '/');
+}
+
+void test_fixed_point(double value) {
+    using namespace erfin;
+    //OstreamFormatSaver cfs(std::cout); (void)cfs;
+    std::stringstream ssout;
+    UInt32 fp = to_fixed_point(value);
+    double val_out = fixed_point_to_double(fp);
+    double diff = val_out - value;
+    // use an error about 1/(2^16), but "fatten" it up for error
+    if (mag(diff) < 0.00002) {
+        return;
+    }
+    // not equal!
+    ssout <<
+        "Fixed point test failed!\n"
+        "Starting         : " << value << "\n"
+        "Fixed Point value: " << std::hex << std::uppercase << fp << "\n"
+        "End value        : " << std::dec << std::nouppercase << val_out <<
+         std::endl;
+    throw Error(ssout.str().c_str());
+}
+
+// ----------------------------------------------------------------------------
+
+template <UInt32(*FixedPtFunc)(UInt32, UInt32), double(*DoubleFunc)(double, double)>
+void test_fp_operation(double a, double b, char) {
+    using namespace erfin;
+    UInt32 fp_a = to_fixed_point(a);
+    UInt32 fp_b = to_fixed_point(b);
+    UInt32 res = FixedPtFunc(fp_a, fp_b);
+    double d = fixed_point_to_double(res);
+
+    const double MAX_ERROR = 0.00002;
+    if (mag(d - DoubleFunc(a, b)) > MAX_ERROR) {
+        throw std::runtime_error(
+            "Stopping test (failed), " + std::to_string(d) + " != " +
+            std::to_string(DoubleFunc(a, b)));
+    }
+}
+
+} // end of <anonymous> namespace

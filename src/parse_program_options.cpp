@@ -55,6 +55,17 @@ struct TempOptions final : erfin::ProgramOptions {
     bool should_test;
 };
 
+class InitListArgs {
+public:
+    explicit InitListArgs(const std::initializer_list<const char * const> &);
+    char ** args();
+    int argc() const;
+    static OptionsPair to_opts(const std::initializer_list<const char * const> &);
+private:
+    std::vector<char *> m_pointers;
+    std::vector<std::string> m_string_args;
+};
+
 constexpr const char * const ONLY_ONE_INPUT_MSG =
     "Only one input option permitted.";
 
@@ -90,7 +101,7 @@ static const struct {
     char identity;
     const char * longform;
     ProcessOptionFunc process;
-} options_table_c[] = {
+} options_table_c [] = {
     { 'b', "break-points" , add_break_points    },
     { 'c', "command-line" , select_cli          },
     { 'h', "help"         , select_help         },
@@ -125,6 +136,14 @@ void ProgramOptions::swap(ProgramOptions & lhs) {
     std::swap(watched_history_length, lhs.watched_history_length);
     std::swap(input_stream_ptr      , lhs.input_stream_ptr      );
     std::swap(break_points          , lhs.break_points          );
+}
+
+/* static */ void ProgramOptions::run_parse_tests() {
+    {
+    auto read_opts = InitListArgs::to_opts({"./erfindung", "-wcr"});
+    assert(read_opts.input_stream_ptr == &std::cin);
+    assert(read_opts.mode == watched_cli_run);
+    }
 }
 
 OptionsPair::OptionsPair():
@@ -218,6 +237,26 @@ void TempOptions::swap(OptionsPair & lhs) {
         }
     }
 }
+
+InitListArgs::InitListArgs
+    (const std::initializer_list<const char * const> & arg_list)
+{
+    for (const auto & arg : arg_list)
+        m_string_args.push_back(arg);
+    for (auto & str : m_string_args)
+        m_pointers.push_back(&str.front());
+}
+
+/* static */ OptionsPair InitListArgs::to_opts
+    (const std::initializer_list<const char * const> & list)
+{
+    auto args = InitListArgs(list);
+    return erfin::parse_program_options(args.argc(), args.args());
+}
+
+char ** InitListArgs::args() { return m_pointers.data(); }
+
+int InitListArgs::argc() const { return int(m_pointers.size()); }
 
 bool str_eq(const char * a, const char * b) {
     while (*a == *b && *a && *b) {

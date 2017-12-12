@@ -59,6 +59,9 @@ struct ProgramOptions {
 
     void swap(ProgramOptions &);
 
+    // run tests on parsing program options
+    static void run_parse_tests();
+
     int window_scale;
     int watched_history_length;
     std::vector<std::size_t> break_points;

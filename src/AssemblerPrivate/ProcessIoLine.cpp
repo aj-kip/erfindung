@@ -171,6 +171,9 @@ void emit_ait_prelude(TextProcessState & state, Reg reg, Channel channel, ApuIns
 
 ApuInstructionType iterator_to_apu_inst_type(TextProcessState & state, StringCIter itr);
 
+Channel get_channel_by_progressing_iterator
+    (const TextProcessState &, StringCIter * beg, StringCIter eol);
+
 StringCIter make_io_read
     (TextProcessState & state, StringCIter beg, StringCIter end)
 {
@@ -209,25 +212,7 @@ StringCIter make_io_apu_inst
 {
     using namespace erfin;
     auto eol = get_eol(beg, end);
-    Channel channel;
-    if (*beg == "triangle") {
-        channel = Channel::TRIANGLE;
-    } else if (*beg == "pulse") {
-        ++beg;
-        if (*beg == "one") {
-            channel = Channel::PULSE_ONE;
-        } else if (*beg == "two") {
-            channel = Channel::PULSE_TWO;
-        } else {
-            throw state.make_error(": \"" + *beg + "\" is not a valid pulse "
-                                   "channel."                                );
-        }
-    } else if (*beg == "noise") {
-        channel = Channel::NOISE;
-    } else {
-        throw state.make_error(": \"" + *beg + "\" is not a valid channel.");
-    }
-    ++beg;
+    Channel channel = get_channel_by_progressing_iterator(state, &beg, eol);
     ApuInstructionType ait = iterator_to_apu_inst_type(state, beg);
     ++beg;
     // next we expect a register
@@ -438,6 +423,35 @@ ApuInstructionType iterator_to_apu_inst_type
         throw state.make_error(": channel 'command' \"" + *itr +
                                "\" is not recognized."          );
     }
+}
+
+Channel get_channel_by_progressing_iterator
+    (const TextProcessState & state, StringCIter * beg, StringCIter eol)
+{
+    Channel channel;
+    if (**beg == "triangle") {
+        channel = Channel::TRIANGLE;
+    } else if (**beg == "pulse") {
+        ++(*beg);
+        if (*beg == eol) {
+            throw state.make_error(": APU io instruction ended too early "
+                                   "(expected a \"pulse one\" or \"pulse two\".");
+        }
+        if (**beg == "one") {
+            channel = Channel::PULSE_ONE;
+        } else if (**beg == "two") {
+            channel = Channel::PULSE_TWO;
+        } else {
+            throw state.make_error(": \"" + **beg + "\" is not a valid pulse "
+                                   "channel."                                );
+        }
+    } else if (**beg == "noise") {
+        channel = Channel::NOISE;
+    } else {
+        throw state.make_error(": \"" + **beg + "\" is not a valid channel.");
+    }
+    ++(*beg);
+    return channel;
 }
 
 } // end of <anonymous> namespace

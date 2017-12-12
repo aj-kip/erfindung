@@ -28,11 +28,7 @@
 
 namespace erfin {
 
-template <typename T>
-typename std::enable_if<std::is_signed<T>::value, T>::type
-    mag(T t) { return t < T(0) ? -t : t; }
-
-UInt32 reverse_bits(UInt32 num);
+void run_fixed_point_tests();
 
 UInt32 fp_multiply(UInt32 a, UInt32 b);
 

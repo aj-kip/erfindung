@@ -1,0 +1,31 @@
+Sections
+Parsing command line arguments
+Assemlbing Erfindung code
+Setup Debugger/Logger if applicable
+Run Console Loop
+- update APU
+- update CPU
+- update GPU
+- update SFML Front-end (if necessary)
+
+Tests are defined for the following files:
+- AssemblerPrivate/GetLineProcessingFunction.cpp
+- AssemblerPrivate/ProcessIoLine.cpp
+- AssemblerPrivate/TextProcessState.cpp
+- Assembler.cpp
+- - NO tests present for this object
+- ErfiCpu.cpp
+- FixedPointUtil.cpp
+- tests.cpp (nothing but tests!)
+Tests are NOT defined for the following files:
+- AssemblerPrivate/LineParsingHelpers.cpp
+- Debugger.cpp
+- ErfiApu.cpp
+- ErfiConsole.cpp
+- ErfiDefs.cpp
+- ErfiGpu.cpp
+- main.cpp
+- parse_program_options.cpp
+
+Targets for further testing:
+parse_program_options (high priority)

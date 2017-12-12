@@ -25,13 +25,14 @@
 #include "ErfiCpu.hpp"
 
 #include "StringUtil.hpp"
+#include "FixedPointUtil.hpp"
+#include "parse_program_options.hpp"
 
 #include <cstring>
 #include <cassert>
 
 namespace {
 
-void run_numeric_encoding_tests();
 void test_string_processing();
 void test_string_to_number();
 
@@ -44,10 +45,11 @@ void run_tests(const erfin::ProgramOptions &, const erfin::ProgramData &) {
 
     test_string_to_number();
     run_encode_decode_tests();
-    run_numeric_encoding_tests();
+    run_fixed_point_tests();
     Assembler::run_tests();
     ErfiCpu::run_tests();
     test_string_processing();
+    ProgramOptions::run_parse_tests();
 
     std::cout << "All Internal Tests passed sucessfully." << std::endl;
 }
@@ -56,11 +58,6 @@ namespace {
 
 // ----------------------------------------------------------------------------
 
-void test_fp_multiply(double a, double b);
-
-void test_fp_divide(double a, double b);
-
-void test_fixed_point(double value);
 
 void test_string_processing() {
     const char * const input_text =
@@ -80,48 +77,7 @@ void test_string_processing() {
     asmr.assemble_from_string(input_text);
 }
 
-void run_numeric_encoding_tests() {
-    test_fp_multiply(-1.0, 1.0);
-    test_fixed_point(  2.0);
-    test_fixed_point( -1.0);
-    test_fixed_point( 10.0);
-    test_fixed_point(  0.1);
-    test_fixed_point(-10.0);
-    test_fixed_point( -0.1);
 
-    test_fixed_point( 32767.0);
-    test_fixed_point(-32767.0);
-
-    // minumum value
-    test_fixed_point( 0.00001525878);
-    test_fixed_point(-0.00001525878);
-    // maximum value
-    /* (1/2)+(1/4)+(1/8)+(1/16)+(1/32)+(1/64)+(1/128)+(1/256)
-       +(1/512)+(1/1024)+(1/2048)+(1/4096)
-       +(1/8192)+(1/16384)+(1/32768)+(1/65536) */
-    test_fixed_point( 32767.9999923706);
-    test_fixed_point(-32767.9999923706);
-#   if 0
-    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.5))) << std::endl;
-    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.25))) << std::endl;
-    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.3333333))) << std::endl;
-    std::cout << erfin::fixed_point_to_double(erfin::fp_inverse(erfin::to_fixed_point(0.1))) << std::endl;
-#   endif
-    test_fp_multiply(2.0, 2.0);
-    test_fp_multiply(-1.0, 1.0);
-    test_fp_multiply(10.0, 10.0);
-    test_fp_multiply(100.0, 100.0);
-    test_fp_multiply(0.5, 0.5);
-    test_fp_multiply(1.1, 1.1);
-    test_fp_multiply(200.0, 0.015625);
-
-    test_fp_divide( 2.0, 1.0);
-    test_fp_divide( 2.0, 4.0);
-    test_fp_divide(10.0, 3.0);
-    test_fp_divide( 2.0, 0.5);
-    test_fp_divide( 0.5, 2.0);
-    test_fp_divide( 1.1, 1.1);
-}
 
 std::runtime_error make_failed_string_to_number() {
     return std::runtime_error("test_string_to_number: tests fail.");
@@ -224,76 +180,6 @@ void test_string_to_number() {
         throw make_failed_string_to_number();
     if (max != res)
         throw make_failed_string_to_number();
-    }
-}
-
-// ----------------------------------------------------------------------------
-
-double mul(double a, double b) { return a*b; }
-double div(double a, double b) { return a/b; }
-
-using UInt32 = erfin::UInt32;
-
-template <UInt32(*FixedPtFunc)(UInt32, UInt32), double(*DoubleFunc)(double, double)>
-void test_fp_operation(double a, double b, char op_char);
-
-void test_fp_multiply(double a, double b) {
-    test_fp_operation<erfin::fp_multiply, mul>(a, b, 'x');
-}
-
-void test_fp_divide(double a, double b) {
-    test_fp_operation<erfin::fp_divide, div>(a, b, '/');
-}
-
-void test_fixed_point(double value) {
-    using namespace erfin;
-    OstreamFormatSaver cfs(std::cout); (void)cfs;
-    UInt32 fp = to_fixed_point(value);
-    double val_out = fixed_point_to_double(fp);
-    double diff = val_out - value;
-    // use an error about 1/(2^16), but "fatten" it up for error
-    if (mag(diff) < 0.00002) {
-#       if 0
-        std::cout <<
-            "For: " << value << "\n"
-            "Fixed Point value: " << std::hex << std::uppercase << fp << "\n"
-            "End value        : " << std::dec << std::nouppercase << val_out << "\n" <<
-            std::endl;
-#       endif
-        return;
-    }
-    // not equal!
-    std::cout <<
-        "Fixed point test failed!\n"
-        "Starting         : " << value << "\n"
-        "Fixed Point value: " << std::hex << std::uppercase << fp << "\n"
-        "End value        : " << std::dec << std::nouppercase << val_out <<
-         std::endl;
-}
-
-// ----------------------------------------------------------------------------
-
-template <UInt32(*FixedPtFunc)(UInt32, UInt32), double(*DoubleFunc)(double, double)>
-void test_fp_operation(double a, double b, char) {
-    using namespace erfin;
-    OstreamFormatSaver cfs(std::cout); (void)cfs;
-    UInt32 fp_a = to_fixed_point(a);
-    UInt32 fp_b = to_fixed_point(b);
-    UInt32 res = FixedPtFunc(fp_a, fp_b);
-    double d = fixed_point_to_double(res);
-
-    const double MAX_ERROR = 0.00002;
-#   if 0
-    std::cout << "For: " << a << op_char << b << " = " << DoubleFunc(a, b) << std::endl;
-    std::cout <<
-        "a   value: " << std::hex << std::uppercase << fp_a << "\n"
-        "b   value: " << std::hex << std::uppercase << fp_b << "\n"
-        "res value: " << std::hex << std::uppercase << res  << std::endl;
-#   endif
-    if (mag(d - DoubleFunc(a, b)) > MAX_ERROR) {
-        throw std::runtime_error(
-            "Stopping test (failed), " + std::to_string(d) + " != " +
-            std::to_string(DoubleFunc(a, b)));
     }
 }
 
