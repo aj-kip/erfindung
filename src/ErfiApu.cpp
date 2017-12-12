@@ -46,7 +46,7 @@ using ChannelSamples  = std::vector<std::vector<std::int16_t>>;
 using Rng = std::default_random_engine;
 
 template <typename T>
-T mag(T t) { return t < T(0) ? -t : t; }
+T mag(T t) { return t < T(0) ? T(-t) : t; }
 
 enum class DoNTimes { CONTINUE, BREAK };
 
@@ -169,11 +169,11 @@ void Apu::io_write(UInt32 data) { m_insts.push(data); }
         // -.---.---.--
         //   . .|
         //    . |
-        if (mag(t) < MAX / 2) return 2*t;
+        if (mag(t) < MAX / 2) return Int16(2*(t - 1));
         // I also like it when the intercepts for the following function
         // segments are doubled (we'll have to control for overflow then
-        if (t < 0) return 2*Int16(-int(t) - int(MAX));
-        if (t > 0) return 2*Int16(-int(t) + int(MAX));
+        if (t < 0) return Int16(2*(-t - MAX));
+        if (t > 0) return Int16(2*(-t + MAX));
         assert(false);
         return 0; // gcc seems to be pessimistic about flow control
     };
@@ -283,10 +283,10 @@ void generate_note_full
     int wave_position = -MAX_AMP; // <- we can apply phase shift here
     int last_sample = 0;
     for (int sample_position = 0; sample_position != samples_count; ++sample_position) {
-        samples.push_back(
+        samples.push_back(Int16(
             dci.duty_cycle_function()(Int16(wave_position))* // duty cycle function
             base_function(Int16(wave_position))       // compute sample amplitude
-        );
+        ));
         wave_position += pitch;
         if (wave_position > MAX_AMP) {
             // next period

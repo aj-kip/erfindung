@@ -44,7 +44,7 @@ HEADERS += \
 
 TARGET = erfindung
 
-QMAKE_CXXFLAGS += -pthread
+QMAKE_CXXFLAGS += -pthread -Wconversion
 QMAKE_LFLAGS   += -pthread
 
 CONFIG (debug, debug|release) {

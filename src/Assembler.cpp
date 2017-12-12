@@ -191,8 +191,9 @@ std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
                 tokens.push_back(std::string { *itr });
                 break;
             case '\n': case '\r':
-                assert(!"Should not see newline chars at this stage.");
-                break;
+                std::cerr << "tokenize: FATAL: Program logic error: Should not "
+                             "see newline chars at this stage." << std::endl;
+                std::terminate();
             case ' ': case '\t': break;
             default:
                 if (old_pos == str.end())
@@ -211,9 +212,10 @@ std::vector<std::string> tokenize(const std::vector<std::string> & lines) {
 
 void convert_to_lower_case(std::string & str) {
     static_assert(int('a') > int('A'), "");
+    static constexpr char TO_LOWER_DIFF = char('a' - 'A');
     for (char & c : str) {
-        if (c >= 'A' && c <= 'Z')
-            c += ('a' - 'A');
+        if (c >= 'A' and c <= 'Z')
+            c = char(c + TO_LOWER_DIFF);
     }
 }
 

@@ -75,7 +75,6 @@ public:
     DebuggerFrame current_frame() const;
 
 private:
-
     std::string print_pack_to_string(const RegisterPack &) const;
 
     const std::string & interpret_register

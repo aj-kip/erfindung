@@ -54,7 +54,56 @@
 
 namespace {
 
-using Error = std::runtime_error;
+using Error          = std::runtime_error   ;
+using ProgramOptions = erfin::ProgramOptions;
+using ProgramData    = erfin::ProgramData   ;
+
+constexpr const char * const HELP_TEXT =
+    "Erfindung command line options:\n\n"
+#   ifdef MACRO_BUILD_STL_ONLY
+    "NOTE: This is a STL Only / Test build intended for unit testing.\n"
+    "this also means that windowed mode will not be available.\n"
+#   endif
+    "If the entire text does not show, you can always stream the\n"
+    "output to a file or use \"less\" on *nix machines.\n\n"
+    "-i / --input\n"
+    "Specify input file, not compatible with --stream-input option\n"
+    "-h / --help\n"
+    "Show this help text.\n"
+#   ifndef MACRO_BUILD_STL_ONLY
+    "-c / --command-line\n"
+    "Causes the program to not open a window, the program will "
+    "finsih once and only when the halt signal is sent (you "
+    "can still cancel the program with ctrl-c as usual)\n"
+#   endif
+    "-t / --run-tests\n"
+    "Run developer tests (for debugging purposes only). If you\n"
+    "run this and the program doesn't crash, that means it\n"
+    "works!\n"
+    "-r / --stream-input\n"
+    "The program will accept stdin as a source \"file\" this\n"
+    "option is not compatible with -i.\n"
+#   ifndef MACRO_BUILD_STL_ONLY
+    "-s / --window-scale\n"
+    "Scales the window by an integer factor.\n"
+    "Each program \"command\" accepts parameters between each \n"
+    "of these \"commands\" e.g.\n"
+#   endif
+    "-b --break-points\n"
+    "Prints current frame at the given line numbers to the terminal. "
+    "Lists registers and their values, and continues running the "
+    "program. Invalid line numbers are ignored.\n"
+    "-w -watch\n"
+    "Implicitly enabled with breakpoints. Watch mode accepts one numeric\n"
+    "argument n, for the number of frames to keep in run history. Run \n"
+    "history is printed out if Erfindung runs into a problem with program\n"
+    "execution, or is halted."
+    "Example:\n"
+    "\n\t ./erfindung -i sample.efas -w 3 -c\n"
+    "Erfindung is GPLv3 software, refer to COPYING on the terms and \n"
+    "conditions for copying.\n"
+    "There is a software manual that should be present with your\n"
+    "distrobution that you can refer to on how to use the software.";
 
 class ExecutionHistoryLogger {
 public:
@@ -112,13 +161,47 @@ int main(int argc, char ** argv) {
     return ~0;
 }
 
+// ----------------------------------------------------------------------------
+
 namespace {
 
-using ProgramOptions = erfin::ProgramOptions;
+enum { WINDOWED, TERMINAL };
+
+template <decltype (WINDOWED) UI_TYPE>
+void do_watched_mode(const ProgramOptions & opts, const ProgramData & program);
+
+template <decltype (WINDOWED) UI_TYPE>
+void do_unwatched_mode(const ProgramOptions & opts, const ProgramData & program);
+
+} // end of <anonymous> namespace
+
+#ifndef MACRO_BUILD_STL_ONLY
+
+void normal_windowed_run
+    (const ProgramOptions & opts, const ProgramData & program)
+    { do_unwatched_mode<WINDOWED>(opts, program); }
+
+void watched_windowed_run
+    (const ProgramOptions & opts, const ProgramData & program)
+    { do_watched_mode<WINDOWED>(opts, program); }
+
+#endif // ifndef MACRO_BUILD_STL_ONLY
+
+void cli_run
+    (const ProgramOptions & options, const ProgramData & program)
+    { do_unwatched_mode<TERMINAL>(options, program); }
+
+void watched_cli_run
+    (const erfin::ProgramOptions & options, const ProgramData & program)
+    { do_watched_mode<TERMINAL>(options, program); }
+
+void print_help(const ProgramOptions &, const ProgramData &)
+    { std::cout << HELP_TEXT << std::endl; }
+
+namespace {
 
 ExecutionHistoryLogger::ExecutionHistoryLogger(int frame_limit) noexcept:
-    m_frame_limit(frame_limit)
-{}
+    m_frame_limit(frame_limit) {}
 
 void ExecutionHistoryLogger::push_frame(const erfin::Debugger & debugger) {
     if (m_frame_limit == 0) return;
@@ -137,38 +220,24 @@ std::string ExecutionHistoryLogger::to_string
     return rv;
 }
 
-// ----------------------------------------------------------------------------
-
-#ifndef MACRO_BUILD_STL_ONLY
-
-void setup_window_view(sf::RenderWindow & window, const ProgramOptions &);
-
-void process_events(erfin::Console & console, sf::Window & window);
-
-template <typename Func>
-void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
-                      Func && do_between_cycles);
-
-#endif
-
 } // end of <anonymous> namespace
 
-#ifndef MACRO_BUILD_STL_ONLY
+// ----------------------------------------------------------------------------
 
-void normal_windowed_run
-    (const ProgramOptions & opts, const erfin::ProgramData & program)
-{
-    using namespace erfin;
-    Console console;
-    console.load_program(program);
+namespace {
 
-    sf::RenderWindow win;
-    setup_window_view(win, opts);
+template <typename Func>
+void in_windowed_mode
+    (const ProgramOptions & opts, erfin::Console & console,
+     Func && do_between_cycles);
 
-    run_console_loop(console, win, [](){});
-}
+template <typename Func>
+void in_terminal_mode
+    (const ProgramOptions &, erfin::Console & console,
+     Func && do_between_cycles);
 
-void watched_windowed_run
+template <decltype (WINDOWED) UI_TYPE>
+void do_watched_mode
     (const ProgramOptions & opts, const erfin::ProgramData & program)
 {
     using namespace erfin;
@@ -186,17 +255,19 @@ void watched_windowed_run
         }
     }
 
-    sf::RenderWindow win;
-    setup_window_view(win, opts);
-
     try {
-        run_console_loop(console, win, [&]() {
+        auto between_cycles = [&]() {
             console.update_with_current_state(debugger);
             exlogger.push_frame(debugger);
             if (debugger.at_break_point()) {
                 std::cout << debugger.print_current_frame_to_string() << std::endl;
             }
-        });
+        };
+        if (UI_TYPE == WINDOWED) {
+            in_windowed_mode(opts, console, std::move(between_cycles));
+        } else {
+            in_terminal_mode(opts, console, std::move(between_cycles));
+        }
     } catch (std::exception & exp) {
         throw Error(std::string(exp.what()) +
                     "\nAdditionally the prefail frames are as follows:\n" +
@@ -209,104 +280,139 @@ void watched_windowed_run
               << exlogger.to_string(debugger);
 }
 
-#endif // ifndef MACRO_BUILD_STL_ONLY
-
-namespace {
-
-template <typename Func>
-void cli_run_with_between_cycles
-    (const ProgramOptions &, const erfin::ProgramData & program, Func && f);
-
-} // end of <anonymous> namespace
-
-void cli_run(const ProgramOptions & options, const erfin::ProgramData & program)
-{
-    using erfin::Console;
-    cli_run_with_between_cycles(options, program, [](const Console &){});
-}
-
-void watched_cli_run
-    (const erfin::ProgramOptions & options, const erfin::ProgramData & program)
+template <decltype (WINDOWED) UI_TYPE>
+void do_unwatched_mode
+    (const ProgramOptions & opts, const erfin::ProgramData & program)
 {
     using namespace erfin;
-    Debugger debugger;
-    ExecutionHistoryLogger exlogger(options.watched_history_length);
-    options.assembler->setup_debugger(debugger);
-    try {
-        cli_run_with_between_cycles(options, program, [&](const Console & console) {
-            console.update_with_current_state(debugger);
-            exlogger.push_frame(debugger);
-            if (debugger.at_break_point()) {
-                std::cout << debugger.print_current_frame_to_string() << std::endl;
-            }
-        });
-    } catch (std::exception & exp) {
-        throw Error(std::string(exp.what()) +
-                    "\nAdditionally the prefail frames are as follows:\n" +
-                    exlogger.to_string(debugger)                           );
-    } catch (...) {
-        throw;
+    Console console;
+    console.load_program(program);
+    if (UI_TYPE == WINDOWED) {
+        in_windowed_mode(opts, console, [](){});
+    } else {
+        in_terminal_mode(opts, console, [](){});
     }
 }
 
-void print_help(const ProgramOptions &, const erfin::ProgramData &) {
-    std::cout <<
-    "Erfindung command line options:\n\n"
-#   ifdef MACRO_BUILD_STL_ONLY
-    "NOTE: This is a STL Only / Test build intended for unit testing.\n"
-    "this also means that windowed mode will not be available.\n"
-#   endif
-    "If the entire text does not show, you can always stream the\n"
-    "output to a file or use \"less\" on *nix machines.\n\n"
-    "-i / --input\n"
-    "Specify input file, not compatible with --stream-input option\n"
-    "-h / --help\n"
-    "Show this help text.\n"
-#   ifndef MACRO_BUILD_STL_ONLY
-    "-c / --command-line\n"
-    "Causes the program to not open a window, the program will "
-    "finsih once and only when the halt signal is sent (you "
-    "can still cancel the program with ctrl-c as usual)\n"
-#   endif
-    "-t / --run-tests\n"
-    "Run developer tests (for debugging purposes only). If you\n"
-    "run this and the program doesn't crash, that means it\n"
-    "works!\n"
-    "-r / --stream-input\n"
-    "The program will accept stdin as a source \"file\" this\n"
-    "option is not compatible with -i.\n"
-#   ifndef MACRO_BUILD_STL_ONLY
-    "-s / --window-scale\n"
-    "Scales the window by an integer factor.\n"
-    "Each program \"command\" accepts parameters between each \n"
-    "of these \"commands\" e.g.\n"
-#   endif
-    "-b --break-points\n"
-    "Prints current frame at the given line numbers to the terminal. "
-    "Lists registers and their values, and continues running the "
-    "program. Invalid line numbers are ignored.\n"
-    "-w -watch\n"
-    "Implicitly enabled with breakpoints. Watch mode accepts one numeric\n"
-    "argument n, for the number of frames to keep in run history. Run \n"
-    "history is printed out if Erfindung runs into a problem with program\n"
-    "execution, or is halted."
-    "Example:\n"
-    "\n\t ./erfindung -i sample.efas -w 3 -c\n"
-    "Erfindung is GPLv3 software, refer to COPYING on the terms and \n"
-    "conditions for copying.\n"
-    "There is a software manual that should be present with your\n"
-    "distrobution that you can refer to on how to use the software."
-    << std::endl;
-}
+} // end of <anonymous> namespace
+
+// ----------------------------------------------------------------------------
 
 namespace {
 
+#ifndef MACRO_BUILD_STL_ONLY
+
+void setup_window_view(sf::RenderWindow & window, const ProgramOptions &);
+
+void process_events(erfin::Console & console, sf::Window & window);
+
+void map_screen_to_texture
+    (const erfin::Console &console, std::vector<erfin::UInt32> & raw_pixels);
+
+#endif
+
 #ifdef MACRO_PLATFORM_LINUX
+
 template <typename Func>
 void global_console_pointer_access(Func && f);
+
 #endif
 
 void print_frame(const erfin::Console & console);
+
+template <typename Func>
+void in_windowed_mode
+    (const ProgramOptions & opts, erfin::Console & console,
+     Func && do_between_cycles)
+{
+#   ifndef MACRO_BUILD_STL_ONLY
+    using namespace erfin;
+    const auto SCREEN_WIDTH  = unsigned(ErfiGpu::SCREEN_WIDTH );
+    const auto SCREEN_HEIGHT = unsigned(ErfiGpu::SCREEN_HEIGHT);
+    sf::Clock clk;
+    int fps = 0;
+    int frame_count = 0;
+
+    sf::Texture screen_pixels;
+    screen_pixels.create(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    std::vector<UInt32> pixel_array(SCREEN_HEIGHT*SCREEN_WIDTH, 0);
+    assert(pixel_array.size() == console.current_screen().size());
+
+    sf::Sprite screen_sprite;
+    screen_sprite.setTexture(screen_pixels);
+    screen_sprite.setPosition(0.f, 0.f);
+
+    sf::RenderWindow window;
+    setup_window_view(window, opts);
+    while (window.isOpen()) {
+        if (double(clk.getElapsedTime().asSeconds()) >= 1.0) {
+            fps = frame_count;
+            frame_count = 0;
+            clk.restart();
+        }
+        ++frame_count;
+
+        process_events(console, window);
+
+        window.clear();
+
+        console.run_until_wait_with_post_frame(std::move(do_between_cycles));
+        if (console.trying_to_shutdown())
+            break;
+
+        map_screen_to_texture(console, pixel_array);
+        screen_pixels.update(reinterpret_cast<UInt8 *>(&pixel_array.front()),
+                             SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0);
+
+        window.draw(screen_sprite);
+
+        window.display();
+    }
+    std::cout << "Last reported fps " << fps << std::endl;
+#   else
+    (void)opts;
+    (void)console;
+    (void)do_between_cycles;
+#   endif
+}
+
+template <typename Func>
+void in_terminal_mode
+    (const ProgramOptions &, erfin::Console & console,
+     Func && do_between_cycles)
+{
+    using namespace erfin;
+    using MicroSeconds = std::chrono::duration<int, std::micro>;
+#   ifdef MACRO_PLATFORM_LINUX
+    global_console_pointer_access([&console](Console *& c_ptr) {
+        c_ptr = &console;
+    });
+    signal(SIGPROF, [/* must not capture */](int) {
+        global_console_pointer_access([](Console *& c_ptr) {
+            print_frame(*c_ptr);
+        });
+    });
+#   endif
+
+    while (!console.trying_to_shutdown()) {
+        console.run_until_wait_with_post_frame(std::move(do_between_cycles));
+        std::this_thread::sleep_for(MicroSeconds(16667));
+    }
+    print_frame(console);
+
+#   ifdef MACRO_PLATFORM_LINUX
+    global_console_pointer_access([&console](Console *& c_ptr) {
+        c_ptr = nullptr;
+    });
+#   endif
+}
+
+} // end of <anonymous> namespace
+
+// ----------------------------------------------------------------------------
+
+namespace {
 
 #ifndef MACRO_BUILD_STL_ONLY
 
@@ -346,110 +452,17 @@ void process_events(erfin::Console & console, sf::Window & window) {
     }
 }
 
-// in ifndef MACRO_BUILD_STL_ONLY
-
-template <typename Func>
-void run_console_loop(erfin::Console & console, sf::RenderWindow & window,
-                      Func && do_between_cycles)
+void map_screen_to_texture
+    (const erfin::Console & console, std::vector<erfin::UInt32> & raw_pixels)
 {
-    using namespace erfin;
-    const auto SCREEN_WIDTH  = unsigned(ErfiGpu::SCREEN_WIDTH );
-    const auto SCREEN_HEIGHT = unsigned(ErfiGpu::SCREEN_HEIGHT);
-    sf::Clock clk;
-    int fps = 0;
-    int frame_count = 0;
-
-    sf::Texture screen_pixels;
-    screen_pixels.create(SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    std::vector<UInt32> pixel_array(SCREEN_HEIGHT*SCREEN_WIDTH, 0);
-    assert(pixel_array.size() == console.current_screen().size());
-
-    auto clks_elapsed_time = [&clk]()
-        { return double(clk.getElapsedTime().asSeconds()); };
-
-    auto map_screen_to_texture =
-        [](Console & console, std::vector<UInt32> & raw_pixels)
-    {
-        auto scr_itr = console.current_screen().begin();
-        for (auto & pix : raw_pixels) {
-            assert(scr_itr != console.current_screen().end());
-            pix = *scr_itr++ ? ~0u : 0;
-        }
-    };
-
-    sf::Sprite screen_sprite;
-    screen_sprite.setTexture(screen_pixels);
-    screen_sprite.setPosition(0.f, 0.f);
-
-    while (window.isOpen()) {
-        if (clks_elapsed_time() >= 1.0) {
-            fps = frame_count;
-            frame_count = 0;
-            clk.restart();
-        }
-        ++frame_count;
-
-        process_events(console, window);
-
-        window.clear();
-
-        console.run_until_wait_with_post_frame(std::move(do_between_cycles));
-        if (console.trying_to_shutdown())
-            break;
-
-        map_screen_to_texture(console, pixel_array);
-        screen_pixels.update(reinterpret_cast<UInt8 *>(&pixel_array.front()),
-                             SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0);
-
-        window.draw(screen_sprite);
-
-        window.display();
+    auto scr_itr = console.current_screen().begin();
+    for (auto & pix : raw_pixels) {
+        assert(scr_itr != console.current_screen().end());
+        pix = *scr_itr++ ? ~0u : 0;
     }
-    std::cout << "Last reported fps " << fps << std::endl;
 }
 
 #endif // ifndef MACRO_BUILD_STL_ONLY
-
-template <typename Func>
-void cli_run_with_between_cycles
-    (const ProgramOptions &, const erfin::ProgramData & program, Func && f)
-{
-    using namespace erfin;
-    using MicroSeconds = std::chrono::duration<int, std::micro>;
-    Console console;
-
-#   ifdef MACRO_PLATFORM_LINUX
-    global_console_pointer_access([&console](Console *& c_ptr) {
-        c_ptr = &console;
-    });
-    signal(SIGPROF, [/* must not capture */](int) {
-        global_console_pointer_access([](Console *& c_ptr) {
-            print_frame(*c_ptr);
-        });
-    });
-#   endif
-
-    console.load_program(program);
-    while (!console.trying_to_shutdown()) {
-        console.run_until_wait_with_post_frame(
-            [&f, &console](){ f(std::cref(console)); });
-        std::this_thread::sleep_for(MicroSeconds(16667));
-    }
-    print_frame(console);
-
-#   ifdef MACRO_PLATFORM_LINUX
-    global_console_pointer_access([&console](Console *& c_ptr) {
-        c_ptr = nullptr;
-    });
-#   endif
-}
-
-} // end of <anonymous> namespace
-
-// ----------------------------------------------------------------------------
-
-namespace {
 
 #ifdef MACRO_PLATFORM_LINUX
 template <typename Func>

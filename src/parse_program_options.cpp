@@ -90,7 +90,7 @@ static const struct {
     char identity;
     const char * longform;
     ProcessOptionFunc process;
-} options_table_c[] = {
+} options_table_c [] = {
     { 'b', "break-points" , add_break_points    },
     { 'c', "command-line" , select_cli          },
     { 'h', "help"         , select_help         },

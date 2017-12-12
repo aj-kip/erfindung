@@ -867,10 +867,10 @@ StringCIter make_gpu_io_instruction
     assert(beg == eol);
     // what does push do to the SP?
     make_gpu_io_command_send(state, COMMAND_IDENTITY, args[0]);
-    static constexpr const int GPU_INPUT_STREAM = device_addresses::GPU_INPUT_STREAM;
+    static constexpr const auto GPU_INPUT_STREAM = device_addresses::GPU_INPUT_STREAM;
     for (const Reg & arg : args) {
-        state.add_instruction( encode(OpCode::SAVE,                arg,
-                                      encode_immd_int(GPU_INPUT_STREAM)) );
+        state.add_instruction(encode(OpCode::SAVE,                arg,
+                                     encode_immd_addr(GPU_INPUT_STREAM)) );
     }
     return eol;
 }
