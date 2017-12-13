@@ -6,3 +6,4 @@
 *.opendb
 *.pro.user*
 !.travis.yml
+msvc/erfindung.VC.db

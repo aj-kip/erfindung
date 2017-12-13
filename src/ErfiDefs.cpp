@@ -22,6 +22,7 @@
 #include "ErfiDefs.hpp"
 #include "FixedPointUtil.hpp"
 
+#include <string>
 #include <stdexcept>
 #include <limits>
 
@@ -77,7 +78,7 @@ const char * device_addresses::to_string(UInt32 address) {
 }
 
 bool device_addresses::is_device_address(UInt32 address)
-    { return address >= RESERVED_NULL and address <= BUS_ERROR; }
+    { return address >= RESERVED_NULL && address <= BUS_ERROR; }
 
 Inst encode_op_with_pf(OpCode op, ParamForm pf) {
     using O  = OpCode;
@@ -118,7 +119,7 @@ RegParamPack encode_reg_reg_reg(Reg r0, Reg r1, Reg r2)
 Immd encode_immd_addr(UInt32 addr) {
     bool last_bit_set = addr & 0x80000000;
     UInt32 first_bits = addr & 0x7FFFFFFF;
-    if (first_bits > std::numeric_limits<int16_t>::max()) {
+    if (first_bits > UInt32(std::numeric_limits<int16_t>::max())) {
         throw Error("Cannot store address \"" + std::to_string(addr) +
                     "\" in an immediate.");
     }
@@ -126,7 +127,7 @@ Immd encode_immd_addr(UInt32 addr) {
 }
 
 Immd encode_immd_int(int i) {
-    if (i > std::numeric_limits<int16_t>::max() or
+    if (i > std::numeric_limits<int16_t>::max() ||
         i < std::numeric_limits<int16_t>::min())
     {
         throw Error("Cannot store number \"" + std::to_string(i) +
@@ -221,7 +222,8 @@ const char * register_to_string(Reg r) {
 
 void run_encode_decode_tests() {
     using namespace device_addresses;
-    static constexpr auto dev_list = {
+    // constexpr initializer not available on MSVC
+    static const auto dev_list = {
         RESERVED_NULL, GPU_INPUT_STREAM, GPU_RESPONSE,
         APU_INPUT_STREAM, TIMER_WAIT_AND_SYNC, TIMER_QUERY_SYNC_ET,
         RANDOM_NUMBER_GENERATOR, READ_CONTROLLER, HALT_SIGNAL,

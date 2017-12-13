@@ -32,6 +32,7 @@ struct ProgramOptions;
 }
 
 // ----------- Program Driver Functions - implemented in main.cpp -------------
+
 #ifndef MACRO_BUILD_STL_ONLY
 void normal_windowed_run (const erfin::ProgramOptions &, const erfin::ProgramData &);
 void watched_windowed_run(const erfin::ProgramOptions &, const erfin::ProgramData &);
@@ -46,6 +47,22 @@ void run_tests           (const erfin::ProgramOptions &, const erfin::ProgramDat
 namespace erfin {
 
 class Assembler;
+
+/** Utility for Micrsoft's stripped down/minimalist compiler.
+ *  In Windows, command line arguments are not by default supported. Space
+ *  seperating arguments is not a feature present, therefore the need for this
+ *  utility.
+ */
+class InitListArgs {
+public:
+    explicit InitListArgs(const std::initializer_list<const char * const> &);
+    explicit InitListArgs(const char * const space_seperated_list);
+    char ** args();
+    int argc() const;
+private:
+    std::vector<char *> m_pointers;
+    std::vector<std::string> m_string_args;
+};
 
 struct ProgramOptions {
     static constexpr const std::size_t DEFAULT_FRAME_LIMIT = 3;
