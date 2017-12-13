@@ -214,7 +214,7 @@ void convert_to_lower_case(std::string & str) {
     static_assert(int('a') > int('A'), "");
     static constexpr char TO_LOWER_DIFF = char('a' - 'A');
     for (char & c : str) {
-        if (c >= 'A' and c <= 'Z')
+        if (c >= 'A' && c <= 'Z')
             c = char(c + TO_LOWER_DIFF);
     }
 }

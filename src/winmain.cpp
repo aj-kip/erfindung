@@ -26,24 +26,68 @@
 #include <cassert>
 #include <cstdio>
 
-int main();
+#include "parse_program_options.hpp"
+
+int main(int argc, char ** argv);
+
+namespace {
+
+void display_exception(const std::string &);
+
+class CommandLineHandlerRaii {
+public:
+    CommandLineHandlerRaii();
+    ~CommandLineHandlerRaii();
+private:
+    FILE * sin, * sout, * serr;
+};
+
+}
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
-#   ifdef MACRO_DEBUG
-    AllocConsole();
-    FILE * so = nullptr;
-    FILE * se = nullptr;
-    freopen_s(&so, "CONOUT$", "w", stdout);
-    freopen_s(&se, "CONOUT$", "w", stderr);
-    assert(so);
-    assert(se);
-#   endif
-	int rv = main();
-#   ifdef MACRO_DEBUG
-    fclose(so);
-    fclose(se);
-
-    std::cin.get();
-#   endif
-	return rv;
+    CommandLineHandlerRaii clhr; (void)clhr;
+    try {
+        auto arguments = erfin::InitListArgs(GetCommandLine());
+        return main(arguments.argc(), arguments.args());
+    } catch (std::exception & exp) {
+        display_exception(exp.what());
+    } catch (...) {
+        display_exception("Unexpected exception occured (bad type).");
+    }
+    return ~0;
 }
+
+namespace {
+
+CommandLineHandlerRaii::CommandLineHandlerRaii():
+    sin(nullptr), sout(nullptr), serr(nullptr)
+{
+    if (GetConsoleWindow()) return;
+    AllocConsole();
+    freopen_s(&sin , "CONOUT$", "r", stdin );
+    freopen_s(&sout, "CONOUT$", "w", stdout);
+    freopen_s(&serr, "CONOUT$", "w", stderr);
+    assert(sout);
+    assert(serr);
+    assert(sin );
+}
+CommandLineHandlerRaii::~CommandLineHandlerRaii() {
+    if (!sin) {
+        assert(!sout && !serr);
+        return;
+    }
+    fclose(sin );
+    fclose(sout);
+    fclose(serr);
+}
+
+void display_exception(const std::string & error_text) {
+    static constexpr const char * const PREFACE =
+        "An exception occured in an especially unusual place of the "
+        "program. This is indication that this problem needs to be fixed on "
+        "a source-code level.\nDetails:\n\n";
+    (void)MessageBox(nullptr, (PREFACE + error_text).c_str(),
+                     "Fatal Runtime Error", MB_OK           );
+}
+
+} // end of <anonymous> namespace

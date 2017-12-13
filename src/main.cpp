@@ -44,6 +44,7 @@ using Error          = std::runtime_error   ;
 using ProgramOptions = erfin::ProgramOptions;
 using ProgramData    = erfin::ProgramData   ;
 
+constexpr const char * const WINDOW_TITLE = "Erfindung - Beta";
 constexpr const char * const HELP_TEXT =
     "Erfindung command line options:\n\n"
 #   ifdef MACRO_BUILD_STL_ONLY
@@ -90,6 +91,43 @@ constexpr const char * const HELP_TEXT =
     "conditions for copying.\n"
     "There is a software manual that should be present with your\n"
     "distrobution that you can refer to on how to use the software.";
+
+constexpr const char * const MONOCHROMATIC_ICON_DATA =
+    "________________________________"
+    "__XX_XXXXXX_________X_XXXXXX____"
+    "__X_________________X______XX___"
+    "__X_________________X_X_____X___"
+    "__X_________________X_X_____X___"
+    "__X_________________X_X_____X___"
+    "__X_________________X_X_____X___"
+    "__X_________________X_X_____X___"
+    "__XX_XXXXXX_________X___________"
+    "__XX________________X__XX_______"
+    "__XX________________X____XX_____"
+    "__XX________________X______X____"
+    "__XX________________X_______X___"
+    "__XX________________X_______X___"
+    "__XXXXXXXXX_________X_______X___"
+    "________________________________"
+    "________________________________"
+    "__XX_XXXXXX_________XXXXXXXXXX__"
+    "__XX____________________________"
+    "__XX____________________XX______"
+    "__XX____________________XX______"
+    "__XX____________________XX______"
+    "__XX____________________XX______"
+    "__XX____________________XX______"
+    "__XX_XXXX_______________XX______"
+    "__X_____________________XX______"
+    "__X_____________________XX______"
+    "__X_____________________XX______"
+    "__X_____________________XX______"
+    "__X_____________________________"
+    "__X_________________XXXXXXXXXX__"
+    "________________________________";
+
+constexpr const unsigned ICON_WIDTH  = 32u;
+constexpr const unsigned ICON_HEIGHT = 32u;
 
 class ExecutionHistoryLogger {
 public:
@@ -178,7 +216,7 @@ void cli_run
     { do_unwatched_mode<TERMINAL>(options, program); }
 
 void watched_cli_run
-    (const erfin::ProgramOptions & options, const ProgramData & program)
+    (const ProgramOptions & options, const ProgramData & program)
     { do_watched_mode<TERMINAL>(options, program); }
 
 void print_help(const ProgramOptions &, const ProgramData &)
@@ -293,7 +331,7 @@ void setup_window_view(sf::RenderWindow & window, const ProgramOptions &);
 void process_events(erfin::Console & console, sf::Window & window);
 
 void map_screen_to_texture
-    (const erfin::Console &console, std::vector<erfin::UInt32> & raw_pixels);
+    (const erfin::Console & console, std::vector<erfin::UInt32> & raw_pixels);
 
 #endif
 
@@ -407,7 +445,23 @@ void setup_window_view(sf::RenderWindow & window, const ProgramOptions & opts) {
     sf::VideoMode vm;
     vm.width  = unsigned(ErfiGpu::SCREEN_WIDTH *opts.window_scale);
     vm.height = unsigned(ErfiGpu::SCREEN_HEIGHT*opts.window_scale);
-    window.create(vm, " ");
+    window.create(vm, WINDOW_TITLE);
+
+    // RGBA pixels
+    static constexpr const UInt32 black = 0xFF000000;
+    static constexpr const UInt32 white = 0xFFFFFFFF;
+    std::vector<UInt32> icon_pixel_data;
+    icon_pixel_data.reserve(ICON_HEIGHT*ICON_WIDTH);
+    for (auto c : std::string(MONOCHROMATIC_ICON_DATA)) {
+        switch (c) {
+        case '_': icon_pixel_data.push_back(black); break;
+        case 'X': icon_pixel_data.push_back(white); break;
+        default :
+            throw std::runtime_error("Internal icon data is malformed.");
+        }
+    }
+    window.setIcon(ICON_WIDTH, ICON_HEIGHT,
+                   reinterpret_cast<const sf::Uint8 *>(icon_pixel_data.data()));
 
     sf::View view = window.getView();
     view.setCenter(float(ErfiGpu::SCREEN_WIDTH /2),

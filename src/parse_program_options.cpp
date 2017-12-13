@@ -26,6 +26,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 
 #include <cassert>
 
@@ -55,16 +56,7 @@ struct TempOptions final : erfin::ProgramOptions {
     bool should_test;
 };
 
-class InitListArgs {
-public:
-    explicit InitListArgs(const std::initializer_list<const char * const> &);
-    char ** args();
-    int argc() const;
-    static OptionsPair to_opts(const std::initializer_list<const char * const> &);
-private:
-    std::vector<char *> m_pointers;
-    std::vector<std::string> m_string_args;
-};
+OptionsPair initlist_to_opts(const std::initializer_list<const char * const> &);
 
 constexpr const char * const ONLY_ONE_INPUT_MSG =
     "Only one input option permitted.";
@@ -116,6 +108,36 @@ static const struct {
 
 namespace erfin {
 
+InitListArgs::InitListArgs
+    (const std::initializer_list<const char * const> & arg_list)
+{
+    for (const auto & arg : arg_list)
+        m_string_args.push_back(arg);
+    for (auto & str : m_string_args)
+        m_pointers.push_back(&str.front());
+}
+
+InitListArgs::InitListArgs(const char * const space_seperated_list) {
+    m_string_args.push_back(space_seperated_list);
+    auto & mutable_string = m_string_args.back();
+    std::replace(mutable_string.begin(), mutable_string.end(), ' ', '\0');
+    char * candidate = nullptr;
+    for (char & c : mutable_string) {
+        if (c != '\0' && !candidate) {
+            candidate = &c;
+        } else if (c == '\0' && candidate) {
+            m_pointers.push_back(candidate);
+            candidate = nullptr;
+        }
+    }
+    if (candidate)
+        m_pointers.push_back(candidate);
+}
+
+char ** InitListArgs::args() { return m_pointers.data(); }
+
+int InitListArgs::argc() const { return int(m_pointers.size()); }
+
 ProgramOptions::ProgramOptions():
     window_scale(3),
     watched_history_length(DEFAULT_FRAME_LIMIT),
@@ -127,7 +149,7 @@ ProgramOptions::ProgramOptions(ProgramOptions && lhs):
     { swap(lhs); }
 
 ProgramOptions::~ProgramOptions() {
-    if (!input_stream_ptr or input_stream_ptr == &std::cin) return;
+    if (!input_stream_ptr || input_stream_ptr == &std::cin) return;
     delete input_stream_ptr;
 }
 
@@ -140,7 +162,7 @@ void ProgramOptions::swap(ProgramOptions & lhs) {
 
 /* static */ void ProgramOptions::run_parse_tests() {
     {
-    auto read_opts = InitListArgs::to_opts({"./erfindung", "-wcr"});
+    auto read_opts = initlist_to_opts({"./erfindung", "-wcr"});
     assert(read_opts.input_stream_ptr == &std::cin);
     assert(read_opts.mode == watched_cli_run);
     }
@@ -238,25 +260,12 @@ void TempOptions::swap(OptionsPair & lhs) {
     }
 }
 
-InitListArgs::InitListArgs
-    (const std::initializer_list<const char * const> & arg_list)
-{
-    for (const auto & arg : arg_list)
-        m_string_args.push_back(arg);
-    for (auto & str : m_string_args)
-        m_pointers.push_back(&str.front());
-}
-
-/* static */ OptionsPair InitListArgs::to_opts
+OptionsPair initlist_to_opts
     (const std::initializer_list<const char * const> & list)
 {
-    auto args = InitListArgs(list);
+    auto args = erfin::InitListArgs(list);
     return erfin::parse_program_options(args.argc(), args.args());
 }
-
-char ** InitListArgs::args() { return m_pointers.data(); }
-
-int InitListArgs::argc() const { return int(m_pointers.size()); }
 
 bool str_eq(const char * a, const char * b) {
     while (*a == *b && *a && *b) {

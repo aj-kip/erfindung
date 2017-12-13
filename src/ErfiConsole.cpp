@@ -87,7 +87,7 @@ void UtilityDevices::set_wait_time() {
 }
 
 /* private */ void UtilityDevices::update_no_stop_signal()
-    { m_no_stop = !m_halt_flag and !m_wait; }
+    { m_no_stop = !m_halt_flag && !m_wait; }
 
 ConsolePack::ConsolePack():
     ram(nullptr),

@@ -384,7 +384,7 @@ SaveRestoreRegRAII::~SaveRestoreRegRAII() {
 
 /* private */ bool SaveRestoreRegRAII::should_emit_save_restore() const noexcept {
     if (m_assumption_flag == FORCE_SAVE_RESTORE) return true;
-    return m_tps->assumptions() & Assembler::SAVE_AND_RESTORE_REGISTERS;
+    return bool(m_tps->assumptions() & Assembler::SAVE_AND_RESTORE_REGISTERS);
 }
 
 // ----------------------------------------------------------------------------

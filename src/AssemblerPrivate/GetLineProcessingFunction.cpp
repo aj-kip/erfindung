@@ -831,7 +831,7 @@ erfin::Immd deal_with_int_immd
     if (!op_code_supports_integer_immd(op_code))
         throw state.make_error(int_unsupported_msg);
     int i;
-    string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), i);
+    string_to_number(&(eol - 1)->front(), &(eol - 1)->back() + 1, i);
     return erfin::encode_immd_int(i);
 }
 
@@ -843,7 +843,7 @@ erfin::Immd deal_with_fp_immd
     if (!op_code_supports_fpoint_immd(op_code))
         throw state.make_error(fp_unsupported_msg);
     double d;
-    string_to_number(&*(eol - 1)->begin(), &*(eol - 1)->end(), d);
+    string_to_number(&(eol - 1)->front(), &(eol - 1)->back() + 1, d);
     return erfin::encode_immd_fp(d);
 }
 

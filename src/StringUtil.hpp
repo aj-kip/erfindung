@@ -46,14 +46,14 @@ using EnableStrToNumIter = typename std::enable_if<
 
 template <typename IterType, typename RealType>
 using EnableStrToNumPtr = typename std::enable_if<
-    std::is_pointer<IterType>::value and
+    std::is_pointer<IterType>::value &&
     std::is_arithmetic<RealType>::value,
     bool
 >;
 
 template <typename IterType, typename RealType>
-using EnableStrToNum = typename std::enable_if <
-    (std::is_pointer<IterType>::value or
+using EnableStrToNum = typename std::enable_if<
+    (std::is_pointer<IterType>::value ||
      std::is_base_of<std::forward_iterator_tag,
                      typename std::iterator_traits<IterType>::iterator_category>::value)
     && std::is_arithmetic<RealType>::value,
@@ -92,7 +92,7 @@ typename EnableStrToNum<IterType, RealType>::type
 /* bool */ string_to_number
     (IterType start, IterType end, RealType & out, const RealType base_c)
 {
-    if (base_c < RealType(2) or base_c > RealType(16)) {
+    if (base_c < RealType(2) || base_c > RealType(16)) {
         throw std::runtime_error("bool string_to_number(...): "
                                  "This function supports only bases 2 to 16.");
     }
@@ -104,7 +104,7 @@ typename EnableStrToNum<IterType, RealType>::type
     const bool is_negative_c = (*start) == CharType('-');
 
     // negative numbers cannot be parsed into an unsigned type
-    if (!IS_SIGNED and is_negative_c)
+    if (!IS_SIGNED && is_negative_c)
         return false;
 
     if (is_negative_c) ++start;
@@ -122,8 +122,8 @@ typename EnableStrToNum<IterType, RealType>::type
             if (found_dot) return false;
             found_dot = true;
             if (IS_INTEGER) {
-                if (adder <= -base_c / RealType(2))
-                    working = -RealType(1);
+                if (adder <= SIGN_FIX*base_c / RealType(2))
+                    working = SIGN_FIX*RealType(1);
                 else
                     working = RealType(0);
             } else {
@@ -150,17 +150,17 @@ typename EnableStrToNum<IterType, RealType>::type
         }
         // detect overflow
         RealType temp = working + adder*multi;
-        if ( IS_SIGNED and temp > working) return false;
-        if (!IS_SIGNED and temp < working) return false;
+        if ( IS_SIGNED && temp > working) return false;
+        if (!IS_SIGNED && temp < working) return false;
         multi *= base_c;
         working = temp;
     }
     while (end != start);
 
     // we've produced a positive integer, so make the adjustment if needed
-    if (!is_negative_c and IS_SIGNED) {
+    if (!is_negative_c && IS_SIGNED) {
         // edge case, cannot flip the sign for minimum value int
-        if (IS_INTEGER and working == std::numeric_limits<RealType>::min()) {
+        if (IS_INTEGER && working == std::numeric_limits<RealType>::min()) {
             return false;
         }
         working *= RealType(-1);

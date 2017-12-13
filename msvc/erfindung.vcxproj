@@ -72,6 +72,10 @@
     <OutDir>$(SolutionDir).$(Platform)\$(Configuration)\</OutDir>
     <IntDir>.$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IntDir>.$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir).$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -86,9 +90,11 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);MACRO_PLATFORM_WINDOWS;MACRO_DEBUG;MACRO_COMPILER_MSVC</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>G:\Active-Files\Development\c++\inc</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <DisableSpecificWarnings>4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>sfml-system-d.lib;sfml-window-d.lib;sfml-graphics-d.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-audio-d.lib;sfml-system-d.lib;sfml-window-d.lib;sfml-graphics-d.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>G:\Active-Files\Development\c++\lib\msvs2015\x64</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -109,37 +115,66 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);MACRO_PLATFORM_WINDOWS;MACRO_DEBUG;MACRO_COMPILER_MSVC</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>G:\Active-Files\Development\c++\inc</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <DisableSpecificWarnings>4800</DisableSpecificWarnings>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>G:\Active-Files\Development\c++\lib\msvs2015\x64</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-system-d.lib;sfml-window-d.lib;sfml-graphics-d.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-audio.lib;sfml-system.lib;sfml-window.lib;sfml-graphics.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\src\Assembler.cpp" />
-    <ClCompile Include="..\src\DrawRectangle.cpp" />
+    <ClCompile Include="..\src\AssemblerPrivate\GetLineProcessingFunction.cpp" />
+    <ClCompile Include="..\src\AssemblerPrivate\LineParsingHelpers.cpp" />
+    <ClCompile Include="..\src\AssemblerPrivate\ProcessIoLine.cpp" />
+    <ClCompile Include="..\src\AssemblerPrivate\TextProcessState.cpp" />
+    <ClCompile Include="..\src\Debugger.cpp" />
+    <ClCompile Include="..\src\ErfiApu.cpp" />
+    <ClCompile Include="..\src\ErfiConsole.cpp" />
     <ClCompile Include="..\src\ErfiCpu.cpp" />
+    <ClCompile Include="..\src\ErfiDefs.cpp" />
     <ClCompile Include="..\src\ErfiGpu.cpp" />
     <ClCompile Include="..\src\FixedPointUtil.cpp" />
     <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\parse_program_options.cpp" />
+    <ClCompile Include="..\src\tests.cpp" />
     <ClCompile Include="..\src\winmain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\Assembler.hpp" />
-    <ClInclude Include="..\src\DrawRectangle.hpp" />
+    <ClInclude Include="..\src\AssemblerPrivate\CommonDefinitions.hpp" />
+    <ClInclude Include="..\src\AssemblerPrivate\GetLineProcessingFunction.hpp" />
+    <ClInclude Include="..\src\AssemblerPrivate\LineParsingHelpers.hpp" />
+    <ClInclude Include="..\src\AssemblerPrivate\ProcessIoLine.hpp" />
+    <ClInclude Include="..\src\AssemblerPrivate\TextProcessState.hpp" />
+    <ClInclude Include="..\src\Debugger.hpp" />
+    <ClInclude Include="..\src\ErfiApu.hpp" />
+    <ClInclude Include="..\src\ErfiConsole.hpp" />
     <ClInclude Include="..\src\ErfiCpu.hpp" />
     <ClInclude Include="..\src\ErfiDefs.hpp" />
     <ClInclude Include="..\src\ErfiError.hpp" />
+    <ClInclude Include="..\src\ErfiGamePad.hpp" />
     <ClInclude Include="..\src\ErfiGpu.hpp" />
     <ClInclude Include="..\src\FixedPointUtil.hpp" />
+    <ClInclude Include="..\src\parse_program_options.hpp" />
+    <ClInclude Include="..\src\StringUtil.hpp" />
+    <ClInclude Include="..\src\tests.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
