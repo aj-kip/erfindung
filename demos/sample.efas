@@ -15,7 +15,7 @@ assume fixed-point
     div  z x y
     set b x
     call expo
-  jump main
+    jump main
 : erfindung-text data [
 __XX_XXXXXX__X_XXXXXX___XX_XXXXXX__XXXXXXXXXX_______________X_______________________________
 __X__________X______XX__XX__________________________________X_______________________________
