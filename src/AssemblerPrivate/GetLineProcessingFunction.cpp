@@ -169,7 +169,7 @@ LineToInstFunc get_line_processing_function
         = fmap["<>=-int"] = make_cmp_int;
     fmap["comp-fp"] = fmap["compare-fp"] = fmap["cmp-fp"] = fmap["<>=-fp"]
         = make_cmp_fp;
-    fmap["comp"] = fmap["compare"] = fmap["cmp"] = fmap["<>="] = make_cmp;
+    fmap["comp"] = fmap["compare"] = fmap["cmp"] = fmap["<=>"] = make_cmp;
 
     fmap["mod"] = fmap["modulus"] = fmap["%"] = make_modulus;
     fmap["mod-int"] = fmap["modulus-int"] = fmap["%-int"] = make_modulus_int;

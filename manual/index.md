@@ -5,6 +5,8 @@ This document defines Erfindung ISA/interpreter and acts as the manual.
 
 I will endeavor to keep this document as concise as possible.
 
+<strong><em>Please note:</em></strong> this is a very early revision of the manual, it should not even be used or thought as a "beta" and is very much a WIP.
+
 Target features:
  + RISC + some bells and whistles
  + assemble to C++ and dynamically executable byte code (shelved)
@@ -87,10 +89,8 @@ Memory Mapped I/O Devices
 ### Stop Space/Reserved null
 Address: 0x8000 0000
 
-|0   -   31|
-|----------|
-|          |
-
+This memory sinkhole is designed to act as a designated space for your null pointer. If a read or write is attempted, then a bus error flag is set to the a designated memory address (Bus Error Data). <br />
+Though it would make me blush if such a thing were to come to fruition... I have no intent of having Erfindung support C++ written applications that use the C++98 style "0" null.
 
 ### GPU
 Addresses: 0x8000 0001 - 0x8000 0002
@@ -99,11 +99,8 @@ Addresses: 0x8000 0001 - 0x8000 0002
 |---------------------------|--------------------|
 | write-only command stream | command output ROM |
 
-
-Command Identities <br/>
 Commands are uploaded to the GPU, first with the command identity
-(a special ISA defined number), followed by its parameters (assume each are
-32bit integers, unless specified otherwise).
+(a special ISA defined number), followed by its parameters (assume each are 32bit integers, unless specified otherwise). Rather than hazarding a guess at what these values are, it is recommended that the programmer use "io" instructions rather than directly saving values using saves.
 
 UPLOAD_SPRITE
  - parameters: width, height, address, index
@@ -134,6 +131,7 @@ At the highest level (the entire reserved memory for texture) looks like this:
 The complete table is much too large to include here.
 If you're curious you can run the following on your local Unix-like machine, provided bcat and lua are installed:
 <pre>lua table-gen.lua | bcat</pre>
+bcat or browser cat is a Ruby Gem, which may be installed using the relevant package manager.
 
 |31 -  13|12 -      10|9 -                      0|
 |--------|------------|--------------------------|
