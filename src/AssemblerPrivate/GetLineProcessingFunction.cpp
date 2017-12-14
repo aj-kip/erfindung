@@ -575,6 +575,11 @@ erfin::Immd deal_with_int_immd
 erfin::Immd deal_with_fp_immd
     (StringCIter eol, erfin::OpCode op_code, TextProcessState & state);
 
+void warn_if_rotate_and_assuming_fp
+    (TextProcessState & state, erfin::ExtendedParamForm pf, erfin::OpCode op);
+
+bool numeric_assumption_matters_for(erfin::OpCode op_code);
+
 template <int ARGUMENT_COUNT, int COMMAND_IDENTITY>
 StringCIter make_gpu_io_instruction
     (TextProcessState &, StringCIter beg, StringCIter end,
@@ -615,27 +620,19 @@ StringCIter make_generic_arithemetic
      StringCIter beg, StringCIter end)
 {
     using namespace erfin;
-    using O = OpCode;
 
     static constexpr const char * const fp_int_ambig_msg =
         ": cannot deduce whether a fixed point or integer operation was "
         "meant; the assembler doesn't know which instruction to construct.";
 
-    bool assumption_matters;
-    switch (op_code) {
-    // this does require some impl knowledge...
-    case O::PLUS: case O::MINUS: case O::AND: case O::OR: case O::XOR:
-    case O::NOT: case O::ROTATE:
-        assumption_matters = false;
-        break;
-    default: assumption_matters = true; break;
-    }
+    bool assumption_matters = numeric_assumption_matters_for(op_code);
 
     Reg ans; // the first register is ALWAYS the answer
     ++beg;
     auto eol = get_eol(beg, end);
     const auto pf = get_lines_param_form(beg, eol);
 
+    warn_if_rotate_and_assuming_fp(state, pf, op_code);
     switch (pf) {
     case XPF_3R   : case XPF_2R: {
         // perfect chance to check if assumptions are ok!
@@ -654,6 +651,8 @@ StringCIter make_generic_arithemetic
     default:
         throw state.make_error(": unsupported parameters.");
     }
+
+    // explicit immediates should silence this warning!
 
     Reg a1, a2;
     Inst inst;
@@ -845,6 +844,33 @@ erfin::Immd deal_with_fp_immd
     double d;
     string_to_number(&(eol - 1)->front(), &(eol - 1)->back() + 1, d);
     return erfin::encode_immd_fp(d);
+}
+
+void warn_if_rotate_and_assuming_fp
+    (TextProcessState & state, erfin::ExtendedParamForm pf, erfin::OpCode op) {
+    using namespace erfin;
+    if (op != OpCode::ROTATE) return;
+    switch (pf) {
+    case XPF_2R_FP: case XPF_2R_INT: case XPF_2R_LABEL:
+    case XPF_1R_FP: case XPF_1R_INT: case XPF_1R_LABEL:
+        return;
+    default: break;
+    }
+    if (state.assumptions() & Assembler::USING_FP) {
+        state.push_warning(": rotate is being used while the fixed point "
+                           "assumption is active.");
+    }
+}
+
+bool numeric_assumption_matters_for(erfin::OpCode op_code) {
+    using O = erfin::OpCode;
+    switch (op_code) {
+    // this does require some impl knowledge...
+    case O::PLUS: case O::MINUS: case O::AND: case O::OR: case O::XOR:
+    case O::NOT: case O::ROTATE:
+        return false;
+    default: return true;
+    }
 }
 
 template <int ARGUMENT_COUNT, int COMMAND_IDENTITY>
