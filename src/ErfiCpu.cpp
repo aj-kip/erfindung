@@ -283,14 +283,15 @@ UInt32 rotate(UInt32 x, UInt32 y) {
 }
 
 UInt32 div_fp  (UInt32 x, UInt32 y) {
-    if (y == erfin::to_fixed_point(0.0))
+    static const auto FP_ZERO_ = erfin::to_fixed_point(0.0);
+    if (y == FP_ZERO_)
         throw Error("Attempted to divide by zero.");
     return erfin::fp_divide(x, y);
 }
 
 UInt32 div_int (UInt32 x, UInt32 y) {
-    if (y == 0) throw Error("Attempted to divide by zero.");
-    return UInt32(int(x) / int(y));
+    if (y == 0u) throw Error("Attempted to divide by zero.");
+    return UInt32(erfin::Int32(x) / erfin::Int32(y));
 }
 
 UInt32 mod_fp  (UInt32 x, UInt32 y) {
