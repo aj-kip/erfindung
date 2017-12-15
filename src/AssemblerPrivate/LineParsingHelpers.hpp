@@ -85,6 +85,16 @@ Reg string_to_register(const std::string & str);
 Reg string_to_register_or_throw
     (TextProcessState & state, const std::string & reg_str);
 
+template <typename T, typename Head, typename ... Types>
+bool equal_to_any(T primary, Head head, Types ... args);
+
+template <typename T, typename ... Types>
+bool equal_to_any(T, Types...) { return false; }
+
+template <typename T, typename Head, typename ... Types>
+bool equal_to_any(T primary, Head head, Types ... args)
+    { return primary == head || equal_to_any(primary, args...); }
+
 } // end of erfin namespace
 
 #endif

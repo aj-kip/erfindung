@@ -225,9 +225,9 @@ erfin::UInt32 do_device_read(erfin::ConsolePack & con, erfin::UInt32 address) {
     case TIMER_QUERY_SYNC_ET    : return con.dev->query_elapsed_time();
     case RANDOM_NUMBER_GENERATOR: return con.dev->generate_random_number();
     case READ_CONTROLLER        : return con.pad->decode();
-    case HALT_SIGNAL            :
-    case BUS_ERROR              :
-    default: return bus_error();
+    case HALT_SIGNAL            : return bus_error();
+    case BUS_ERROR              : return con.dev->bus_error_present() ? 1u : 0u;
+    default                     : return bus_error();
     }
 }
 
@@ -250,8 +250,8 @@ void do_device_write
     case RANDOM_NUMBER_GENERATOR:
     case READ_CONTROLLER        : bus_error(); return;
     case HALT_SIGNAL            : con.dev->power(data); return;
-    case BUS_ERROR              :
-    default: bus_error(); return;
+    case BUS_ERROR              : con.dev->set_bus_error(data ? 1u : 0u); return;
+    default                     : bus_error(); return;
     }
 }
 

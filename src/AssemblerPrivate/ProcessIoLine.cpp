@@ -67,8 +67,7 @@ StringCIter make_sysio
     using namespace erfin;
     // possible io commands (register names can vary)
     // io upload x y z # <- turns into three save instructions
-    // io unload x
-    // io clear screen
+    // io clear # screen
     // io draw x y z
     // io halt
     //
@@ -315,11 +314,12 @@ StringCIter make_io_draw
     // three arguments
     using namespace erfin;
     auto eol = get_eol(++beg, end);
-    if (eol - beg != 3) {
+    static constexpr const auto ARG_COUNT = 3;
+    if (eol - beg != ARG_COUNT) {
         state.make_error(": draw expects exactly three arguments: the "
                          "x position, y position, and index.");
     }
-    std::array<Reg, 3> args;
+    std::array<Reg, ARG_COUNT> args;
     for (Reg & arg : args) {
         arg = string_to_register_or_throw(state, *beg++);
     }
