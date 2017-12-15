@@ -16,6 +16,7 @@ SOURCES += \
     ../src/AssemblerPrivate/GetLineProcessingFunction.cpp \
     ../src/AssemblerPrivate/LineParsingHelpers.cpp \
     ../src/AssemblerPrivate/ProcessIoLine.cpp \
+    ../src/AssemblerPrivate/make_generic_instructions.cpp \
     ../src/Debugger.cpp \
     ../src/ErfiConsole.cpp \
     ../src/ErfiApu.cpp \
@@ -35,6 +36,7 @@ HEADERS += \
     ../src/AssemblerPrivate/LineParsingHelpers.hpp \
     ../src/AssemblerPrivate/CommonDefinitions.hpp \
     ../src/AssemblerPrivate/ProcessIoLine.hpp \
+    ../src/AssemblerPrivate/make_generic_instructions.hpp \
     ../src/Debugger.hpp \
     ../src/ErfiGamePad.hpp \
     ../src/ErfiConsole.hpp \

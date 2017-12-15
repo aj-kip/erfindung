@@ -294,11 +294,66 @@ Real instruction forms: <ul>
 <li>Reg Reg Reg </li>
 <li>Reg Reg Immd</li>
 </ul>
-...<br />
-This instruction has the same effects regardless of assumptions/deduced data 'type' of the operands. The effects will be semantically correct for both integers and fixed points, though the implementation itself is the same.
+If there are three arguments the second argument is rotated, with the third being used as an integer for how many places to rotate. If there are two arguments, the first argument is rotated, with the second used as "how many". The result is placed into the first operand.<br />
+Negative integers rotate the bits left, while positive rotates to the right. <br />
+This instruction only accepts "integers" and the assembler will issue a warning if the fixed point assumption is active at the time this instruction is requested.
 </p>
 
-### io
+<h3 id="io">io</h3>
+<p>
+Pure pseudo-instruction<br />
+Parameters: <ul>
+<li>read controller/timer/random/gpu/bus-error Reg ...</li>
+<li>upload Reg Reg Reg Reg</li>
+<li>clear Reg </li>
+<li>draw Reg Reg Reg</li>
+<li>halt Reg</li>
+<li>wait Reg </li>
+<li>triangle Reg Immd ...</li>
+<li>pulse one/two Reg Immd ...</li>
+<li>noise Reg Immd ...</li>
+</ul>
+This psuedo-instruction emits some number of real set, save, and/or load instructions. Since these may emit many real instructions, it is not recommended that "io" follow and "skip", and the assembler will issue a warning as such (but will not fail the compilation).<br />
+Since this psuedo-instruction has so many variants, documentation for it is split up.
+</p>
+
+<h3 id="io-read">io read</h3>
+
+<p>
+Pure pseudo-instruction<br />
+Parameters: DEVICE Reg ... <br />
+This psuedo-instruction reads from a memory mapped addressed specified by a device string into the given registers.<br />
+As the ellipse implies, the programmer may do a device read and send it to multiple registers at once.
+<pre>io read controller x y</pre>
+This will read the controller device twice, sending the read data to each register. Note that if reading a device has side effects, then this is not desired, you may mitigate this by using an additional set. It maybe desirable that a device is read multiple times and those values sent to separate registers. For instance:
+<pre>io read random x y</pre>
+This will load what is very likely to be two different randomly generated values to both x and y in a single line.<br />
+Possible devices are as follows: <ul>
+<li>controller -> the user input device</li>
+<li>timer      -> timer device</li>
+<li>random     -> psuedo-random number</li>
+<li>gpu        -> GPU output stream</li>
+<li>bus-error  -> Bus Error flags, "super special register"</li>
+</ul>
+<h4>io read controller</h4>
+<p>Erfindung's controller is very simple, there are only seven buttons. When reading the controller the buttons which are currently being depressed are corresponded to there own bit-field.</p>
+</p>
+
+| bits 31-7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2| bit 1 | bit 0 |
+|-----------|-------|-------|-------|-------|------|-------|-------|
+| (unused)  | Start | B     | A     | Right | Left | Down  | Up    |
+
+This read has no side-effects.
+
+<h4>io read timer</h4>
+<p>When the timer is read, the value is a 32-bit fixed point number of elapsed time in seconds since the last wait was issue.</p>
+This read has no side-effects. <br />
+<h4>io read random</h4>
+<p>Reads a 32-bit series of randomly generated bits.</p>
+This read has a side-effect, reading will cause the PRNG to generate a new psuedo-random value. <br />
+<h4>io read gpu</h4>
+<p>It is not recommended to read from the GPU output stream. It is currently an unused device, and maybe removed in future versions of this interpreter.</p>
+<h4>bus-error</h4>
 ### call
 ### jump
 ### times
