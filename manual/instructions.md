@@ -354,6 +354,9 @@ This read has a side-effect, reading will cause the PRNG to generate a new psued
 <h4>io read gpu</h4>
 <p>It is not recommended to read from the GPU output stream. It is currently an unused device, and maybe removed in future versions of this interpreter.</p>
 <h4>bus-error</h4>
+<p>This is a special flag on the control unit, if it is set than an illegal read or write operation has occurred. If the flag is set, the reading will set the destination register's least significant bit to 1.</p>
+<p>Unfortunately there is no direct way to clear the flag at the time of this writing.</p>
+
 ### call
 ### jump
 ### times

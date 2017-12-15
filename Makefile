@@ -22,6 +22,7 @@ SRCS = \
 	src/AssemblerPrivate/ProcessIoLine.cpp \
 	src/AssemblerPrivate/LineParsingHelpers.cpp \
 	src/AssemblerPrivate/GetLineProcessingFunction.cpp \
+	src/AssemblerPrivate/make_generic_instructions.cpp \
 	src/tests.cpp
 
 clean:
