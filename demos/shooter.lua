@@ -33,8 +33,8 @@ function player_bullet_features(ship_instance, n)
         0 # fire delay - as fp
         ]])
         for i = 1, n do
-            print('\t0 # x bullet number '..i)
-            print('\t0 # y')
+            print('    0 # x bullet number '..i)
+            print('    0 # y')
         end
         print([[ ] # end bullet array
         :bullet-sprite data binary [
@@ -89,6 +89,22 @@ function player_bullet_features(ship_instance, n)
         # inlined
         : check-fire-bullet
         push x y z
+        # load bullet et, increment, save
+        # if over 0.2, continue function otherwise return
+        set z ]]..bullet_data_label..[[#
+        load x z 1
+        assume fp
+        io read timer y
+        add x x y
+        save x z 1
+        comp x    0.2
+        skip x >=
+            jump ]]..skip_fire_bullet..[[#
+        # reset counter
+        set  x 0.0
+        save x z 1
+        # read controller
+        assume int
         io read controller z
         and  z    16
         comp z    16
@@ -110,6 +126,11 @@ function player_bullet_features(ship_instance, n)
         save x z 0
         save y z 1
         
+        # increment bullet index
+        load z ]]..bullet_data_label..[[#
+        plus z 1
+        mod  z ]]..n..[[#
+        save z ]]..bullet_data_label..[[#
         :]]..skip_fire_bullet..[[#
         pop z y x pc]])
     end

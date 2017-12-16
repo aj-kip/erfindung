@@ -120,6 +120,10 @@ std::size_t Assembler::translate_to_line_number
     return m_inst_to_line_map[instruction_address];
 }
 
+/* static */ void Assembler::run_tests() {
+    TextProcessState::run_tests();
+}
+
 } // end of erfin namespace
 
 // <-------------------------- Level 1 helpers ------------------------------->
@@ -230,7 +234,3 @@ int get_file_size(const char * filename) {
 } // end of anonymous namespace
 
 // we'll have to bring this back later
-
-/* static */ void erfin::Assembler::run_tests() {
-    TextProcessState::run_tests();
-}

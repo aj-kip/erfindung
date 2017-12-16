@@ -33,16 +33,6 @@
 
 #include <cassert>
 
-#ifdef MACRO_COMPILER_GCC
-#   define MACRO_FALLTHROUGH
-#elif defined(MACRO_COMPILER_MSVC)
-#   define MACRO_FALLTHROUGH
-#elif defined(MACRO_COMPILER_CLANG)
-#   define MACRO_FALLTHROUGH [[clang::fallthrough]]
-#else
-#   error "no compiler defined"
-#endif
-
 namespace {
 
 using Error = std::runtime_error;
@@ -96,6 +86,7 @@ void ErfiCpu::run_cycle(ConsolePack & console) {
 
 void ErfiCpu::run_cycle(Inst inst, ConsolePack & console) {
     // ------------------- This is inside a HOT LOOP --------------------------
+    //               do not attempt to refactor for style reasons!
     using O = OpCode;
     switch (decode_op_code(inst)) {
     // R-type type indifferent split by pf (1-bit) (integer only)
@@ -173,7 +164,7 @@ void try_program(const char * source_code, const int inst_limit_c);
         "     set c 0\n"
         "     pop a b c x y z\n"
         ":safety-loop set pc safety-loop\n"
-        ":stack-start data [________ ________ ________ ________]", 30);
+        ":stack-start data numbers [ 0 ]", 30);
     assert(mod_int(UInt32(-1), UInt32(-1)) == 0);
     assert(mod_int( 3,  2) == 1);
     assert(mod_int( 7,  4) == 7 % 4);

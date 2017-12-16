@@ -28,13 +28,12 @@
 
 #include "../StringUtil.hpp"
 #include "../Assembler.hpp" // for tests
+#include "../FixedPointUtil.hpp" // also for test
 
 #include <iostream>
 #include <bitset>
 
 #include <cassert>
-
-
 
 namespace {
 
@@ -639,6 +638,10 @@ void run_get_line_processing_function_tests() {
     auto d = encode(OpCode::SET, string_to_register("x"), encode_immd_fp(npi.floating_point));
     (void)c; (void)d;
     assert(c == d);
+    }
+    {
+    auto immd = encode_immd_fp(0.0);
+    assert(decode_immd_as_fp(erfin::Inst(immd)) == to_fixed_point(0.0));
     }
     TextProcessState state;
     // test basic instructions

@@ -193,10 +193,7 @@ StringCIter make_generic_memory_access
         inst |= encode_op_with_pf(op_code, ParamForm::REG_REG_IMMD);
         break;
     case XPF_1R_INT: case XPF_1R_LABEL:
-        if (op_code == OpCode::LOAD)
-            inst |= encode_op_with_pf(op_code, ParamForm::REG_REG_IMMD);
-        else
-            inst |= encode_op_with_pf(op_code, ParamForm::REG_IMMD);
+        inst |= encode_op_with_pf(op_code, ParamForm::REG_IMMD);
         break;
     default:
         throw state.make_error(std::string(": <op_code> does not support ") +
@@ -215,12 +212,11 @@ StringCIter make_generic_memory_access
         inst |= encode_reg_reg(reg, string_to_register(*(beg + 1)));
     }
 
-    if (equal_to_any(pf, XPF_1R, XPF_1R_INT, XPF_1R_LABEL)) {
-        if (op_code == OpCode::LOAD) {
-            inst |= encode_reg_reg(reg, reg);
-        } else {
-            inst |= encode_reg(reg);
-        }
+    if (equal_to_any(pf, XPF_1R_INT, XPF_1R_LABEL)) {
+        inst |= encode_reg(reg);
+    }
+    if (pf == XPF_1R) {
+        inst |= encode_reg_reg(reg, reg);
     }
 
     state.add_instruction(inst, label);

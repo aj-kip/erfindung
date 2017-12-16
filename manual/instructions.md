@@ -2,7 +2,7 @@
 Aliases are comma delimited. Directives have no aliases. These instructions have further documentation available, which will follow a template. <br />
 Also refer to important notes on how [immediates](#immd-notes) are handled. <br />
 This document also contains information pertaining to assembler assumptions both [numeric](#numeric-assumptions) and io instruction related.
-
+<strong>Super Important Note:</strong> if it is found that the software fails to follow the documentation, then the documentation takes precedence, and the misbehavior is classed as a bug. (however with this document being in beta/incomplete, an error <em>may</em> occur in the documents!)
 ### Sample Instruction Template
 <p>
 Instruction Type <br />
@@ -28,29 +28,29 @@ Further comments.
 
 <tr>
 <td> <a href="#and">and</a>       </td><td> &amp; </td>
-<td> or       </td><td> | </td>
-<td> xor       </td><td> ^ </td>
+<td> <a href="#or">or</a>       </td><td> | </td>
+<td> <a href="#xor">xor</a>       </td><td> ^ </td>
 </tr>
 
 <tr>
-<td> not       </td><td> !, ~ </td>
-<td> plus      </td><td> + </td>
-<td> minus     </td><td> - </td>
+<td> <a href="#not">not</a>       </td><td> !, ~ </td>
+<td> <a href="#plus">plus</a>      </td><td> + </td>
+<td> <a href="#minus">minus</a>     </td><td> - </td>
 </tr>
 <tr>
-<td> skip       </td><td> ? </td>
-<td> save      </td><td> sav, &lt;&lt; </td>
-<td> load     </td><td> ld, &gt;&gt; </td>
+<td> <a href="#skip">skip</a>       </td><td> ? </td>
+<td> <a href="#save">save</a>      </td><td> sav, &lt;&lt; </td>
+<td> <a href="#load">load</a>     </td><td> ld, &gt;&gt; </td>
 </tr>
 <tr>
-<td> set       </td><td> = </td>
-<td> rotate      </td><td> rot, @ </td>
+<td> <a href="#set">set</a>       </td><td> = </td>
+<td> <a href="#rotate">rotate </a>     </td><td> rot, @ </td>
 <td>      </td><td>  </td>
 </tr>
 <tr>
-<td> io      </td><td>  </td>
-<td> call      </td><td>  </td>
-<td> jump     </td><td>  </td>
+<td> <a href="#io">io </a>     </td><td>  </td>
+<td> <a href="#call">call </a>     </td><td>  </td>
+<td> <a href="#jump">jump </a>    </td><td>  </td>
 </tr>
 <tr>
 <td> times     </td><td> mul, multiply, &ast; </td>
@@ -128,8 +128,8 @@ Further comments.
 <p>
 The Erfindung CPU can perform operations on both integers and fixed point numbers. Bitwise operations, addition, and subtraction all use the same implementation regardless whether the data is to be treated as fixed point numbers or integers. Other operations where fixed point numbers and integers need separate implementations, have suffixes ('-fp' and '-int').
 </p><p>
-Assumption directives have the role of eliminating the need for these suffixes. Do note however, if there's an immediate, that immediate's 'type' will override any assumption that was directed. So a <em>times x a 0.8</em> will perform a fixed point operation regardless of a previous <em>assume integer</em>.</p>
-
+Assumption directives have the role of eliminating the need for these suffixes. Do note however, if there's an immediate, that immediate's 'type' will override any assumption that was directed. So a <em>times x a 0.8</em> will perform a fixed point operation regardless of any previous <em>assume integer</em>.</p>
+<p>The assembler will by default assume integer. </p>
 Assume Integer directive:
 <pre>assume int</pre><pre>assume integer</pre>
 Assume Fixed Point directive:
@@ -250,7 +250,7 @@ Saves the data in first operand's data (register) to the address specified by th
 
 Or alternatively visualized as: <br />
 16 bit immediate: 0bNXXX XXXX XXXX XXXX<br />
-32 bit used value: 0bN000 0000 0000 0000 0000 XXXX XXXX XXXX<br />
+32 bit used value: 0bN000 0000 0000 0000 0XXX XXXX XXXX XXXX<br />
 
 <h3 id="load">load</h3>
 <p>
@@ -263,6 +263,8 @@ Real instruction forms: <ul>
 <li>Reg Immd</li>
 </ul>
 Loads data from the address in the second operand into the first operand. If the second operand is a register, then there may optionally be a third integer immediate operand to act as an offset.<br />
+<em>Special Pseudo-Instruction</em>
+You may issue a <em>load x</em> which the assembler will treat "x" as a pointer to load content from and store that content into register x. This special case is not available for save.<br />
 <em>Special case:</em> If the second operand is an immediate rather than a register, then it'll be decoded not as an integer immediate, but rather as an address. The 16 bit address immediate is mapped to a 32 bit value as follows:
 </p>
 
@@ -273,7 +275,7 @@ Loads data from the address in the second operand into the first operand. If the
 
 Or alternatively visualized as: <br />
 16 bit immediate: 0bNXXX XXXX XXXX XXXX<br />
-32 bit used value: 0bN000 0000 0000 0000 0000 XXXX XXXX XXXX<br />
+32 bit used value: 0bN000 0000 0000 0000 0XXX XXXX XXXX XXXX<br />
 
 <h3 id="set">set</h3>
 <p>
@@ -303,22 +305,21 @@ This instruction only accepts "integers" and the assembler will issue a warning 
 <p>
 Pure pseudo-instruction<br />
 Parameters: <ul>
-<li>read controller/timer/random/gpu/bus-error Reg ...</li>
-<li>upload Reg Reg Reg Reg</li>
-<li>clear Reg </li>
-<li>draw Reg Reg Reg</li>
-<li>halt Reg</li>
-<li>wait Reg </li>
-<li>triangle Reg Immd ...</li>
-<li>pulse one/two Reg Immd ...</li>
-<li>noise Reg Immd ...</li>
+<li><a href="#io-read">read controller/timer/random/gpu/bus-error Reg ...</a></li>
+<li><a href="#io-upload">upload Reg Reg Reg Reg</a></li>
+<li><a href="#io-clear">clear Reg</a></li>
+<li><a href="#io-draw">draw Reg Reg Reg</a></li>
+<li><a href="#io-halt">halt Reg</a></li>
+<li><a href="#io-wait">Reg</a></li>
+<li><a href="#io-note">triangle Reg Immd ...</a></li>
+<li><a href="#io-note">pulse one/two Reg Immd ...</a></li>
+<li><a href="#io-note">noise Reg Immd ...</a></li>
 </ul>
 This psuedo-instruction emits some number of real set, save, and/or load instructions. Since these may emit many real instructions, it is not recommended that "io" follow and "skip", and the assembler will issue a warning as such (but will not fail the compilation).<br />
 Since this psuedo-instruction has so many variants, documentation for it is split up.
 </p>
 
 <h3 id="io-read">io read</h3>
-
 <p>
 Pure pseudo-instruction<br />
 Parameters: DEVICE Reg ... <br />
@@ -356,12 +357,66 @@ This read has a side-effect, reading will cause the PRNG to generate a new psued
 <h4>bus-error</h4>
 <p>This is a special flag on the control unit, if it is set than an illegal read or write operation has occurred. If the flag is set, the reading will set the destination register's least significant bit to 1.</p>
 <p>Unfortunately there is no direct way to clear the flag at the time of this writing.</p>
+<h3 id="io-upload">io upload</h3>
+<h3 id="io-clear">io clear</h3>
+<h3 id="io-draw">io draw</h3>
+<h3 id="io-halt">io halt</h3>
+<h3 id="io-wait">io wait</h3>
+<h3 id="io-note">io triangle/pulse/noise ...</h3>
 
-### call
-### jump
-### times
-### times-int
-### times-fp
+<h3 id="call">call</h3>
+<p>
+J-Type <br />
+Parameters: Reg/Immd<br />
+Real instruction forms: <ul>
+<li>Reg </li>
+<li>Immd</li>
+</ul>
+The call instruction pushes PC + 1 onto the stack, increments SP by one and jumps to the address specified by the given immediate (as integer). This in effect acts as a function call (barring any epilogue/prologue of callee and caller register pushes and pops). <br />
+This instruction exist for the reason that it is not possible to get the same behavior with just a jump instruction, especially light of skip instruction's single PC increment behavior. <br />
+A <em>pop pc</em> acts as this ISA's ret instruction (from the very real x86).
+</p>
+<h3 id="jump">jump</h3>
+Pure pseudo-instruction<br />
+Jump is simply a set <em>pc (Reg/Immd)</em>
+<p>
+
+<h3 id="times">times</h3>
+<p>
+Pure Pseudo-Instruction <br />
+Parameters: Reg Reg/Immd/Label (Reg/Immd/Label) <br />
+Real instruction forms: <ul>
+<li>Reg Reg Reg </li>
+<li>Reg Reg Immd</li>
+</ul>
+Performs integer or fixed point multiplication on the last two operands and stores the result in the first operand.<br />
+The Assembler emits a real times-int or times-fp depending on its numeric assumptions. If an immediate is present, than the immediate determines the which real instruction is emitted. That is a fixed point immediate will cause a times-fp to be generated, labels/integers will cause a times-int to be emitted. <br />
+<strong>Note: </strong> Will labels are permissible for use in this instruction, it is not recommended, as it may cause unexpected behavior. I've failed to find a compelling reason to prohibit labels from appearing in this instruction.
+</p>
+
+<h3 id="times-int">times-int</h3>
+<p>
+R-Type<br />
+Parameters: Reg Reg/Immd/Label (Reg/Immd/Label) <br />
+Real instruction forms: <ul>
+<li>Reg Reg Reg </li>
+<li>Reg Reg Immd</li>
+</ul>
+Performs an explicit integer multiplication on the last two operands and stores the result in the first operand.<br />
+Unlike "times" or any instruction where operation selection is implicit, this instruction will always perform integer multiplication regardless of assumptions or the format of the immediate value.
+</p>
+<h3 id="times-fp">times-fp</h3>
+<p>
+R-Type<br />
+Parameters: Reg Reg/Immd/Label (Reg/Immd/Label) <br />
+Real instruction forms: <ul>
+<li>Reg Reg Reg </li>
+<li>Reg Reg Immd</li>
+</ul>
+Performs an explicit fixed point multiplication on the last two operands and stores the result in the first operand.<br />
+Unlike "times" or any instruction where operation selection is implicit, this instruction will always perform fixed point multiplication regardless of assumptions or the format of the immediate value.
+</p>
+
 ### div
 ### div-int
 ### div-fp

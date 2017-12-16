@@ -112,8 +112,7 @@ UInt32 do_read(ConsolePack & con, UInt32 address) {
     if (address & device_addresses::DEVICE_ADDRESS_MASK) {
         return do_device_read(con, address);
     } else if (address < con.ram->size()) {
-        volatile auto * mptr = con.ram->data();
-        return mptr[address];
+        return con.ram->data()[address];
     } else {
         throw Error(ACCESS_VIOLATION_MESSAGE);
     }

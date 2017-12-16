@@ -38,32 +38,33 @@ Sample programs are available in the project's root directory.
 
 ### Instruction List
 
-These are the so called "real" instructions that directly correspond to byte code in the virtual machine. Note that some of these instructions have additional parameter forms than listed on this table. They will be covered in Pseudo-Instructions section.
+These are the so called "real" instructions that directly correspond to byte code in the virtual machine. Note that some of these instructions have additional parameter forms than listed on this table. These are covered by pseudo-instructions.
 
 All the following instructions store their answer into the first register.
 <table>
 <tr><th> Mnemonic  </th><th> Parameters </th><th>Description                </th> </tr>
 
-<tr><td> and       </td><td> Reg reg (reg/fp/int/label)          </td><td>  bitwise operations treat registers as a "bag of bits"                </td></tr>
-<tr><td> or        </td><td> Reg reg (reg/fp/int/label)          </td><td> </td></tr>
-<tr><td> xor       </td><td> Reg reg (reg/fp/int/label)          </td><td> </td></tr>
-<tr><td> not       </td><td>                                 </td><td> register has its bits flipped </td></tr>
-<tr><td> plus      </td><td> Reg reg (reg/fp/int/label)          </td><td>  covers both fixed point and integers</td></tr>
-<tr><td> minus     </td><td> Reg reg (reg/fp/int/label)          </td><td>  covers both fixed point and integers</td></tr>
-<tr><td> times-int </td><td> Reg reg (reg/int/label)           </td><td> integers only (as per suffix) </td></tr>
-<tr><td> times-fp  </td><td> Reg reg (reg/fp/label)           </td><td> fixed points only (as per suffix) </td></tr>
-<tr><td> div-int </td><td> </td><td> </td></tr>
-<tr><td> div-fp  </td><td> </td><td> </td></tr>
-<tr><td> mod-int </td><td> </td><td> </td></tr>
-<tr><td> mod-fp  </td><td> </td><td> </td></tr>
-<tr><td> comp-int </td><td> </td><td> The compare operation behaves very similarly to the other arithmetic operations. This operation produces a four-bit response of flags, where each denotes  </td></tr>
-<tr><td> comp-fp </td><td> </td><td></td></tr>
-<tr><td> skip </td><td> </td><td> </td></tr>
-<tr><td> save </td><td> </td><td> </td></tr>
-<tr><td> load </td><td> </td><td> </td></tr>
-<tr><td> call </td><td> </td><td> </td></tr>
+<tr><td> and       </td><td> Reg Reg (Reg/Immd)          </td><td>  bitwise operations treat registers as a "bag of bits"                </td></tr>
+<tr><td> or        </td><td> Reg Reg (Reg/Immd)          </td><td> </td></tr>
+<tr><td> xor       </td><td> Reg Reg (Reg/Immd)          </td><td> </td></tr>
+<tr><td> not       </td><td> Reg Reg                     </td><td> register has its bits flipped </td></tr>
+<tr><td> plus      </td><td> Reg Reg (Reg/Immd)          </td><td>  covers both fixed point and integers</td></tr>
+<tr><td> minus     </td><td> Reg Reg (Reg/Immd)          </td><td>  covers both fixed point and integers</td></tr>
+<tr><td> times-int </td><td> Reg Reg (Reg/Immd)           </td><td> integers only (as per suffix) </td></tr>
+<tr><td> times-fp  </td><td> Reg Reg (Reg/Immd)           </td><td> fixed points only (as per suffix) </td></tr>
+<tr><td> div-int   </td><td> Reg Reg (Reg/Immd) </td><td> </td></tr>
+<tr><td> div-fp    </td><td> Reg Reg (Reg/Immd) </td><td> </td></tr>
+<tr><td> mod-int   </td><td> Reg Reg (Reg/Immd) </td><td> </td></tr>
+<tr><td> mod-fp    </td><td> Reg Reg (Reg/Immd) </td><td> </td></tr>
+<tr><td> comp-int  </td><td> Reg Reg (Reg/Immd) </td><td> The compare operation behaves very similarly to the other arithmetic operations. This operation produces a four-bit response of flags, where each denotes  </td></tr>
+<tr><td> comp-fp   </td><td> Reg Reg (Reg/Immd)</td><td></td></tr>
+<tr><td> skip      </td><td> Reg (Immd)        </td><td> </td></tr>
+<tr><td> save      </td><td> Reg Reg (Immd)    </td><td> </td></tr>
+<tr><td> load      </td><td> Reg Reg (Immd)    </td><td> </td></tr>
+<tr><td> call      </td><td> (Reg/Immd)        </td><td> </td></tr>
 </table>
-### Pseudo-Instructions
+
+### Pseudo-Instruction Examples
 + times
 + div
 + mod
@@ -73,12 +74,14 @@ All the following instructions store their answer into the first register.
 + push
 + pop
 
+A complete and comprehensive list of supported pseudo-instructions
+
 Complete Memory Map
 -------------------
 
 <table>
 <tr><th> Region                     </th><th> Address                    </th></tr>
-<tr><td> Device I/O                 </td><td> 0x8000 0000 - 0xFFFFFFFF   </td></tr>
+<tr><td> Device I/O                 </td><td> 0x8000 0000 - 0x8000 0009  </td></tr>
 <tr><td> Program Code               </td><td> 0x0000 0000                </td></tr>
 <tr><td> Free Memory for Stack/Heap </td><td> 0x0000 0000 + program size </td></tr>
 </table>

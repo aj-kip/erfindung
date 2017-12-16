@@ -415,7 +415,7 @@ enum class ParamForm {
 //                ... ]
 using RegisterPack = std::array<UInt32, 8>;
 constexpr const unsigned MEMORY_CAPACITY = 65536;
-using MemorySpace  = std::array<UInt32, MEMORY_CAPACITY/sizeof(UInt32)>;
+using MemorySpace  = std::array<UInt32, MEMORY_CAPACITY / sizeof(UInt32)>;
 
 // high level type alaises
 using DebuggerInstToLineMap = std::vector<std::size_t>;

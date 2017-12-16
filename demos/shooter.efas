@@ -9,12 +9,12 @@ jump bullet_data_end
         0 # bullet index
         0 # fire delay - as fp
         
-	0 # x bullet number 1
-	0 # y
-	0 # x bullet number 2
-	0 # y
-	0 # x bullet number 3
-	0 # y
+    0 # x bullet number 1
+    0 # y
+    0 # x bullet number 2
+    0 # y
+    0 # x bullet number 3
+    0 # y
  ] # end bullet array
         :bullet-sprite data binary [
         # 0123
@@ -97,6 +97,22 @@ jump main-loop
         # inlined
         : check-fire-bullet
         push x y z
+        # load bullet et, increment, save
+        # if over 0.2, continue function otherwise return
+        set z bullet_data#
+        load x z 1
+        assume fp
+        io read timer y
+        add x x y
+        save x z 1
+        comp x    0.2
+        skip x >=
+            jump skip-fire-bullet#
+        # reset counter
+        set  x 0.0
+        save x z 1
+        # read controller
+        assume int
         io read controller z
         and  z    16
         comp z    16
@@ -122,6 +138,11 @@ jump main-loop
         save x z 0
         save y z 1
         
+        # increment bullet index
+        load z bullet_data#
+        plus z 1
+        mod  z 3#
+        save z bullet_data#
         :skip-fire-bullet#
         pop z y x pc
 
@@ -141,6 +162,7 @@ jump main-loop
             load y z 1
             sub  y 10
             save y z 1
+            load x z
             set  z 0b1001111111011#
             io draw x y z
             
@@ -152,6 +174,7 @@ jump main-loop
             load y z 1
             sub  y 10
             save y z 1
+            load x z
             set  z 0b1001111111011#
             io draw x y z
             
@@ -163,6 +186,7 @@ jump main-loop
             load y z 1
             sub  y 10
             save y z 1
+            load x z
             set  z 0b1001111111011#
             io draw x y z
             
@@ -188,7 +212,7 @@ pop z y z pc
             comp z    1
             skip z ==  # up is pressed
                jump skip-press-up
-            add y -1
+            add y -2
             jump skip-press-down
         : skip-press-up
             io read controller z
@@ -196,14 +220,14 @@ pop z y z pc
             comp z    2
             skip z ==  # down is pressed
                set pc skip-press-down
-            add y 1
+            add y 2
         : skip-press-down
             io read controller z
             and  z   12
             comp z    4 # left is pressed
             skip z ==
                set pc skip-press-left
-            add x -1
+            add x -2
             jump do-ship-update
         : skip-press-left
             io read controller z
@@ -211,7 +235,7 @@ pop z y z pc
             comp z    8 # right is pressed
             skip z ==
                set pc do-ship-update
-            add x 1
+            add x 2
         : do-ship-update
             # save it back
             set  z ship-data

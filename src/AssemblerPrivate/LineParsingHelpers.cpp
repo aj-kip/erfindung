@@ -150,14 +150,16 @@ ExtendedParamForm get_lines_param_form
     if (!npi) npi = &local_npi;
     switch (arg_count) {
     case 4:
-        for (int i = 0; i != 4; ++i)
+        for (int i = 0; i != 4; ++i) {
             if (string_to_register(*(beg + i)) == Reg::COUNT)
                 return XPF_INVALID;
+        }
         return XPF_4R;
     case 3: case 2:
-        for (int i = 0; i != arg_count - 1; ++i)
+        for (int i = 0; i != arg_count - 1; ++i) {
             if (string_to_register(*(beg + i)) == Reg::COUNT)
                 return XPF_INVALID;
+        }
         if (string_to_register(*(beg + arg_count - 1)) != Reg::COUNT) {
             return arg_count == 2 ? XPF_2R : XPF_3R;
         }
