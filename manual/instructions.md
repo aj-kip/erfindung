@@ -21,9 +21,9 @@ Further comments.
 </style>
 <table>
 <tr>
-<th> Mnemonic  </th><th> Aliases </th>
-<th> Mnemonic  </th><th> Aliases </th>
-<th> Mnemonic  </th><th> Aliases </th>
+<th> R-Types  </th><th> Aliases </th>
+<th> R-Types  </th><th> Aliases </th>
+<th> R-Types  </th><th> Aliases </th>
 </tr>
 
 <tr>
@@ -31,58 +31,42 @@ Further comments.
 <td> <a href="#or">or</a>       </td><td> | </td>
 <td> <a href="#xor">xor</a>       </td><td> ^ </td>
 </tr>
-
 <tr>
-<td> <a href="#not">not</a>       </td><td> !, ~ </td>
 <td> <a href="#plus">plus</a>      </td><td> + </td>
 <td> <a href="#minus">minus</a>     </td><td> - </td>
-</tr>
-<tr>
-<td> <a href="#skip">skip</a>       </td><td> ? </td>
-<td> <a href="#save">save</a>      </td><td> sav, &lt;&lt; </td>
-<td> <a href="#load">load</a>     </td><td> ld, &gt;&gt; </td>
-</tr>
-<tr>
-<td> <a href="#set">set</a>       </td><td> = </td>
 <td> <a href="#rotate">rotate </a>     </td><td> rot, @ </td>
-<td>      </td><td>  </td>
 </tr>
 <tr>
-<td> <a href="#io">io </a>     </td><td>  </td>
-<td> <a href="#call">call </a>     </td><td>  </td>
-<td> <a href="#jump">jump </a>    </td><td>  </td>
-</tr>
-<tr>
-<td> times     </td><td> mul, multiply, &ast; </td>
-<td> times-int       </td><td>
+<td> <a href="#times"> times</a>     </td><td> mul, multiply, &ast; </td>
+<td> <a href="#times-int"> times-int</a>       </td><td>
 <span class="nowrap">mul-int</span>,
 <span class="nowrap">multiply-int</span>,
 <span class="nowrap">&ast;-int</span> </td>
-<td> times-fp      </td><td>
+<td> <a href="#times-fp"> times-fp</a>      </td><td>
 <span class="nowrap">mul-fp</span>,
 <span class="nowrap">multiply-fp</span>,
 <span class="nowrap">&ast;-fp</span> </td>
 
 </tr>
 <tr>
-<td> div    </td><td> divide, / </td>
-<td> div-int       </td><td>
+<td> <a href="#div"> div</a>    </td><td> divide, / </td>
+<td> <a href="#div-int"> div-int</a>       </td><td>
 <span class="nowrap">divide-int</span>,
 <span class="nowrap">/-int</span> </td>
-<td> div-fp   </td><td>
+<td> <a href="#div-fp"> div-fp</a>   </td><td>
 <span class="nowrap">divide-fp</span>,
 <span class="nowrap">/-fp</span> </td>
 
 </tr>
 
 <tr>
-<td> comp     </td><td> compare, cmp, &lt;=&gt; </td>
-<td> comp-int       </td><td>
+<td> <a href="#comp"> comp</a>     </td><td> compare, cmp, &lt;=&gt; </td>
+<td> <a href="#comp-int"> comp-int</a>       </td><td>
 <span class="nowrap">compare-int</span>,
 <span class="nowrap">cmp-int</span>,
 <span class="nowrap">&lt;=&gt;-int</span>
 </td>
-<td> comp-fp      </td><td>
+<td> <a href="#comp-fp">comp-fp</a>      </td><td>
 <span class="nowrap">compare-fp</span>,
 <span class="nowrap">cmp-fp</span>,
 <span class="nowrap">&lt;=&gt;-fp</span>
@@ -90,41 +74,75 @@ Further comments.
 
 </tr>
 <tr>
-<td> mod      </td><td> modulus, % </td>
-<td> mod-int      </td><td>
+<td> <a href="#mod"> mod</a>      </td><td> modulus, % </td>
+<td> <a href="#mod-int"> mod-int</a>      </td><td>
 <span class="nowrap">modulus-int</span>,
 <span class="nowrap">%-fp</span>
  </td>
-<td> mod-fp     </td><td>
+<td> <a href="#mod-fp"> mod-fp</a>     </td><td>
 <span class="nowrap">modulus-fp</span>,
 <span class="nowrap">%-fp</span>
 </td>
+<tr>
+<th> J-Types  </th><th> Aliases </th>
+<th> M-Types  </th><th> Aliases </th>
+<th> U-Types  </th><th> Aliases </th>
+</tr>
+
 </tr>
 <tr>
-<td> push     </td><td>  </td>
-<td> pop     </td><td>  </td>
+<td> <a href="#skip">skip</a>       </td><td> ? </td>
+<td> <a href="#save">save</a>      </td><td> sav, &lt;&lt; </td>
+<td> <a href="#not">not</a>       </td><td> !, ~ </td>
+</tr>
+<tr>
+<td> <a href="#call">call </a>     </td><td>  </td>
+<td> <a href="#load">load</a>     </td><td> ld, &gt;&gt; </td>
+
+<td>     </td><td></td>
+
+</tr>
+<tr>
+<td> <a href="#jump">jump </a>    </td><td>  </td>
+<td> <a href="#set">set</a>       </td><td> = </td>
 <td>        </td><td>  </td>
+
+</tr>
+
+
+<tr>
+<th> Pseudo Instructions </th><th>  </th>
+<th> Special Characters </th><th> Meaning </th>
+<th> Directives </th><th>  </th>
 </tr>
 <tr>
-<th> Directive </th><th>  </th>
-<th> Directive </th><th>  </th>
-<th> Directive </th><th>  </th>
+<td> <a href="#push"> push</a>     </td><td>  </td>
+<td> <a href="#comments"> #</a>     </td><td> <a href="#comments">comments</a> </td>
+
+<td> <a href="#assume">assume</a>       </td><td>  </td>
+
+
 </tr>
 <tr>
-<td> data       </td><td>  </td>
-<td> :     </td><td> (labels) </td>
-<td> #     </td><td> (comments) </td>
+<td> <a href="#pop"> pop</a>     </td><td>  </td>
+<td> <a href="#labels"> :</a>     </td><td> <a href="#labels"> labels</a> </td>
+<td> <a href="#data"> data</a>       </td><td>  </td>
 </tr>
 
 <tr>
-<td> assume       </td><td>  </td>
+<td> <a href="#io">io </a>     </td><td>  </td>
+
 <td>      </td><td>  </td>
 <td>      </td><td>  </td>
 </tr>
 
 </table>
-
-<h3 id="numeric-assumptions">Numeric Assumptions, important notes</h3>
+<h3 id="io-assumptions">IO Assumptions</h3>
+<p>
+The assembler maybe directed to automatically save and restore registers used in io directives. By default the assembler will save and restore register values automatically. This can be explicitly controlled through the <em>assume</em> directive.
+</p>
+<p>This will </p>
+<h3 id="numeric-assumptions">Numeric Assumptions</h3>
 <p>
 The Erfindung CPU can perform operations on both integers and fixed point numbers. Bitwise operations, addition, and subtraction all use the same implementation regardless whether the data is to be treated as fixed point numbers or integers. Other operations where fixed point numbers and integers need separate implementations, have suffixes ('-fp' and '-int').
 </p><p>
@@ -310,7 +328,7 @@ Parameters: <ul>
 <li><a href="#io-clear">clear Reg</a></li>
 <li><a href="#io-draw">draw Reg Reg Reg</a></li>
 <li><a href="#io-halt">halt Reg</a></li>
-<li><a href="#io-wait">Reg</a></li>
+<li><a href="#io-wait">wait Reg</a></li>
 <li><a href="#io-note">triangle Reg Immd ...</a></li>
 <li><a href="#io-note">pulse one/two Reg Immd ...</a></li>
 <li><a href="#io-note">noise Reg Immd ...</a></li>
@@ -390,8 +408,8 @@ Real instruction forms: <ul>
 <li>Reg Reg Immd</li>
 </ul>
 Performs integer or fixed point multiplication on the last two operands and stores the result in the first operand.<br />
-The Assembler emits a real times-int or times-fp depending on its numeric assumptions. If an immediate is present, than the immediate determines the which real instruction is emitted. That is a fixed point immediate will cause a times-fp to be generated, labels/integers will cause a times-int to be emitted. <br />
-<strong>Note: </strong> Will labels are permissible for use in this instruction, it is not recommended, as it may cause unexpected behavior. I've failed to find a compelling reason to prohibit labels from appearing in this instruction.
+The Assembler emits a real times-int or times-fp depending on its numeric assumptions. If an immediate is present, than the immediate takes precedence in determining which real instruction is emitted. That is a fixed point immediate will cause a times-fp to be generated, labels/integers will cause a times-int to be emitted. <br />
+<strong>Note: </strong>Labels are permissible for use with this instruction, however it is not recommended. It may cause unexpected behavior. I've failed to find a compelling reason to prohibit labels from appearing in this instruction.
 </p>
 
 <h3 id="times-int">times-int</h3>
@@ -417,10 +435,62 @@ Performs an explicit fixed point multiplication on the last two operands and sto
 Unlike "times" or any instruction where operation selection is implicit, this instruction will always perform fixed point multiplication regardless of assumptions or the format of the immediate value.
 </p>
 
-### div
-### div-int
-### div-fp
-### comp
+<h3 id="div">division</h3>
+<p>
+Pure Pseudo-Instruction <br />
+Parameters: Reg Reg/Immd/Label (Reg/Immd/Label) <br />
+Real instruction forms: <ul>
+<li>Reg Reg Reg </li>
+<li>Reg Reg Immd</li>
+</ul>
+Performs integer or fixed point division on the last two operands and stores the result in the first operand.<br />
+The Assembler emits a real div-int or div-fp depending on its numeric assumptions. If an immediate is present, than the immediate takes precedence in determining which real instruction is emitted. That is a fixed point immediate will cause a div-fp to be generated, labels/integers will cause a div-int to be emitted. <br />
+<strong>Note: </strong>Labels are permissible for use with this instruction, however it is not recommended. It may cause unexpected behavior. I've failed to find a compelling reason to prohibit labels from appearing in this instruction.
+</p>
+
+<h3 id="div-int">division-int</h3>
+<p>
+R-Type<br />
+Parameters: Reg Reg/Immd/Label (Reg/Immd/Label) <br />
+Real instruction forms: <ul>
+<li>Reg Reg Reg </li>
+<li>Reg Reg Immd</li>
+</ul>
+Performs an explicit integer division on the last two operands and stores the result in the first operand.<br />
+Unlike "times" or any instruction where operation selection is implicit, this instruction will always perform integer multiplication regardless of assumptions or the format of the immediate value.
+</p>
+<h3 id="div-fp">division-fp</h3>
+<p>
+R-Type<br />
+Parameters: Reg Reg/Immd/Label (Reg/Immd/Label) <br />
+Real instruction forms: <ul>
+<li>Reg Reg Reg </li>
+<li>Reg Reg Immd</li>
+</ul>
+Performs an explicit fixed point division on the last two operands and stores the result in the first operand.<br />
+Unlike "times" or any instruction where operation selection is implicit, this instruction will always perform fixed point multiplication regardless of assumptions or the format of the immediate value.
+</p>
+
+<h3 id="comp">comp</h3>
+<p>
+Pure Pseudo-Instruction <br />
+Parameters: Reg Reg/Immd/Label (Reg/Immd/Label) <br />
+Real instruction forms: <ul>
+<li>Reg Reg Reg </li>
+<li>Reg Reg Immd</li>
+</ul>
+Performs integer or fixed point comparison on the last two operands and stores the result in the first operand.<br />
+The Assembler emits a real comp-int or comp-fp depending on its numeric assumptions. If an immediate is present, than the immediate takes precedence in determining which real instruction is emitted. That is a fixed point immediate will cause a comp-fp to be generated, labels/integers will cause a comp-int to be emitted. <br />
+The result is stored as a bit series in the least four significant bits, with all others being set to zero. If a condition holds true, then the bit is set to one, if false it is left as zero. Consider the first operand used as a, and the second operand as b (and result having no letter assigned). These conditions are mapped as follows:</p>
+
+| bits 31-4            | bit 3         | bit 2        | bit 1        | bit 0         |
+|----------------------|---------------|--------------|--------------|---------------|
+| unconditionally zero | one if a != b | one if a > b | one if a < b | one if a == b |
+
+<p>
+<strong>Note: </strong>Labels are permissible for use with this instruction, however it is not recommended. It may cause unexpected behavior. I've failed to find a compelling reason to prohibit labels from appearing in this instruction.
+</p>
+
 ### comp-int
 ### comp-fp
 ### mod
@@ -432,6 +502,5 @@ Unlike "times" or any instruction where operation selection is implicit, this in
 ### : (labels)
 ### # (comments)
 ### assume
-<p>
-Assume directives cover [numeric assumptions](#numeric-assumptions) and io related assumptions.
-</p>
+
+<p>In general assumptions are applied immediately after an assume directive for the rest of the source file. Another assume directive maybe used later to direct the assembler to assume less/more/or something else. These directives cover [numeric assumptions](#numeric-assumptions) and [io related assumptions](#io-assumptions).</p>

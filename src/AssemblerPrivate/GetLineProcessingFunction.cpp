@@ -712,7 +712,7 @@ void run_get_line_processing_function_tests() {
     state = TextProcessState();
     const std::vector<std::string> sample_code = {
         "=" , "pc", "label1", "\n",
-        ">>", "x", "label2", "\n",
+        ">>", "x", "x", "label2", "\n",
         ":", "label1", ":", "label2", "+", "x", "y", "\n",
         "-", "x", "a"
     };
