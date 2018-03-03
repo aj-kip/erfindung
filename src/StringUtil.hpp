@@ -19,6 +19,9 @@
 
 *****************************************************************************/
 
+/** @note This file is in the process of being merged!
+ */
+
 /* Microsoft is very seriously disappointing, my install of msvc 2015 seems to
  * be missing a lot string utility features.
  *

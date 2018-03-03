@@ -168,10 +168,10 @@ function ship_features()
         io upload x y a z
         jump end-ship-data
         :]]..ship_data_label..[[ data numbers [
-            160 # x
-            200 # y
-            3   # lives
-            0   # upgrade-level
+            160.0 # x
+            200.0 # y
+            3     # lives
+            0     # upgrade-level
         ]
         :]]..ship_sprite_label..[[ data [
         # 0123456789ABCDEF
@@ -205,7 +205,7 @@ function ship_features()
             comp z    1
             skip z ==  # up is pressed
                jump skip-press-up
-            add y -2
+            add y -1
             jump skip-press-down
         : skip-press-up
             io read controller z
@@ -213,14 +213,14 @@ function ship_features()
             comp z    2
             skip z ==  # down is pressed
                set pc skip-press-down
-            add y 2
+            add y 1
         : skip-press-down
             io read controller z
             and  z   12
             comp z    4 # left is pressed
             skip z ==
                set pc skip-press-left
-            add x -2
+            add x -1
             jump do-ship-update
         : skip-press-left
             io read controller z
@@ -228,8 +228,10 @@ function ship_features()
             comp z    8 # right is pressed
             skip z ==
                set pc do-ship-update
-            add x 2
+            add x 1
         : do-ship-update
+            push x y
+            pop y x
             # save it back
             set  z ]]..ship_data_label..'\n'..[[
             save x z 0

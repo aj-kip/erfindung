@@ -9,7 +9,6 @@ I will endeavor to keep this document as concise as possible.
 
 Target features:
  + RISC + some bells and whistles
- + assemble to C++ and dynamically executable byte code (shelved)
  + parts of the virtual machine can operate independently from each other
  + You can run programs using only the memory space and CPU
  + You can upload instructions to the APU or GPU and expect the objects
@@ -20,27 +19,27 @@ Erfindung Assembly Language
 
 ### Introduction
 Erfindung is designed to handle two different types of numbers:
- + unsigned 32 bit integers (also used for pointers)
- + two's complement 32 bit fixed point real numbers
- + Positive integers may be used as pointers.
+ + signed 32 bit integers (usable as pointers)
+ + 32 bit fixed point real numbers
  + Each instruction is strictly 32bits.
  + There are 8 32bit registers.
- + Erfindung has instructions that can handle fixed point math.
+ + Seperate handling exists for both types
 
 Erfindung assembly language: is a superset of the provided hardware
-instructions.
+instructions. The language is case-insensitive.
 Terms:
- + Hardware instruction: an instruction defined by the ISA
- + pseudo instruction: an instruction NOT defined by the ISA, but can be
+ + Hardware/Real instruction: an instruction that corresponds directly to virtual CPU bytecode
+ + pseudo instruction: an instruction which describes indirectly one or more real instructions
+ + Directive: These may do many things, and fall outside of both pseudo and real instructions. Some may emit many instructions, others may emit zero instructions.
 formed from a combination of one or more hardware instructions.
 
-Sample programs are available in the project's root directory.
+Sample programs are available in the project's demos directory.
 
 ### Instruction List
 
 These are the so called "real" instructions that directly correspond to byte code in the virtual machine. Note that some of these instructions have additional parameter forms than listed on this table. These are covered by pseudo-instructions.
 
-All the following instructions store their answer into the first register.
+All the following instructions store their answer into the first register. A more comprehensive list and information on instructions maybe found on the [instructions](instructions.md) page of the manual.
 <table>
 <tr><th> Mnemonic  </th><th> Parameters </th><th>Description                </th> </tr>
 
@@ -70,11 +69,8 @@ All the following instructions store their answer into the first register.
 + mod
 + comp
 + jump
-+ io
 + push
 + pop
-
-A complete and comprehensive list of supported pseudo-instructions
 
 Complete Memory Map
 -------------------

@@ -1,7 +1,7 @@
 ## Complete Table of Instructions, Pseudo-Instructions, and Directives
 Aliases are comma delimited. Directives have no aliases. These instructions have further documentation available, which will follow a template. <br />
 Also refer to important notes on how [immediates](#immd-notes) are handled. <br />
-This document also contains information pertaining to assembler assumptions both [numeric](#numeric-assumptions) and io instruction related.
+This document also contains information pertaining to assembler assumptions both [numeric](#numeric-assumptions) and io instruction related. <br />
 <strong>Super Important Note:</strong> if it is found that the software fails to follow the documentation, then the documentation takes precedence, and the misbehavior is classed as a bug. (however with this document being in beta/incomplete, an error <em>may</em> occur in the documents!)
 ### Sample Instruction Template
 <p>
@@ -16,9 +16,6 @@ Description of behavior <br />
 Further comments.
 </p>
 
-<style>
-.nowrap { white-space: nowrap; }
-</style>
 <table>
 <tr>
 <th> R-Types  </th><th> Aliases </th>
@@ -39,49 +36,49 @@ Further comments.
 <tr>
 <td> <a href="#times"> times</a>     </td><td> mul, multiply, &ast; </td>
 <td> <a href="#times-int"> times-int</a>       </td><td>
-<span class="nowrap">mul-int</span>,
-<span class="nowrap">multiply-int</span>,
-<span class="nowrap">&ast;-int</span> </td>
+<span style="white-space: nowrap;">mul-int</span>,
+<span style="white-space: nowrap;">multiply-int</span>,
+<span style="white-space: nowrap;">&ast;-int</span> </td>
 <td> <a href="#times-fp"> times-fp</a>      </td><td>
-<span class="nowrap">mul-fp</span>,
-<span class="nowrap">multiply-fp</span>,
-<span class="nowrap">&ast;-fp</span> </td>
+<span style="white-space: nowrap;">mul-fp</span>,
+<span style="white-space: nowrap;">multiply-fp</span>,
+<span style="white-space: nowrap;">&ast;-fp</span> </td>
 
 </tr>
 <tr>
 <td> <a href="#div"> div</a>    </td><td> divide, / </td>
 <td> <a href="#div-int"> div-int</a>       </td><td>
-<span class="nowrap">divide-int</span>,
-<span class="nowrap">/-int</span> </td>
+<span style="white-space: nowrap;">divide-int</span>,
+<span style="white-space: nowrap;">/-int</span> </td>
 <td> <a href="#div-fp"> div-fp</a>   </td><td>
-<span class="nowrap">divide-fp</span>,
-<span class="nowrap">/-fp</span> </td>
+<span style="white-space: nowrap;">divide-fp</span>,
+<span style="white-space: nowrap;">/-fp</span> </td>
 
 </tr>
 
 <tr>
 <td> <a href="#comp"> comp</a>     </td><td> compare, cmp, &lt;=&gt; </td>
 <td> <a href="#comp-int"> comp-int</a>       </td><td>
-<span class="nowrap">compare-int</span>,
-<span class="nowrap">cmp-int</span>,
-<span class="nowrap">&lt;=&gt;-int</span>
+<span style="white-space: nowrap;">compare-int</span>,
+<span style="white-space: nowrap;">cmp-int</span>,
+<span style="white-space: nowrap;">&lt;=&gt;-int</span>
 </td>
 <td> <a href="#comp-fp">comp-fp</a>      </td><td>
-<span class="nowrap">compare-fp</span>,
-<span class="nowrap">cmp-fp</span>,
-<span class="nowrap">&lt;=&gt;-fp</span>
+<span style="white-space: nowrap;">compare-fp</span>,
+<span style="white-space: nowrap;">cmp-fp</span>,
+<span style="white-space: nowrap;">&lt;=&gt;-fp</span>
 </td>
 
 </tr>
 <tr>
 <td> <a href="#mod"> mod</a>      </td><td> modulus, % </td>
 <td> <a href="#mod-int"> mod-int</a>      </td><td>
-<span class="nowrap">modulus-int</span>,
-<span class="nowrap">%-fp</span>
+<span style="white-space: nowrap;">modulus-int</span>,
+<span style="white-space: nowrap;">%-fp</span>
  </td>
 <td> <a href="#mod-fp"> mod-fp</a>     </td><td>
-<span class="nowrap">modulus-fp</span>,
-<span class="nowrap">%-fp</span>
+<span style="white-space: nowrap;">modulus-fp</span>,
+<span style="white-space: nowrap;">%-fp</span>
 </td>
 <tr>
 <th> J-Types  </th><th> Aliases </th>
@@ -132,7 +129,7 @@ Further comments.
 <tr>
 <td> <a href="#io">io </a>     </td><td>  </td>
 
-<td>      </td><td>  </td>
+<td> $     </td><td> (reserved) </td>
 <td>      </td><td>  </td>
 </tr>
 
@@ -141,7 +138,12 @@ Further comments.
 <p>
 The assembler maybe directed to automatically save and restore registers used in io directives. By default the assembler will save and restore register values automatically. This can be explicitly controlled through the <em>assume</em> directive.
 </p>
-<p>This will </p>
+<p>The assembler will not emit any save/restore instructions following this directive:</p>
+<pre>assume io-throw-away</pre>
+<pre>assume io-throw-away-registers</pre>
+<p>If later it becomes desirable to have the io directive generate save and restore instructions, the following will re-enable that behavior:</p>
+<pre>assume io-save-and-restore</pre>
+<pre>assume io-save-and-restore-registers</pre>
 <h3 id="numeric-assumptions">Numeric Assumptions</h3>
 <p>
 The Erfindung CPU can perform operations on both integers and fixed point numbers. Bitwise operations, addition, and subtraction all use the same implementation regardless whether the data is to be treated as fixed point numbers or integers. Other operations where fixed point numbers and integers need separate implementations, have suffixes ('-fp' and '-int').
@@ -162,6 +164,7 @@ The assembler supports several forms of number formats for immediates. The commo
 On the type of data: if a "." (decimal point) is present, the assembler will interpret the value as a fixed point always. Without this decimal point, it will always be interpreted as an integer. Note that a numeric immediate will override any 'type' assumption.
 </p>
 <p>See also: [Numeric Assumptions](#numeric-assumptions)</p>
+
 
 <h3 id="and">and</h3>
 <p>

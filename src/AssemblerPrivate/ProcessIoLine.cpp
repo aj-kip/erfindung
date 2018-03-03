@@ -94,8 +94,8 @@ StringCIter make_sysio
                                    *beg + "\"."                         );
         }
         if (state.last_instruction_was(OpCode::SKIP)) {
-            state.push_warning(": \"io\" is a pseudo-instruction following a "
-                               "skip instruction! Often io "
+            state.push_warning(": \"io\" directive following a skip "
+                               "instruction! Often io "
                                "emits many instructions, some of which affect "
                                "the stack. This may lead to stack corruption, "
                                "however this does NOT necessarily restrict "
